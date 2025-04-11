@@ -59,9 +59,21 @@
   let currentEditingNode = null;
   let currentLabelText = '';
 
-  // Helper function to check if element is a node (task, event, gateway)
+  // Helper function to check if element is a node (any element with position and size)
   function isNode(element) {
-    return element.type === 'task' || element.type === 'event' || element.type === 'gateway';
+    return element.type === 'task' ||
+           element.type === 'event' ||
+           element.type === 'gateway' ||
+           element.type === 'subprocess' ||
+           element.type === 'callactivity' ||
+           element.type === 'dataobject' ||
+           element.type === 'datastore' ||
+           element.type === 'textannotation' ||
+           element.type === 'group' ||
+           element.type === 'pool' ||
+           element.type === 'lane' ||
+           element.type === 'conversation' ||
+           element.type === 'choreography';
   }
 
   // Get all connection points for all elements
@@ -79,49 +91,144 @@
   }
 
   // Add a new task
-  function addTask() {
+  function addTask(taskType = 'user') {
     const newTask = {
       id: `task-${Date.now()}`,
       type: 'task',
-      label: 'New Task',
+      label: `${taskType.charAt(0).toUpperCase() + taskType.slice(1)} Task`,
       x: 200,
       y: 200,
       width: 120,
       height: 80,
-      taskType: 'user'
+      taskType: taskType
     };
     bpmnStore.addElement(newTask);
   }
 
   // Add a new event
-  function addEvent() {
+  function addEvent(eventType = 'start', eventDefinition = 'none') {
     const newEvent = {
       id: `event-${Date.now()}`,
       type: 'event',
-      label: 'New Event',
+      label: `${eventDefinition.charAt(0).toUpperCase() + eventDefinition.slice(1)} ${eventType.charAt(0).toUpperCase() + eventType.slice(1)} Event`,
       x: 400,
       y: 200,
       width: 36,
       height: 36,
-      eventType: 'start',
-      eventDefinition: 'none'
+      eventType: eventType,
+      eventDefinition: eventDefinition
     };
     bpmnStore.addElement(newEvent);
   }
 
   // Add a new gateway
-  function addGateway() {
+  function addGateway(gatewayType = 'exclusive') {
     const newGateway = {
       id: `gateway-${Date.now()}`,
       type: 'gateway',
-      label: 'New Gateway',
+      label: `${gatewayType.charAt(0).toUpperCase() + gatewayType.slice(1)} Gateway`,
       x: 300,
       y: 300,
       width: 50,
       height: 50,
-      gatewayType: 'exclusive'
+      gatewayType: gatewayType
     };
     bpmnStore.addElement(newGateway);
+  }
+
+  // Add a new subprocess
+  function addSubProcess(subProcessType = 'embedded') {
+    const newSubProcess = {
+      id: `subprocess-${Date.now()}`,
+      type: 'subprocess',
+      label: `${subProcessType.charAt(0).toUpperCase() + subProcessType.slice(1)} SubProcess`,
+      x: 200,
+      y: 300,
+      width: 180,
+      height: 120,
+      subProcessType: subProcessType,
+      isExpanded: true,
+      children: []
+    };
+    bpmnStore.addElement(newSubProcess);
+  }
+
+  // Add a new data object
+  function addDataObject(isInput = false, isOutput = false) {
+    const newDataObject = {
+      id: `dataobject-${Date.now()}`,
+      type: 'dataobject',
+      label: isInput ? 'Data Input' : (isOutput ? 'Data Output' : 'Data Object'),
+      x: 500,
+      y: 200,
+      width: 36,
+      height: 50,
+      isCollection: false,
+      isInput: isInput,
+      isOutput: isOutput
+    };
+    bpmnStore.addElement(newDataObject);
+  }
+
+  // Add a new data store
+  function addDataStore() {
+    const newDataStore = {
+      id: `datastore-${Date.now()}`,
+      type: 'datastore',
+      label: 'Data Store',
+      x: 500,
+      y: 300,
+      width: 50,
+      height: 50,
+      isCollection: false
+    };
+    bpmnStore.addElement(newDataStore);
+  }
+
+  // Add a new text annotation
+  function addTextAnnotation() {
+    const newTextAnnotation = {
+      id: `annotation-${Date.now()}`,
+      type: 'textannotation',
+      label: 'Annotation',
+      text: 'Text Annotation',
+      x: 600,
+      y: 200,
+      width: 100,
+      height: 80
+    };
+    bpmnStore.addElement(newTextAnnotation);
+  }
+
+  // Add a new pool
+  function addPool() {
+    const newPool = {
+      id: `pool-${Date.now()}`,
+      type: 'pool',
+      label: 'Pool',
+      x: 100,
+      y: 400,
+      width: 600,
+      height: 200,
+      isHorizontal: true,
+      participants: []
+    };
+    bpmnStore.addElement(newPool);
+  }
+
+  // Add a new lane
+  function addLane() {
+    const newLane = {
+      id: `lane-${Date.now()}`,
+      type: 'lane',
+      label: 'Lane',
+      x: 100,
+      y: 400,
+      width: 600,
+      height: 100,
+      isHorizontal: true
+    };
+    bpmnStore.addElement(newLane);
   }
 
   // Start dragging an element
@@ -455,16 +562,72 @@
 
 <div class="bpmn-editor">
   <div class="toolbar">
-    <button on:click={addTask}>Add Task</button>
-    <button on:click={addEvent}>Add Event</button>
-    <button on:click={addGateway}>Add Gateway</button>
-    <button on:click={toggleConnectionPoints}>
-      {showConnectionPoints ? 'Hide Connection Points' : 'Show Connection Points'}
-    </button>
-    <button on:click={addConditionToSelectedConnection} disabled={!connections.some(c => c.isSelected && c.connectionType === 'sequence')}>
-      Add Condition
-    </button>
-    <button on:click={() => bpmnStore.reset()}>Reset</button>
+    <div class="toolbar-section">
+      <h3>Activities</h3>
+      <button on:click={() => addTask('task')}>Task</button>
+      <button on:click={() => addTask('user')}>User Task</button>
+      <button on:click={() => addTask('service')}>Service Task</button>
+      <button on:click={() => addTask('send')}>Send Task</button>
+      <button on:click={() => addTask('receive')}>Receive Task</button>
+      <button on:click={() => addTask('manual')}>Manual Task</button>
+      <button on:click={() => addTask('business-rule')}>Business Rule Task</button>
+      <button on:click={() => addTask('script')}>Script Task</button>
+      <button on:click={() => addSubProcess('embedded')}>Subprocess</button>
+      <button on:click={() => addSubProcess('event')}>Event Subprocess</button>
+      <button on:click={() => addSubProcess('transaction')}>Transaction</button>
+      <button on:click={() => addSubProcess('adhoc')}>Ad-hoc Subprocess</button>
+    </div>
+
+    <div class="toolbar-section">
+      <h3>Events</h3>
+      <button on:click={() => addEvent('start', 'none')}>Start Event</button>
+      <button on:click={() => addEvent('start', 'message')}>Message Start</button>
+      <button on:click={() => addEvent('start', 'timer')}>Timer Start</button>
+      <button on:click={() => addEvent('intermediate-catch', 'none')}>Intermediate Event</button>
+      <button on:click={() => addEvent('intermediate-catch', 'message')}>Message Catch</button>
+      <button on:click={() => addEvent('intermediate-throw', 'message')}>Message Throw</button>
+      <button on:click={() => addEvent('end', 'none')}>End Event</button>
+      <button on:click={() => addEvent('end', 'terminate')}>Terminate End</button>
+    </div>
+
+    <div class="toolbar-section">
+      <h3>Gateways</h3>
+      <button on:click={() => addGateway('exclusive')}>Exclusive Gateway</button>
+      <button on:click={() => addGateway('inclusive')}>Inclusive Gateway</button>
+      <button on:click={() => addGateway('parallel')}>Parallel Gateway</button>
+      <button on:click={() => addGateway('complex')}>Complex Gateway</button>
+      <button on:click={() => addGateway('event-based')}>Event-based Gateway</button>
+    </div>
+
+    <div class="toolbar-section">
+      <h3>Data</h3>
+      <button on:click={() => addDataObject()}>Data Object</button>
+      <button on:click={() => addDataObject(true, false)}>Data Input</button>
+      <button on:click={() => addDataObject(false, true)}>Data Output</button>
+      <button on:click={() => addDataStore()}>Data Store</button>
+    </div>
+
+    <div class="toolbar-section">
+      <h3>Artifacts</h3>
+      <button on:click={() => addTextAnnotation()}>Text Annotation</button>
+    </div>
+
+    <div class="toolbar-section">
+      <h3>Swimlanes</h3>
+      <button on:click={() => addPool()}>Pool</button>
+      <button on:click={() => addLane()}>Lane</button>
+    </div>
+
+    <div class="toolbar-section">
+      <h3>Tools</h3>
+      <button on:click={toggleConnectionPoints}>
+        {showConnectionPoints ? 'Hide Connection Points' : 'Show Connection Points'}
+      </button>
+      <button on:click={addConditionToSelectedConnection} disabled={!connections.some(c => c.isSelected && c.connectionType === 'sequence')}>
+        Add Condition
+      </button>
+      <button on:click={() => bpmnStore.reset()}>Reset</button>
+    </div>
   </div>
 
   <div class="canvas-container" id="canvas-container">
@@ -644,22 +807,51 @@
 
   .toolbar {
     display: flex;
+    flex-wrap: wrap;
     gap: 8px;
     padding: 8px;
     background-color: #f0f0f0;
     border-bottom: 1px solid #ccc;
+    max-height: 300px;
+    overflow-y: auto;
+  }
+
+  .toolbar-section {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 150px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    padding: 8px;
+    background-color: white;
+  }
+
+  .toolbar-section h3 {
+    margin: 0 0 8px 0;
+    font-size: 14px;
+    color: #333;
+    border-bottom: 1px solid #eee;
+    padding-bottom: 4px;
   }
 
   .toolbar button {
-    padding: 6px 12px;
+    padding: 4px 8px;
     background-color: white;
     border: 1px solid #ccc;
     border-radius: 4px;
     cursor: pointer;
+    font-size: 12px;
+    text-align: left;
   }
 
   .toolbar button:hover {
     background-color: #e0e0e0;
+  }
+
+  .toolbar button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
   }
 
   .canvas-container {

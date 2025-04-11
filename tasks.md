@@ -8,6 +8,7 @@
 - [ ] Set up Jest/Vitest for testing
 - [ ] Set up Storybook for component documentation
 - [x] Create directory structure
+- [x] Remove TypeScript annotations for JavaScript compatibility
 
 ### Data Model
 - [x] Define interfaces for BPMN elements
@@ -39,6 +40,12 @@
 - [x] Implement gateway components
 - [x] Implement connection component with path calculation
 - [x] Add handles for resizing and connection points
+- [x] Implement all BPMN 2.0 element types data models
+  - [x] Define all task types (user, service, send, receive, manual, business rule, script)
+  - [x] Define all event types (start, intermediate, end with various triggers)
+  - [x] Define all gateway types (exclusive, inclusive, parallel, complex, event-based)
+  - [x] Define data objects, data stores, and artifacts
+  - [x] Define pools and lanes
 - [ ] Write tests for rendering components
 
 ### Interaction Components
@@ -58,11 +65,11 @@
 - [ ] Implement multi-selection and group operations
 - [x] Implement deleting elements
 - [ ] Implement copy/paste functionality
-- [ ] Implement labels for nodes
-  - [ ] Add text labels to tasks, events, and gateways
-  - [ ] Implement label editing functionality
-  - [ ] Position labels automatically
-  - [ ] Allow manual label positioning
+- [x] Implement labels for nodes
+  - [x] Add text labels to tasks, events, and gateways
+  - [x] Implement label editing functionality
+  - [x] Position labels automatically
+  - [x] Allow manual label positioning
 
 ### Connections
 - [x] Define connection points for elements

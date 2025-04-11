@@ -19,6 +19,7 @@ export interface BpmnElementBase {
   label: string;
   labelPosition?: Position;
   labelVisible?: boolean;
+  documentation?: string; // Documentation for the element
 }
 
 // Base interface for all node elements (elements with position and size)
@@ -50,16 +51,26 @@ export interface BpmnTask extends BpmnNode {
   isMultiInstance?: boolean;
   isLoop?: boolean;
   isCompensation?: boolean;
+  implementation?: string; // Implementation details for the task
 }
+
+// Subprocess Types
+export type SubProcessType =
+  | 'embedded'       // Standard embedded subprocess
+  | 'event'          // Event subprocess
+  | 'transaction'    // Transaction subprocess
+  | 'adhoc';         // Ad-hoc subprocess
 
 // Subprocess element
 export interface BpmnSubProcess extends BpmnNode {
   type: 'subprocess';
+  subProcessType: SubProcessType;
   isExpanded: boolean;
   isMultiInstance?: boolean;
   isLoop?: boolean;
   isCompensation?: boolean;
   children?: string[]; // IDs of child elements
+  triggeredByEvent?: boolean; // For event subprocesses
 }
 
 // Call Activity element
@@ -76,7 +87,8 @@ export interface BpmnCallActivity extends BpmnNode {
 // Event Types
 export type EventType =
   | 'start'
-  | 'intermediate'
+  | 'intermediate-catch'
+  | 'intermediate-throw'
   | 'end'
   | 'boundary';
 
@@ -103,6 +115,8 @@ export interface BpmnEvent extends BpmnNode {
   eventDefinition: EventDefinition;
   isInterrupting?: boolean; // For start events in subprocesses and boundary events
   attachedToRef?: string;   // For boundary events, ID of the attached element
+  cancelActivity?: boolean; // For boundary events
+  parallelMultiple?: boolean; // For parallel multiple events
 }
 
 // ---- GATEWAYS ----
@@ -113,13 +127,15 @@ export type GatewayType =
   | 'inclusive'      // OR gateway
   | 'parallel'       // AND gateway
   | 'complex'        // Complex gateway
-  | 'event-based';   // Event-based gateway
+  | 'event-based'    // Event-based gateway
+  | 'parallel-event-based'; // Parallel event-based gateway
 
 // Gateway element
 export interface BpmnGateway extends BpmnNode {
   type: 'gateway';
   gatewayType: GatewayType;
   isInstantiating?: boolean; // For event-based gateways
+  defaultFlow?: string; // ID of the default sequence flow
 }
 
 // ---- DATA OBJECTS ----
@@ -129,12 +145,16 @@ export interface BpmnDataObject extends BpmnNode {
   type: 'dataobject';
   isCollection?: boolean;
   state?: string;
+  isInput?: boolean; // Whether this is a data input
+  isOutput?: boolean; // Whether this is a data output
 }
 
 // Data Store element
 export interface BpmnDataStore extends BpmnNode {
   type: 'datastore';
   isCollection?: boolean;
+  capacity?: number; // Optional capacity of the data store
+  isUnlimited?: boolean; // Whether the data store has unlimited capacity
 }
 
 // ---- ARTIFACTS ----
@@ -143,6 +163,7 @@ export interface BpmnDataStore extends BpmnNode {
 export interface BpmnTextAnnotation extends BpmnNode {
   type: 'textannotation';
   text: string;
+  textFormat?: string; // Format of the text (e.g., 'text/plain')
 }
 
 // Group element
@@ -158,6 +179,8 @@ export interface BpmnPool extends BpmnNode {
   type: 'pool';
   isHorizontal: boolean;
   participants?: string[]; // IDs of lanes
+  processRef?: string; // Reference to the process contained in the pool
+  isExecutable?: boolean; // Whether the process is executable
 }
 
 // Lane element
@@ -165,6 +188,7 @@ export interface BpmnLane extends BpmnNode {
   type: 'lane';
   isHorizontal: boolean;
   parentRef?: string; // ID of parent pool or lane
+  flowNodeRefs?: string[]; // IDs of flow nodes contained in this lane
 }
 
 // ---- CONNECTIONS ----
@@ -174,7 +198,8 @@ export type ConnectionType =
   | 'sequence'       // Sequence flow
   | 'message'        // Message flow
   | 'association'    // Association
-  | 'dataassociation'; // Data association
+  | 'dataassociation' // Data association
+  | 'conversation';  // Conversation link
 
 // Connection Point Position
 export type AnchorPosition = 'top' | 'right' | 'bottom' | 'left';
@@ -187,6 +212,12 @@ export interface ConnectionPoint {
   x: number;
   y: number;
 }
+
+// Association Direction
+export type AssociationDirection =
+  | 'none'          // No direction
+  | 'one'           // Source to target
+  | 'both';         // Bidirectional
 
 // Connection element
 export interface BpmnConnection extends BpmnElementBase {
@@ -201,6 +232,35 @@ export interface BpmnConnection extends BpmnElementBase {
   isDefault?: boolean;
   isConditional?: boolean;
   isSelected?: boolean;
+  associationDirection?: AssociationDirection; // For associations
+}
+
+// Conversation Types
+export type ConversationType =
+  | 'conversation'   // Regular conversation
+  | 'sub-conversation' // Sub-conversation
+  | 'call-conversation'; // Call conversation
+
+// Conversation element
+export interface BpmnConversation extends BpmnNode {
+  type: 'conversation';
+  conversationType: ConversationType;
+  isMultiInstance?: boolean;
+}
+
+// Choreography Types
+export type ChoreographyType =
+  | 'task'           // Choreography task
+  | 'subprocess'     // Choreography subprocess
+  | 'call-choreography'; // Call choreography
+
+// Choreography element
+export interface BpmnChoreography extends BpmnNode {
+  type: 'choreography';
+  choreographyType: ChoreographyType;
+  participants: string[]; // IDs of participants
+  initiatingParticipantRef?: string; // ID of the initiating participant
+  isMultiInstance?: boolean;
 }
 
 // Union type for all BPMN elements
@@ -216,4 +276,6 @@ export type BpmnElementUnion =
   | BpmnGroup
   | BpmnPool
   | BpmnLane
+  | BpmnConversation
+  | BpmnChoreography
   | BpmnConnection;
