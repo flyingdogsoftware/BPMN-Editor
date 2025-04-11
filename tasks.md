@@ -81,7 +81,7 @@
   - [x] Add waypoints for manual path adjustments
 - [x] Implement connection interaction
   - [x] Allow selecting connections
-  - [ ] Enable dragging connection paths
+  - [x] Enable dragging connection paths
   - [x] Add connection deletion functionality
   - [ ] Implement connection point adjustment
 - [ ] Implement labels for connections

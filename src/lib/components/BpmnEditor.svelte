@@ -23,10 +23,12 @@
 
   // Connection state
   let isCreatingConnection = false;
+  let isAdjustingConnectionEndpoint = false;
   let connectionStartPoint = null;
   let connectionEndPosition = null;
   let connectionPreviewValid = true;
   let showConnectionPoints = false;
+  let highlightedConnectionPoints = [];
 
   // Helper function to check if element is a node (task, event, gateway)
   function isNode(element) {
@@ -302,6 +304,19 @@
     bpmnStore.toggleConnectionSelection(id);
   }
 
+  // Start adjusting a connection endpoint
+  function handleConnectionEndpointAdjustment(isAdjusting) {
+    isAdjustingConnectionEndpoint = isAdjusting;
+
+    // If we're starting to adjust, show all connection points
+    if (isAdjusting) {
+      showConnectionPoints = true;
+    } else {
+      // Reset to previous state when done
+      showConnectionPoints = false;
+    }
+  }
+
   // Toggle connection points visibility
   function toggleConnectionPoints() {
     showConnectionPoints = !showConnectionPoints;
@@ -399,6 +414,7 @@
               sourcePosition={posInfo.source}
               targetPosition={posInfo.target}
               onSelect={handleConnectionSelect}
+              onEndpointAdjustment={handleConnectionEndpointAdjustment}
             />
           {/if}
         {/if}
@@ -486,6 +502,7 @@
                 <ConnectionPoint
                   point={point}
                   isVisible={showConnectionPoints}
+                  isHighlighted={isAdjustingConnectionEndpoint}
                   onMouseDown={handleConnectionPointMouseDown}
                 />
               {/each}

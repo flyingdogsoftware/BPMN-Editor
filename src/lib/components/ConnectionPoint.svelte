@@ -2,6 +2,7 @@
   // Props
   export let point;
   export let isVisible = false;
+  export let isHighlighted = false;
   export let onMouseDown;
 
   // Local state
@@ -22,8 +23,8 @@
   }
 
   // Computed
-  $: showPoint = isVisible || isHovered;
-  $: pointSize = isHovered ? 8 : 6;
+  $: showPoint = isVisible || isHovered || isHighlighted;
+  $: pointSize = isHovered ? 8 : isHighlighted ? 7 : 6;
 </script>
 
 <circle
@@ -33,6 +34,7 @@
   class="connection-point"
   class:visible={showPoint}
   class:hovered={isHovered}
+  class:highlighted={isHighlighted}
   on:mouseenter={handleMouseEnter}
   on:mouseleave={handleMouseLeave}
   on:mousedown={handleMouseDown}
@@ -58,5 +60,11 @@
   .connection-point.hovered {
     fill: #3498db;
     stroke: #2980b9;
+  }
+
+  .connection-point.highlighted {
+    fill: #f39c12;
+    stroke: #e67e22;
+    opacity: 0.8;
   }
 </style>

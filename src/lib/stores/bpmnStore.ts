@@ -98,6 +98,27 @@ const createBpmnStore = () => {
           return el;
         })
       ),
+    // Update connection endpoints
+    updateConnectionEndpoints: (id: string, sourcePointId?: string, targetPointId?: string) =>
+      update(elements => {
+        console.log(`Updating connection ${id} endpoints:`, { sourcePointId, targetPointId });
+
+        return elements.map(el => {
+          if (el.id === id && el.type === 'connection') {
+            const updates: Partial<BpmnConnection> = {};
+            if (sourcePointId !== undefined) updates.sourcePointId = sourcePointId;
+            if (targetPointId !== undefined) updates.targetPointId = targetPointId;
+
+            // Clear waypoints to force recalculation of the path
+            // This ensures the orthogonal path is recalculated correctly
+            updates.waypoints = [];
+
+            console.log('Connection updates:', updates);
+            return { ...el, ...updates };
+          }
+          return el;
+        });
+      }),
     // Reset to initial state
     reset: () => set(initialElements)
   };
