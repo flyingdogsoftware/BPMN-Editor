@@ -135,6 +135,7 @@
           name={category.name}
           elements={category.elements}
           on:add={handleAdd}
+          on:dragstart={() => setTimeout(() => dispatch('close'), 0)}
         />
       {/each}
 

@@ -10,6 +10,10 @@
   function handleAdd(event) {
     dispatch('add', event.detail);
   }
+
+  function handleDragStart(event) {
+    dispatch('dragstart', event.detail);
+  }
 </script>
 
 <div class="element-category">
@@ -19,6 +23,7 @@
       <ElementPreview 
         element={element}
         on:add={handleAdd}
+        on:dragstart={handleDragStart}
       />
     {/each}
   </div>

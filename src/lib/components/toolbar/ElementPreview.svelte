@@ -34,6 +34,9 @@
       console.error('ElementPreview: Error setting drag data:', error);
     }
 
+    // Dispatch dragstart event for dialog auto-close
+    dispatch('dragstart');
+
     // Create a custom drag image if needed
     // This is optional but can provide better visual feedback
     const dragIcon = document.createElement('div');
@@ -299,6 +302,7 @@
   on:keydown={(e) => e.key === 'Enter' && handleClick()}
   on:dragstart={handleDragStart}
   on:dragend={handleDragEnd}
+  on:mousedown|stopPropagation
   title="Click to add or drag to position"
   tabindex="0"
   role="button"
