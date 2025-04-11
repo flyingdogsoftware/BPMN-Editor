@@ -58,6 +58,11 @@
 - [ ] Implement multi-selection and group operations
 - [x] Implement deleting elements
 - [ ] Implement copy/paste functionality
+- [ ] Implement labels for nodes
+  - [ ] Add text labels to tasks, events, and gateways
+  - [ ] Implement label editing functionality
+  - [ ] Position labels automatically
+  - [ ] Allow manual label positioning
 
 ### Connections
 - [x] Define connection points for elements
@@ -83,12 +88,12 @@
   - [x] Allow selecting connections
   - [x] Enable dragging connection paths
   - [x] Add connection deletion functionality
-  - [ ] Implement connection point adjustment
-- [ ] Implement labels for connections
-  - [ ] Add text labels to connections
-  - [ ] Position labels automatically
-  - [ ] Allow manual label positioning
-  - [ ] Support condition expressions for sequence flows
+  - [x] Implement connection point adjustment
+- [x] Implement labels for connections
+  - [x] Add text labels to connections
+  - [x] Position labels automatically
+  - [x] Allow manual label positioning
+  - [x] Support condition expressions for sequence flows
 
 
 ### Property Editing

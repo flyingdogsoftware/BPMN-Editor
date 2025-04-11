@@ -363,13 +363,25 @@ export function calculateLabelPosition(
     const middleIndex = Math.floor(waypoints.length / 2);
     return {
       x: waypoints[middleIndex].x,
-      y: waypoints[middleIndex].y - 10 // Offset above the line
+      y: waypoints[middleIndex].y - 15 // Offset above the line
     };
   } else {
-    // Otherwise, place the label in the middle of the connection
-    return {
-      x: (start.x + end.x) / 2,
-      y: (start.y + end.y) / 2 - 10 // Offset above the line
-    };
+    // For orthogonal connections without waypoints, find the middle of the longest segment
+    const dx = Math.abs(end.x - start.x);
+    const dy = Math.abs(end.y - start.y);
+
+    if (dx > dy) {
+      // Horizontal segment is longer
+      return {
+        x: (start.x + end.x) / 2,
+        y: start.y - 15 // Offset above the horizontal segment
+      };
+    } else {
+      // Vertical segment is longer
+      return {
+        x: start.x + 15, // Offset to the right of the vertical segment
+        y: (start.y + end.y) / 2
+      };
+    }
   }
 }

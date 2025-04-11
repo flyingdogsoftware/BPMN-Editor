@@ -71,6 +71,8 @@ export interface BpmnConnection extends BpmnElement {
   isSelected?: boolean;
   label?: string;
   condition?: string;
+  labelPosition?: Position; // Custom position for the label
+  labelVisible?: boolean; // Whether the label is visible
 }
 
 // Union type for all BPMN elements

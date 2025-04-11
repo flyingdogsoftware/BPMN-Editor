@@ -10,6 +10,7 @@
   import { snapToGrid } from '$lib/utils/gridUtils';
   import BendPoint from './BendPoint.svelte';
   import ConnectionEndpointHandle from './ConnectionEndpointHandle.svelte';
+  import ConnectionLabel from './ConnectionLabel.svelte';
 
   // Props
   export let connection;
@@ -17,6 +18,10 @@
   export let targetPosition;
   export let onSelect;
   export let onEndpointAdjustment = (isAdjusting) => {};
+  export let onEditLabel = (connection) => {};
+
+  // Label editing state
+  let isEditingLabel = false;
 
   // Local state
   let isDragging = false;
@@ -98,6 +103,49 @@
   function handleClick(event) {
     event.stopPropagation();
     onSelect(connection.id);
+  }
+
+  function handleDoubleClick(event) {
+    event.stopPropagation();
+    console.log('Connection: handleDoubleClick called for connection', connection.id);
+
+    // If the connection doesn't have a label yet, create an empty one
+    if (!connection.label) {
+      console.log('Connection: Creating empty label for connection', connection.id);
+      bpmnStore.updateConnectionLabel(connection.id, '');
+    }
+
+    // Call the onEditLabel prop to open the label dialog in the parent component
+    console.log('Connection: Calling onEditLabel prop');
+    onEditLabel(connection);
+  }
+
+  // Label editing handlers
+  function handleStartLabelEdit(connectionId) {
+    console.log('Connection: handleStartLabelEdit called for connectionId', connectionId);
+    console.log('Connection: current connection.id', connection.id);
+    console.log('Connection: isEditingLabel before', isEditingLabel);
+
+    if (connectionId === connection.id) {
+      // If there's no label yet, add an empty one
+      if (!connection.label) {
+        console.log('Connection: No label found, creating empty one');
+        bpmnStore.updateConnectionLabel(connectionId, '');
+      }
+      isEditingLabel = true;
+      console.log('Connection: isEditingLabel after', isEditingLabel);
+    }
+  }
+
+  function handleEndLabelEdit(connectionId, newLabel) {
+    if (connectionId === connection.id) {
+      isEditingLabel = false;
+
+      if (newLabel !== null) {
+        // Update the label in the store
+        bpmnStore.updateConnectionLabel(connectionId, newLabel);
+      }
+    }
   }
 
   function handleKeyDown(event) {
@@ -265,6 +313,7 @@
   class="connection"
   class:selected={connection.isSelected}
   on:click={handleClick}
+  on:dblclick={handleDoubleClick}
   on:keydown={handleKeyDown}
   role="button"
   tabindex="0"
@@ -279,16 +328,38 @@
     marker-end={markerEnd}
   />
 
-  {#if connection.label}
-    <text
-      x={labelPosition.x}
-      y={labelPosition.y}
-      text-anchor="middle"
-      dominant-baseline="middle"
-      class="connection-label"
+  <!-- Connection Label -->
+  <ConnectionLabel
+    connection={connection}
+    position={connection.labelPosition || labelPosition}
+    isEditing={isEditingLabel}
+    onStartEdit={handleStartLabelEdit}
+    onEndEdit={handleEndLabelEdit}
+  />
+
+  <!-- Edit Label Button (only shown when connection is selected) -->
+  {#if connection.isSelected}
+    <g
+      class="edit-label-button"
+      on:click={() => {
+        console.log('Connection: Edit button clicked, calling onEditLabel');
+        // Call the onEditLabel prop to open the label dialog in the parent component
+        onEditLabel(connection);
+      }}
+      on:keydown={(e) => {
+        if (e.key === 'Enter') {
+          console.log('Connection: Edit button Enter key pressed, calling onEditLabel');
+          onEditLabel(connection);
+        }
+      }}
+      transform="translate({(connection.labelPosition || labelPosition).x + 30}, {(connection.labelPosition || labelPosition).y - 10})"
+      role="button"
+      tabindex="0"
+      aria-label="Edit connection label"
     >
-      {connection.label}
-    </text>
+      <rect x="-10" y="-10" width="20" height="20" rx="3" fill="#3498db" />
+      <text x="0" y="4" text-anchor="middle" fill="white" font-size="14">✎</text>
+    </g>
   {/if}
 
   {#if connection.isSelected}
@@ -351,12 +422,5 @@
   .connection.selected path {
     stroke-width: 3;
     filter: drop-shadow(0 0 2px rgba(52, 152, 219, 0.5));
-  }
-
-  .connection-label {
-    font-size: 12px;
-    fill: #333;
-    pointer-events: none;
-    user-select: none;
   }
 </style>

@@ -2,9 +2,32 @@
   import { bpmnStore } from '$lib/stores/bpmnStore';
   import { snapPositionToGrid } from '$lib/utils/gridUtils';
   import { isValidConnection, calculateConnectionPoints } from '$lib/utils/connectionUtils';
+  import { onMount } from 'svelte';
   import ConnectionPoint from './ConnectionPoint.svelte';
   import ConnectionPreview from './ConnectionPreview.svelte';
   import Connection from './Connection.svelte';
+  import LabelEditDialog from './LabelEditDialog.svelte';
+
+  // Listen for edit-label events from Connection components
+  onMount(() => {
+    document.addEventListener('edit-label', handleEditLabelEvent);
+
+    return () => {
+      document.removeEventListener('edit-label', handleEditLabelEvent);
+    };
+  });
+
+  // Handle edit-label events from Connection components
+  function handleEditLabelEvent(event) {
+    console.log('BpmnEditor: Received edit-label event', event.detail);
+    const connectionId = event.detail.connectionId;
+    const connection = $bpmnStore.find(el => el.id === connectionId);
+
+    if (connection) {
+      console.log('BpmnEditor: Found connection, opening label dialog', connection);
+      openLabelDialog(connection, connection.connectionType === 'sequence');
+    }
+  }
 
   // Canvas dimensions
   let canvasWidth = 800;
@@ -29,6 +52,11 @@
   let connectionPreviewValid = true;
   let showConnectionPoints = false;
   let highlightedConnectionPoints = [];
+
+  // Label editing state
+  let isLabelDialogOpen = false;
+  let currentEditingConnection = null;
+  let currentLabelText = '';
 
   // Helper function to check if element is a node (task, event, gateway)
   function isNode(element) {
@@ -304,6 +332,49 @@
     bpmnStore.toggleConnectionSelection(id);
   }
 
+  // Add condition to selected connection
+  function addConditionToSelectedConnection() {
+    const selectedConnection = connections.find(c => c.isSelected);
+
+    if (selectedConnection && selectedConnection.connectionType === 'sequence') {
+      openLabelDialog(selectedConnection, true);
+    }
+  }
+
+  // Label dialog functions
+  function openLabelDialog(connection, isCondition = false) {
+    console.log('BpmnEditor: openLabelDialog called for connection', connection.id);
+    currentEditingConnection = connection;
+    currentLabelText = connection.label || '';
+    isLabelDialogOpen = true;
+    console.log('BpmnEditor: isLabelDialogOpen set to', isLabelDialogOpen);
+  }
+
+  function handleLabelSave(text) {
+    if (currentEditingConnection) {
+      if (currentEditingConnection.connectionType === 'sequence' &&
+          currentEditingConnection.condition !== undefined) {
+        // This is a condition expression
+        bpmnStore.updateConnectionCondition(currentEditingConnection.id, text);
+
+        // If there's no label yet, add a default one
+        if (!currentEditingConnection.label) {
+          bpmnStore.updateConnectionLabel(currentEditingConnection.id, text);
+        }
+      } else {
+        // This is a regular label
+        bpmnStore.updateConnectionLabel(currentEditingConnection.id, text);
+      }
+      closeLabelDialog();
+    }
+  }
+
+  function closeLabelDialog() {
+    isLabelDialogOpen = false;
+    currentEditingConnection = null;
+    currentLabelText = '';
+  }
+
   // Start adjusting a connection endpoint
   function handleConnectionEndpointAdjustment(isAdjusting) {
     isAdjustingConnectionEndpoint = isAdjusting;
@@ -366,10 +437,13 @@
     <button on:click={toggleConnectionPoints}>
       {showConnectionPoints ? 'Hide Connection Points' : 'Show Connection Points'}
     </button>
+    <button on:click={addConditionToSelectedConnection} disabled={!connections.some(c => c.isSelected && c.connectionType === 'sequence')}>
+      Add Condition
+    </button>
     <button on:click={() => bpmnStore.reset()}>Reset</button>
   </div>
 
-  <div class="canvas-container">
+  <div class="canvas-container" id="canvas-container">
     <svg width={canvasWidth} height={canvasHeight} class="canvas">
       <!-- Draw grid -->
       <pattern id="grid" width="20" height="20" patternUnits="userSpaceOnUse">
@@ -415,6 +489,7 @@
               targetPosition={posInfo.target}
               onSelect={handleConnectionSelect}
               onEndpointAdjustment={handleConnectionEndpointAdjustment}
+              onEditLabel={(conn) => openLabelDialog(conn)}
             />
           {/if}
         {/if}
@@ -521,6 +596,15 @@
       {/if}
     </svg>
   </div>
+
+  <!-- Label Edit Dialog -->
+  <LabelEditDialog
+    isOpen={isLabelDialogOpen}
+    label={currentLabelText}
+    isCondition={currentEditingConnection?.connectionType === 'sequence' && currentEditingConnection?.condition !== undefined}
+    on:save={(e) => handleLabelSave(e.detail)}
+    on:close={closeLabelDialog}
+  />
 </div>
 
 <style>

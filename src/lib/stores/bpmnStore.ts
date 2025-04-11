@@ -119,6 +119,21 @@ const createBpmnStore = () => {
           return el;
         });
       }),
+    // Update connection label
+    updateConnectionLabel: (id: string, label: string) =>
+      update(elements =>
+        elements.map(el => el.id === id && el.type === 'connection' ? { ...el, label } : el)
+      ),
+    // Update connection label position
+    updateConnectionLabelPosition: (id: string, position: Position) =>
+      update(elements =>
+        elements.map(el => el.id === id && el.type === 'connection' ? { ...el, labelPosition: position } : el)
+      ),
+    // Update connection condition
+    updateConnectionCondition: (id: string, condition: string) =>
+      update(elements =>
+        elements.map(el => el.id === id && el.type === 'connection' ? { ...el, condition } : el)
+      ),
     // Reset to initial state
     reset: () => set(initialElements)
   };
