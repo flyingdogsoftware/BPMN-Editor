@@ -3,42 +3,42 @@
 ## Phase 1: Basic Infrastructure
 
 ### Project Setup
-- [ ] Initialize Svelte 4 with TypeScript
+- [x] Initialize Svelte 4 with TypeScript
 - [ ] Configure ESLint and Prettier
 - [ ] Set up Jest/Vitest for testing
 - [ ] Set up Storybook for component documentation
-- [ ] Create directory structure
+- [x] Create directory structure
 
 ### Data Model
-- [ ] Define interfaces for BPMN elements
+- [x] Define interfaces for BPMN elements
 - [ ] Implement base classes for elements
 - [ ] Create specific classes for different element types
 - [ ] Implement diagram model
 - [ ] Write unit tests for data model
 
 ### State Management
-- [ ] Create Svelte stores for editor state
+- [x] Create Svelte stores for editor state
 - [ ] Implement command system for undo/redo
-- [ ] Implement basic commands (add, remove, move)
-- [ ] Implement selection mechanism
+- [x] Implement basic commands (add, remove, move)
+- [x] Implement selection mechanism
 - [ ] Write unit tests for state management
 
 ## Phase 2: Rendering Engine
 
 ### SVG Base Components
-- [ ] Implement canvas component with SVG
+- [x] Implement canvas component with SVG
 - [ ] Add zoom and pan functionality
-- [ ] Implement grid with snapping functionality
+- [x] Implement grid with snapping functionality
 - [ ] Implement coordinate system transformations
 - [ ] Create minimap for navigation in large diagrams
 
 ### BPMN Element Components
-- [ ] Create base component for all BPMN elements
-- [ ] Implement task component
-- [ ] Implement event components (start, end, intermediate)
-- [ ] Implement gateway components
-- [ ] Implement connection component with path calculation
-- [ ] Add handles for resizing and connection points
+- [x] Create base component for all BPMN elements
+- [x] Implement task component
+- [x] Implement event components (start, end, intermediate)
+- [x] Implement gateway components
+- [x] Implement connection component with path calculation
+- [x] Add handles for resizing and connection points
 - [ ] Write tests for rendering components
 
 ### Interaction Components
@@ -52,37 +52,37 @@
 ## Phase 3: Core Functionality
 
 ### Element Manipulation
-- [ ] Implement drag & drop of elements from palette
-- [ ] Implement moving elements on the canvas
+- [x] Implement drag & drop of elements from palette
+- [x] Implement moving elements on the canvas
 - [ ] Implement resizing of elements
 - [ ] Implement multi-selection and group operations
-- [ ] Implement deleting elements
+- [x] Implement deleting elements
 - [ ] Implement copy/paste functionality
 
 ### Connections
-- [ ] Define connection points for elements
-  - [ ] Add anchor points to task elements
-  - [ ] Add anchor points to event elements
-  - [ ] Add anchor points to gateway elements
-  - [ ] Implement visual indicators for connection points
-- [ ] Implement connection creation via drag & drop
-  - [ ] Create connection start interaction (mousedown on anchor)
-  - [ ] Implement connection preview during drag
-  - [ ] Handle connection completion (mouseup on valid target)
-  - [ ] Add validation for valid connection targets
-- [ ] Implement connection data model
-  - [ ] Define connection types (sequence flow, message flow, association)
-  - [ ] Create connection styling based on type
-  - [ ] Store connection data in the BPMN store
-- [ ] Implement automatic routing for connections
-  - [ ] Create path calculation algorithm
-  - [ ] Implement orthogonal routing option
-  - [ ] Implement direct routing option
-  - [ ] Add waypoints for manual path adjustments
-- [ ] Implement connection interaction
-  - [ ] Allow selecting connections
+- [x] Define connection points for elements
+  - [x] Add anchor points to task elements
+  - [x] Add anchor points to event elements
+  - [x] Add anchor points to gateway elements
+  - [x] Implement visual indicators for connection points
+- [x] Implement connection creation via drag & drop
+  - [x] Create connection start interaction (mousedown on anchor)
+  - [x] Implement connection preview during drag
+  - [x] Handle connection completion (mouseup on valid target)
+  - [x] Add validation for valid connection targets
+- [x] Implement connection data model
+  - [x] Define connection types (sequence flow, message flow, association)
+  - [x] Create connection styling based on type
+  - [x] Store connection data in the BPMN store
+- [x] Implement automatic routing for connections
+  - [x] Create path calculation algorithm
+  - [x] Implement orthogonal routing option
+  - [x] Implement direct routing option
+  - [x] Add waypoints for manual path adjustments
+- [x] Implement connection interaction
+  - [x] Allow selecting connections
   - [ ] Enable dragging connection paths
-  - [ ] Add connection deletion functionality
+  - [x] Add connection deletion functionality
   - [ ] Implement connection point adjustment
 - [ ] Implement labels for connections
   - [ ] Add text labels to connections
