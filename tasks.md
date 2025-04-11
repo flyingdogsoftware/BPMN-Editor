@@ -89,11 +89,7 @@
   - [ ] Position labels automatically
   - [ ] Allow manual label positioning
   - [ ] Support condition expressions for sequence flows
-- [ ] Write tests for connection functionality
-  - [ ] Test connection creation
-  - [ ] Test connection routing
-  - [ ] Test connection interaction
-  - [ ] Test connection validation
+
 
 ### Property Editing
 - [ ] Implement dynamic properties panel

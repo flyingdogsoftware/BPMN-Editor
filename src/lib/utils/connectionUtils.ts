@@ -1,4 +1,5 @@
 import type { AnchorPosition, BpmnNode, ConnectionPoint, Position } from '$lib/types/bpmn';
+import { snapToGrid } from './gridUtils';
 
 /**
  * Calculate connection points for a BPMN node
@@ -81,11 +82,27 @@ export function calculateConnectionPath(
     // Use waypoints if provided
     let path = `M ${start.x} ${start.y}`;
 
+    // Create orthogonal segments between waypoints
+    let prevPoint = start;
+
     for (const point of waypoints) {
-      path += ` L ${point.x} ${point.y}`;
+      if (routingType === 'orthogonal') {
+        // Create orthogonal segment between prevPoint and current point
+        path += calculateOrthogonalSegment(prevPoint, point);
+      } else {
+        // Direct line to the waypoint
+        path += ` L ${point.x} ${point.y}`;
+      }
+      prevPoint = point;
     }
 
-    path += ` L ${end.x} ${end.y}`;
+    // Final segment to the end point
+    if (routingType === 'orthogonal') {
+      path += calculateOrthogonalSegment(prevPoint, end);
+    } else {
+      path += ` L ${end.x} ${end.y}`;
+    }
+
     return path;
   } else if (routingType === 'direct') {
     // Direct routing (straight line)
@@ -186,6 +203,147 @@ export function isValidConnection(sourceType: string, targetType: string): boole
   // Implement validation rules based on BPMN specification
   // For now, allow all connections
   return true;
+}
+
+/**
+ * Calculate an orthogonal segment between two points
+ * @param start The start position
+ * @param end The end position
+ * @returns SVG path data string (without the initial M command)
+ */
+function calculateOrthogonalSegment(start: Position, end: Position): string {
+  // Determine the direction of the connection
+  const dx = end.x - start.x;
+  const dy = end.y - start.y;
+
+  // If the points are aligned horizontally or vertically, use a direct line
+  if (start.x === end.x || start.y === end.y) {
+    return ` L ${end.x} ${end.y}`;
+  }
+
+  // Otherwise, create an L-shaped path
+  return ` L ${end.x} ${start.y} L ${end.x} ${end.y}`;
+}
+
+/**
+ * Generate virtual bendpoints for a connection
+ * @param start The start position
+ * @param end The end position
+ * @param waypoints Existing waypoints
+ * @param segmentThreshold Minimum length of segment to add a virtual bendpoint
+ * @returns Array of virtual bendpoint positions
+ */
+export function generateVirtualBendpoints(
+  start: Position,
+  end: Position,
+  waypoints: Position[],
+  segmentThreshold: number = 50
+): Position[] {
+  const virtualPoints: Position[] = [];
+
+  // If no waypoints, calculate virtual points between start and end
+  if (!waypoints || waypoints.length === 0) {
+    const dx = end.x - start.x;
+    const dy = end.y - start.y;
+
+    // Only add virtual points if the segment is long enough
+    if (Math.abs(dx) > segmentThreshold && Math.abs(dy) > segmentThreshold) {
+      // Add a virtual point at the corner of the L-shape
+      virtualPoints.push({ x: end.x, y: start.y });
+    }
+
+    return virtualPoints;
+  }
+
+  // Add virtual points between waypoints
+  let prevPoint = start;
+
+  for (const point of waypoints) {
+    // Check if the segment is long enough for a virtual point
+    const dx = point.x - prevPoint.x;
+    const dy = point.y - prevPoint.y;
+
+    if (Math.abs(dx) > segmentThreshold && Math.abs(dy) > segmentThreshold) {
+      // Add a virtual point at the corner of the L-shape
+      virtualPoints.push({ x: point.x, y: prevPoint.y });
+    }
+
+    prevPoint = point;
+  }
+
+  // Check the final segment to the end point
+  const lastDx = end.x - prevPoint.x;
+  const lastDy = end.y - prevPoint.y;
+
+  if (Math.abs(lastDx) > segmentThreshold && Math.abs(lastDy) > segmentThreshold) {
+    virtualPoints.push({ x: end.x, y: prevPoint.y });
+  }
+
+  return virtualPoints;
+}
+
+/**
+ * Update waypoints when a bendpoint is moved
+ * @param waypoints The current waypoints array
+ * @param index The index of the bendpoint being moved
+ * @param newX The new X coordinate
+ * @param newY The new Y coordinate
+ * @param snapToGrid Whether to snap the new position to the grid
+ * @param gridSize The grid size for snapping
+ * @returns The updated waypoints array
+ */
+export function updateWaypoint(
+  waypoints: Position[],
+  index: number,
+  newX: number,
+  newY: number,
+  snapToGrid: boolean = true,
+  gridSize: number = 20
+): Position[] {
+  // Create a copy of the waypoints array
+  const updatedWaypoints = [...waypoints];
+
+  // Snap the coordinates to the grid if needed
+  const x = snapToGrid ? Math.round(newX / gridSize) * gridSize : newX;
+  const y = snapToGrid ? Math.round(newY / gridSize) * gridSize : newY;
+
+  // Update the waypoint at the specified index
+  updatedWaypoints[index] = { x, y };
+
+  return updatedWaypoints;
+}
+
+/**
+ * Add a new waypoint to the connection
+ * @param waypoints The current waypoints array
+ * @param newX The X coordinate of the new waypoint
+ * @param newY The Y coordinate of the new waypoint
+ * @param snapToGrid Whether to snap the new position to the grid
+ * @param gridSize The grid size for snapping
+ * @returns The updated waypoints array with the new waypoint inserted at the appropriate position
+ */
+export function addWaypoint(
+  waypoints: Position[],
+  newX: number,
+  newY: number,
+  snapToGrid: boolean = true,
+  gridSize: number = 20
+): Position[] {
+  // Snap the coordinates to the grid if needed
+  const x = snapToGrid ? Math.round(newX / gridSize) * gridSize : newX;
+  const y = snapToGrid ? Math.round(newY / gridSize) * gridSize : newY;
+
+  // Create a new waypoint
+  const newWaypoint = { x, y };
+
+  // If there are no existing waypoints, just return an array with the new one
+  if (!waypoints || waypoints.length === 0) {
+    return [newWaypoint];
+  }
+
+  // Otherwise, find the best position to insert the new waypoint
+  // For now, we'll just append it to the end
+  return [...waypoints, newWaypoint];
 }
 
 /**

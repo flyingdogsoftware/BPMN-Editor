@@ -1,6 +1,13 @@
 <script>
   import { bpmnStore } from '$lib/stores/bpmnStore';
-  import { calculateConnectionPath, calculateLabelPosition } from '$lib/utils/connectionUtils';
+  import {
+    calculateConnectionPath,
+    calculateLabelPosition,
+    generateVirtualBendpoints,
+    updateWaypoint
+  } from '$lib/utils/connectionUtils';
+  import { snapToGrid } from '$lib/utils/gridUtils';
+  import BendPoint from './BendPoint.svelte';
 
   // Props
   export let connection;
@@ -8,11 +15,35 @@
   export let targetPosition;
   export let onSelect;
 
+  // Local state
+  let isDragging = false;
+  let previewWaypoints = null;
+  let virtualBendpoints = [];
+
+  // Grid size for snapping
+  const gridSize = 20;
+  // Minimum segment length to show virtual bendpoints
+  const segmentThreshold = 50;
+
   // Computed
+  $: {
+    // Calculate virtual bendpoints when connection is selected
+    if (connection.isSelected) {
+      virtualBendpoints = generateVirtualBendpoints(
+        sourcePosition,
+        targetPosition,
+        connection.waypoints || [],
+        segmentThreshold
+      );
+    } else {
+      virtualBendpoints = [];
+    }
+  }
+
   $: pathData = calculateConnectionPath(
     sourcePosition,
     targetPosition,
-    connection.waypoints,
+    isDragging && previewWaypoints ? previewWaypoints : connection.waypoints,
     'orthogonal'
   );
 
@@ -68,6 +99,62 @@
       onSelect(connection.id);
     }
   }
+
+  // Bendpoint drag handlers
+  function handleBendPointDragStart() {
+    isDragging = true;
+
+    // Initialize preview waypoints
+    previewWaypoints = connection.waypoints ? [...connection.waypoints] : [];
+  }
+
+  function handleBendPointDrag(index, x, y) {
+    if (!isDragging) return;
+
+    // Update the preview waypoints
+    if (previewWaypoints) {
+      previewWaypoints = updateWaypoint(previewWaypoints, index, x, y, false);
+    }
+  }
+
+  function handleBendPointDragEnd(index, x, y, isVirtual) {
+    if (!isDragging) return;
+
+    isDragging = false;
+
+    // Snap to grid
+    const snappedX = snapToGrid(x, gridSize);
+    const snappedY = snapToGrid(y, gridSize);
+
+    // If this is a virtual point, convert it to a real waypoint
+    if (isVirtual) {
+      // Create a new array of waypoints with the virtual point added
+      const newWaypoints = connection.waypoints ? [...connection.waypoints] : [];
+      newWaypoints.push({ x: snappedX, y: snappedY });
+
+      // Sort waypoints by position (this is a simple approach, might need refinement)
+      // For now, we'll just add it and let the user adjust if needed
+
+      // Update the connection in the store
+      bpmnStore.updateConnectionWaypoints(connection.id, newWaypoints);
+    } else {
+      // Update the existing waypoint
+      const updatedWaypoints = updateWaypoint(
+        connection.waypoints || [],
+        index,
+        snappedX,
+        snappedY,
+        true,
+        gridSize
+      );
+
+      // Update the connection in the store
+      bpmnStore.updateConnectionWaypoints(connection.id, updatedWaypoints);
+    }
+
+    // Reset preview
+    previewWaypoints = null;
+  }
 </script>
 
 <g
@@ -101,18 +188,33 @@
   {/if}
 
   {#if connection.isSelected}
-    <!-- Show control points when selected -->
-    {#if connection.waypoints}
+    <!-- Show bendpoints when selected -->
+    {#if connection.waypoints && connection.waypoints.length > 0}
       {#each connection.waypoints as waypoint, i}
-        <circle
-          cx={waypoint.x}
-          cy={waypoint.y}
-          r="5"
-          class="waypoint"
-          data-index={i}
+        <BendPoint
+          x={waypoint.x}
+          y={waypoint.y}
+          index={i}
+          isVirtual={false}
+          onDragStart={handleBendPointDragStart}
+          onDrag={handleBendPointDrag}
+          onDragEnd={handleBendPointDragEnd}
         />
       {/each}
     {/if}
+
+    <!-- Show virtual bendpoints on long segments -->
+    {#each virtualBendpoints as vpoint, i}
+      <BendPoint
+        x={vpoint.x}
+        y={vpoint.y}
+        index={i}
+        isVirtual={true}
+        onDragStart={() => handleBendPointDragStart()}
+        onDrag={(_, x, y) => handleBendPointDrag(connection.waypoints ? connection.waypoints.length + i : i, x, y)}
+        onDragEnd={(_, x, y, isVirtual) => handleBendPointDragEnd(connection.waypoints ? connection.waypoints.length + i : i, x, y, isVirtual)}
+      />
+    {/each}
   {/if}
 </g>
 
@@ -134,12 +236,5 @@
     fill: #333;
     pointer-events: none;
     user-select: none;
-  }
-
-  .waypoint {
-    fill: white;
-    stroke: #3498db;
-    stroke-width: 2;
-    cursor: move;
   }
 </style>
