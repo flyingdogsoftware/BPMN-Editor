@@ -7,6 +7,7 @@
   import ConnectionPreview from './ConnectionPreview.svelte';
   import Connection from './Connection.svelte';
   import LabelEditDialog from './LabelEditDialog.svelte';
+  import Toolbar from './toolbar/Toolbar.svelte';
 
   // Listen for edit-label events from Connection components
   onMount(() => {
@@ -561,74 +562,38 @@
 </script>
 
 <div class="bpmn-editor">
-  <div class="toolbar">
-    <div class="toolbar-section">
-      <h3>Activities</h3>
-      <button on:click={() => addTask('task')}>Task</button>
-      <button on:click={() => addTask('user')}>User Task</button>
-      <button on:click={() => addTask('service')}>Service Task</button>
-      <button on:click={() => addTask('send')}>Send Task</button>
-      <button on:click={() => addTask('receive')}>Receive Task</button>
-      <button on:click={() => addTask('manual')}>Manual Task</button>
-      <button on:click={() => addTask('business-rule')}>Business Rule Task</button>
-      <button on:click={() => addTask('script')}>Script Task</button>
-      <button on:click={() => addSubProcess('embedded')}>Subprocess</button>
-      <button on:click={() => addSubProcess('event')}>Event Subprocess</button>
-      <button on:click={() => addSubProcess('transaction')}>Transaction</button>
-      <button on:click={() => addSubProcess('adhoc')}>Ad-hoc Subprocess</button>
-    </div>
-
-    <div class="toolbar-section">
-      <h3>Events</h3>
-      <button on:click={() => addEvent('start', 'none')}>Start Event</button>
-      <button on:click={() => addEvent('start', 'message')}>Message Start</button>
-      <button on:click={() => addEvent('start', 'timer')}>Timer Start</button>
-      <button on:click={() => addEvent('intermediate-catch', 'none')}>Intermediate Event</button>
-      <button on:click={() => addEvent('intermediate-catch', 'message')}>Message Catch</button>
-      <button on:click={() => addEvent('intermediate-throw', 'message')}>Message Throw</button>
-      <button on:click={() => addEvent('end', 'none')}>End Event</button>
-      <button on:click={() => addEvent('end', 'terminate')}>Terminate End</button>
-    </div>
-
-    <div class="toolbar-section">
-      <h3>Gateways</h3>
-      <button on:click={() => addGateway('exclusive')}>Exclusive Gateway</button>
-      <button on:click={() => addGateway('inclusive')}>Inclusive Gateway</button>
-      <button on:click={() => addGateway('parallel')}>Parallel Gateway</button>
-      <button on:click={() => addGateway('complex')}>Complex Gateway</button>
-      <button on:click={() => addGateway('event-based')}>Event-based Gateway</button>
-    </div>
-
-    <div class="toolbar-section">
-      <h3>Data</h3>
-      <button on:click={() => addDataObject()}>Data Object</button>
-      <button on:click={() => addDataObject(true, false)}>Data Input</button>
-      <button on:click={() => addDataObject(false, true)}>Data Output</button>
-      <button on:click={() => addDataStore()}>Data Store</button>
-    </div>
-
-    <div class="toolbar-section">
-      <h3>Artifacts</h3>
-      <button on:click={() => addTextAnnotation()}>Text Annotation</button>
-    </div>
-
-    <div class="toolbar-section">
-      <h3>Swimlanes</h3>
-      <button on:click={() => addPool()}>Pool</button>
-      <button on:click={() => addLane()}>Lane</button>
-    </div>
-
-    <div class="toolbar-section">
-      <h3>Tools</h3>
-      <button on:click={toggleConnectionPoints}>
-        {showConnectionPoints ? 'Hide Connection Points' : 'Show Connection Points'}
-      </button>
-      <button on:click={addConditionToSelectedConnection} disabled={!connections.some(c => c.isSelected && c.connectionType === 'sequence')}>
-        Add Condition
-      </button>
-      <button on:click={() => bpmnStore.reset()}>Reset</button>
-    </div>
-  </div>
+  <Toolbar
+    on:add={({detail}) => {
+      if (detail.type === 'task') {
+        addTask(detail.subtype);
+      } else if (detail.type === 'event') {
+        addEvent(detail.subtype, detail.eventDefinition || 'none');
+      } else if (detail.type === 'gateway') {
+        addGateway(detail.subtype);
+      } else if (detail.type === 'subprocess') {
+        addSubProcess(detail.subtype);
+      } else if (detail.type === 'dataobject') {
+        if (detail.subtype === 'input') {
+          addDataObject(true, false);
+        } else if (detail.subtype === 'output') {
+          addDataObject(false, true);
+        } else {
+          addDataObject();
+        }
+      } else if (detail.type === 'datastore') {
+        addDataStore();
+      } else if (detail.type === 'textannotation') {
+        addTextAnnotation();
+      } else if (detail.type === 'pool') {
+        addPool();
+      } else if (detail.type === 'lane') {
+        addLane();
+      }
+    }}
+    on:toggleConnectionPoints={toggleConnectionPoints}
+    on:addCondition={addConditionToSelectedConnection}
+    on:reset={() => bpmnStore.reset()}
+  />
 
   <div class="canvas-container" id="canvas-container">
     <svg width={canvasWidth} height={canvasHeight} class="canvas">
@@ -1454,54 +1419,7 @@
     overflow: hidden;
   }
 
-  .toolbar {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-    padding: 8px;
-    background-color: #f0f0f0;
-    border-bottom: 1px solid #ccc;
-    max-height: 300px;
-    overflow-y: auto;
-  }
-
-  .toolbar-section {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-    min-width: 150px;
-    border: 1px solid #ddd;
-    border-radius: 4px;
-    padding: 8px;
-    background-color: white;
-  }
-
-  .toolbar-section h3 {
-    margin: 0 0 8px 0;
-    font-size: 14px;
-    color: #333;
-    border-bottom: 1px solid #eee;
-    padding-bottom: 4px;
-  }
-
-  .toolbar button {
-    padding: 4px 8px;
-    background-color: white;
-    border: 1px solid #ccc;
-    border-radius: 4px;
-    cursor: pointer;
-    font-size: 12px;
-    text-align: left;
-  }
-
-  .toolbar button:hover {
-    background-color: #e0e0e0;
-  }
-
-  .toolbar button:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
+  /* Toolbar styles moved to Toolbar.svelte component */
 
   .canvas-container {
     overflow: auto;

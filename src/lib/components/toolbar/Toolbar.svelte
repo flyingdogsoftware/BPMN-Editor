@@ -1,0 +1,169 @@
+<script>
+  import { createEventDispatcher } from 'svelte';
+  import ElementCreationDialog from './ElementCreationDialog.svelte';
+  
+  const dispatch = createEventDispatcher();
+  let showElementDialog = false;
+  
+  function addCommonElement(type, subtype) {
+    dispatch('add', { type, subtype });
+  }
+  
+  function toggleElementDialog() {
+    showElementDialog = !showElementDialog;
+  }
+
+  function handleAddElement(event) {
+    dispatch('add', event.detail);
+    showElementDialog = false;
+  }
+
+  function toggleConnectionPoints() {
+    dispatch('toggleConnectionPoints');
+  }
+
+  function addConditionToSelectedConnection() {
+    dispatch('addCondition');
+  }
+
+  function resetDiagram() {
+    dispatch('reset');
+  }
+</script>
+
+<div class="toolbar">
+  <!-- Common elements -->
+  <div class="toolbar-section">
+    <h3>Common Elements</h3>
+    <div class="button-group">
+      <button on:click={() => addCommonElement('task', 'task')} class="element-button">
+        <div class="element-icon task-icon"></div>
+        <span>Task</span>
+      </button>
+      <button on:click={() => addCommonElement('event', 'start')} class="element-button">
+        <div class="element-icon start-event-icon"></div>
+        <span>Start</span>
+      </button>
+      <button on:click={() => addCommonElement('event', 'end')} class="element-button">
+        <div class="element-icon end-event-icon"></div>
+        <span>End</span>
+      </button>
+      <button on:click={() => addCommonElement('gateway', 'exclusive')} class="element-button">
+        <div class="element-icon gateway-icon"></div>
+        <span>Gateway</span>
+      </button>
+      <button on:click={toggleElementDialog} class="more-button">
+        More Elements...
+      </button>
+    </div>
+  </div>
+  
+  <!-- Tools section -->
+  <div class="toolbar-section">
+    <h3>Tools</h3>
+    <div class="button-group">
+      <button on:click={toggleConnectionPoints}>
+        Connection Points
+      </button>
+      <button on:click={addConditionToSelectedConnection}>
+        Add Condition
+      </button>
+      <button on:click={resetDiagram}>
+        Reset
+      </button>
+    </div>
+  </div>
+</div>
+
+{#if showElementDialog}
+  <ElementCreationDialog 
+    on:close={toggleElementDialog}
+    on:add={handleAddElement}
+  />
+{/if}
+
+<style>
+  .toolbar {
+    background-color: #f5f5f5;
+    border-bottom: 1px solid #ddd;
+    padding: 10px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 20px;
+  }
+
+  .toolbar-section {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .toolbar-section h3 {
+    font-size: 14px;
+    margin: 0 0 8px 0;
+    color: #555;
+  }
+
+  .button-group {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  button {
+    background-color: #fff;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    padding: 6px 12px;
+    cursor: pointer;
+    font-size: 14px;
+    transition: all 0.2s;
+  }
+
+  button:hover {
+    background-color: #f0f0f0;
+    border-color: #ccc;
+  }
+
+  .element-button {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 8px;
+  }
+
+  .element-icon {
+    width: 24px;
+    height: 24px;
+    margin-bottom: 4px;
+    background-repeat: no-repeat;
+    background-position: center;
+    background-size: contain;
+  }
+
+  .task-icon {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect x='2' y='4' width='20' height='16' rx='2' ry='2' fill='white' stroke='black' stroke-width='1.5'/%3E%3C/svg%3E");
+  }
+
+  .start-event-icon {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Ccircle cx='12' cy='12' r='10' fill='white' stroke='black' stroke-width='1.5'/%3E%3C/svg%3E");
+  }
+
+  .end-event-icon {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Ccircle cx='12' cy='12' r='10' fill='white' stroke='black' stroke-width='3'/%3E%3C/svg%3E");
+  }
+
+  .gateway-icon {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpolygon points='12,2 22,12 12,22 2,12' fill='white' stroke='black' stroke-width='1.5'/%3E%3Cpath d='M7,12 L17,12 M12,7 L12,17' stroke='black' stroke-width='1.5'/%3E%3C/svg%3E");
+  }
+
+  .more-button {
+    background-color: #e6f7ff;
+    border-color: #91d5ff;
+    color: #1890ff;
+  }
+
+  .more-button:hover {
+    background-color: #bae7ff;
+    border-color: #1890ff;
+  }
+</style>
