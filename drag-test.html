@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Drag and Drop Test</title>
+    <style>
+        .draggable {
+            width: 100px;
+            height: 50px;
+            background-color: #3498db;
+            color: white;
+            text-align: center;
+            line-height: 50px;
+            margin: 10px;
+            cursor: move;
+        }
+        
+        .drop-zone {
+            width: 300px;
+            height: 300px;
+            border: 2px dashed #2c3e50;
+            margin: 20px;
+            padding: 10px;
+        }
+        
+        .drop-zone.drag-over {
+            background-color: #ecf0f1;
+        }
+    </style>
+</head>
+<body>
+    <h1>Drag and Drop Test</h1>
+    
+    <div class="draggable" draggable="true" id="drag1">Drag Me</div>
+    
+    <div class="drop-zone" id="drop-zone">
+        Drop Zone
+    </div>
+    
+    <div id="log" style="margin: 20px; padding: 10px; border: 1px solid #ccc; height: 200px; overflow: auto;"></div>
+    
+    <script>
+        function log(message) {
+            const logElement = document.getElementById('log');
+            logElement.innerHTML += message + '<br>';
+            console.log(message);
+        }
+        
+        const draggable = document.getElementById('drag1');
+        const dropZone = document.getElementById('drop-zone');
+        
+        draggable.addEventListener('dragstart', function(event) {
+            log('Drag start');
+            
+            // Set the data being dragged
+            const data = {
+                id: 'test-element',
+                type: 'test',
+                name: 'Test Element'
+            };
+            
+            const jsonData = JSON.stringify(data);
+            log('Setting data: ' + jsonData);
+            
+            try {
+                // Try different MIME types
+                event.dataTransfer.setData('application/json', jsonData);
+                log('Set application/json data');
+                
+                event.dataTransfer.setData('text/plain', jsonData);
+                log('Set text/plain data');
+                
+                event.dataTransfer.effectAllowed = 'copy';
+                log('Set effectAllowed to copy');
+            } catch (error) {
+                log('Error setting drag data: ' + error.message);
+            }
+        });
+        
+        draggable.addEventListener('dragend', function(event) {
+            log('Drag end');
+        });
+        
+        dropZone.addEventListener('dragover', function(event) {
+            // Prevent default to allow drop
+            event.preventDefault();
+            this.classList.add('drag-over');
+            log('Drag over');
+        });
+        
+        dropZone.addEventListener('dragleave', function(event) {
+            this.classList.remove('drag-over');
+            log('Drag leave');
+        });
+        
+        dropZone.addEventListener('drop', function(event) {
+            // Prevent default action (open as link for some elements)
+            event.preventDefault();
+            this.classList.remove('drag-over');
+            
+            log('Drop event triggered');
+            log('Available data types: ' + Array.from(event.dataTransfer.types).join(', '));
+            
+            // Try different MIME types
+            let data;
+            try {
+                data = event.dataTransfer.getData('application/json');
+                log('application/json data: ' + data);
+            } catch (error) {
+                log('Error getting application/json data: ' + error.message);
+            }
+            
+            if (!data) {
+                try {
+                    data = event.dataTransfer.getData('text/plain');
+                    log('text/plain data: ' + data);
+                } catch (error) {
+                    log('Error getting text/plain data: ' + error.message);
+                }
+            }
+            
+            if (data) {
+                try {
+                    const parsedData = JSON.parse(data);
+                    log('Parsed data: ' + JSON.stringify(parsedData));
+                    
+                    // Create a new element in the drop zone
+                    const newElement = document.createElement('div');
+                    newElement.className = 'draggable';
+                    newElement.textContent = parsedData.name;
+                    newElement.style.backgroundColor = '#27ae60';
+                    this.appendChild(newElement);
+                } catch (error) {
+                    log('Error parsing data: ' + error.message);
+                }
+            } else {
+                log('No data received');
+            }
+        });
+    </script>
+</body>
+</html>

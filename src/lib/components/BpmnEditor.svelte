@@ -45,6 +45,11 @@
   let elementStartX = 0;
   let elementStartY = 0;
 
+  // Drop zone state
+  let isDragOver = false;
+  let dropX = 0;
+  let dropY = 0;
+
   // Connection state
   let isCreatingConnection = false;
   let isAdjustingConnectionEndpoint = false;
@@ -92,13 +97,16 @@
   }
 
   // Add a new task
-  function addTask(taskType = 'user') {
+  function addTask(taskType = 'user', x = 200, y = 200) {
+    // Snap the position to grid
+    const [snappedX, snappedY] = snapPositionToGrid(x, y);
+
     const newTask = {
       id: `task-${Date.now()}`,
       type: 'task',
       label: `${taskType.charAt(0).toUpperCase() + taskType.slice(1)} Task`,
-      x: 200,
-      y: 200,
+      x: snappedX,
+      y: snappedY,
       width: 120,
       height: 80,
       taskType: taskType
@@ -107,13 +115,16 @@
   }
 
   // Add a new event
-  function addEvent(eventType = 'start', eventDefinition = 'none') {
+  function addEvent(eventType = 'start', eventDefinition = 'none', x = 400, y = 200) {
+    // Snap the position to grid
+    const [snappedX, snappedY] = snapPositionToGrid(x, y);
+
     const newEvent = {
       id: `event-${Date.now()}`,
       type: 'event',
       label: `${eventDefinition.charAt(0).toUpperCase() + eventDefinition.slice(1)} ${eventType.charAt(0).toUpperCase() + eventType.slice(1)} Event`,
-      x: 400,
-      y: 200,
+      x: snappedX,
+      y: snappedY,
       width: 36,
       height: 36,
       eventType: eventType,
@@ -123,13 +134,16 @@
   }
 
   // Add a new gateway
-  function addGateway(gatewayType = 'exclusive') {
+  function addGateway(gatewayType = 'exclusive', x = 300, y = 300) {
+    // Snap the position to grid
+    const [snappedX, snappedY] = snapPositionToGrid(x, y);
+
     const newGateway = {
       id: `gateway-${Date.now()}`,
       type: 'gateway',
       label: `${gatewayType.charAt(0).toUpperCase() + gatewayType.slice(1)} Gateway`,
-      x: 300,
-      y: 300,
+      x: snappedX,
+      y: snappedY,
       width: 50,
       height: 50,
       gatewayType: gatewayType
@@ -138,13 +152,16 @@
   }
 
   // Add a new subprocess
-  function addSubProcess(subProcessType = 'embedded') {
+  function addSubProcess(subProcessType = 'embedded', x = 200, y = 300) {
+    // Snap the position to grid
+    const [snappedX, snappedY] = snapPositionToGrid(x, y);
+
     const newSubProcess = {
       id: `subprocess-${Date.now()}`,
       type: 'subprocess',
       label: `${subProcessType.charAt(0).toUpperCase() + subProcessType.slice(1)} SubProcess`,
-      x: 200,
-      y: 300,
+      x: snappedX,
+      y: snappedY,
       width: 180,
       height: 120,
       subProcessType: subProcessType,
@@ -155,13 +172,16 @@
   }
 
   // Add a new data object
-  function addDataObject(isInput = false, isOutput = false) {
+  function addDataObject(isInput = false, isOutput = false, x = 500, y = 200) {
+    // Snap the position to grid
+    const [snappedX, snappedY] = snapPositionToGrid(x, y);
+
     const newDataObject = {
       id: `dataobject-${Date.now()}`,
       type: 'dataobject',
       label: isInput ? 'Data Input' : (isOutput ? 'Data Output' : 'Data Object'),
-      x: 500,
-      y: 200,
+      x: snappedX,
+      y: snappedY,
       width: 36,
       height: 50,
       isCollection: false,
@@ -172,13 +192,16 @@
   }
 
   // Add a new data store
-  function addDataStore() {
+  function addDataStore(x = 500, y = 300) {
+    // Snap the position to grid
+    const [snappedX, snappedY] = snapPositionToGrid(x, y);
+
     const newDataStore = {
       id: `datastore-${Date.now()}`,
       type: 'datastore',
       label: 'Data Store',
-      x: 500,
-      y: 300,
+      x: snappedX,
+      y: snappedY,
       width: 50,
       height: 50,
       isCollection: false
@@ -187,14 +210,17 @@
   }
 
   // Add a new text annotation
-  function addTextAnnotation() {
+  function addTextAnnotation(x = 600, y = 200) {
+    // Snap the position to grid
+    const [snappedX, snappedY] = snapPositionToGrid(x, y);
+
     const newTextAnnotation = {
       id: `annotation-${Date.now()}`,
       type: 'textannotation',
       label: 'Annotation',
       text: 'Text Annotation',
-      x: 600,
-      y: 200,
+      x: snappedX,
+      y: snappedY,
       width: 100,
       height: 80
     };
@@ -202,13 +228,16 @@
   }
 
   // Add a new pool
-  function addPool() {
+  function addPool(x = 100, y = 400) {
+    // Snap the position to grid
+    const [snappedX, snappedY] = snapPositionToGrid(x, y);
+
     const newPool = {
       id: `pool-${Date.now()}`,
       type: 'pool',
       label: 'Pool',
-      x: 100,
-      y: 400,
+      x: snappedX,
+      y: snappedY,
       width: 600,
       height: 200,
       isHorizontal: true,
@@ -218,13 +247,16 @@
   }
 
   // Add a new lane
-  function addLane() {
+  function addLane(x = 100, y = 400) {
+    // Snap the position to grid
+    const [snappedX, snappedY] = snapPositionToGrid(x, y);
+
     const newLane = {
       id: `lane-${Date.now()}`,
       type: 'lane',
       label: 'Lane',
-      x: 100,
-      y: 400,
+      x: snappedX,
+      y: snappedY,
       width: 600,
       height: 100,
       isHorizontal: true
@@ -350,6 +382,100 @@
 
       // Update the element position in the store (without snapping during drag for smooth movement)
       bpmnStore.updateElement(draggedElementId, { x: newX, y: newY });
+    }
+  }
+
+  // Handle drag over event for drop zone
+  function handleDragOver(event) {
+    // Prevent default to allow drop
+    event.preventDefault();
+
+    // Set the drop effect to copy
+    event.dataTransfer.dropEffect = 'copy';
+
+    // Update drop zone state
+    isDragOver = true;
+
+    // Update drop position for visual feedback
+    const canvasRect = event.currentTarget.getBoundingClientRect();
+    dropX = event.clientX - canvasRect.left;
+    dropY = event.clientY - canvasRect.top;
+  }
+
+  // Handle drop event
+  function handleDrop(event) {
+    // Prevent default browser behavior
+    event.preventDefault();
+
+    // Reset drop zone state
+    isDragOver = false;
+
+    // Get the canvas position
+    const canvasRect = event.currentTarget.getBoundingClientRect();
+    const dropX = event.clientX - canvasRect.left;
+    const dropY = event.clientY - canvasRect.top;
+    console.log('Drop position:', { dropX, dropY });
+
+    // Get the dropped element data
+    console.log('BpmnEditor: Drop event triggered');
+    console.log('BpmnEditor: Available data types:', event.dataTransfer.types);
+
+    // Try different MIME types
+    let elementData;
+    try {
+      elementData = event.dataTransfer.getData('application/bpmn-element');
+      console.log('BpmnEditor: application/bpmn-element data:', elementData);
+    } catch (error) {
+      console.error('BpmnEditor: Error getting application/bpmn-element data:', error);
+    }
+
+    if (!elementData) {
+      try {
+        // Try text/plain as a fallback
+        elementData = event.dataTransfer.getData('text/plain');
+        console.log('BpmnEditor: text/plain fallback data:', elementData);
+      } catch (error) {
+        console.error('BpmnEditor: Error getting text/plain data:', error);
+      }
+    }
+
+    console.log('BpmnEditor: Final element data received:', elementData);
+
+    if (elementData) {
+      try {
+        // Parse the element data
+        const element = JSON.parse(elementData);
+        console.log('Parsed element:', element);
+
+        // Create a new element at the drop position
+        if (element.type === 'task') {
+          addTask(element.subtype, dropX, dropY);
+        } else if (element.type === 'event') {
+          addEvent(element.subtype, element.eventDefinition || 'none', dropX, dropY);
+        } else if (element.type === 'gateway') {
+          addGateway(element.subtype, dropX, dropY);
+        } else if (element.type === 'subprocess') {
+          addSubProcess(element.subtype, dropX, dropY);
+        } else if (element.type === 'dataobject') {
+          if (element.subtype === 'input') {
+            addDataObject(true, false, dropX, dropY);
+          } else if (element.subtype === 'output') {
+            addDataObject(false, true, dropX, dropY);
+          } else {
+            addDataObject(false, false, dropX, dropY);
+          }
+        } else if (element.type === 'datastore') {
+          addDataStore(dropX, dropY);
+        } else if (element.type === 'textannotation') {
+          addTextAnnotation(dropX, dropY);
+        } else if (element.type === 'pool') {
+          addPool(dropX, dropY);
+        } else if (element.type === 'lane') {
+          addLane(dropX, dropY);
+        }
+      } catch (error) {
+        console.error('Error parsing dropped element data:', error);
+      }
     }
   }
 
@@ -564,30 +690,34 @@
 <div class="bpmn-editor">
   <Toolbar
     on:add={({detail}) => {
+      // Get the current mouse position or use default position
+      const x = detail.x || 300;
+      const y = detail.y || 200;
+
       if (detail.type === 'task') {
-        addTask(detail.subtype);
+        addTask(detail.subtype, x, y);
       } else if (detail.type === 'event') {
-        addEvent(detail.subtype, detail.eventDefinition || 'none');
+        addEvent(detail.subtype, detail.eventDefinition || 'none', x, y);
       } else if (detail.type === 'gateway') {
-        addGateway(detail.subtype);
+        addGateway(detail.subtype, x, y);
       } else if (detail.type === 'subprocess') {
-        addSubProcess(detail.subtype);
+        addSubProcess(detail.subtype, x, y);
       } else if (detail.type === 'dataobject') {
         if (detail.subtype === 'input') {
-          addDataObject(true, false);
+          addDataObject(true, false, x, y);
         } else if (detail.subtype === 'output') {
-          addDataObject(false, true);
+          addDataObject(false, true, x, y);
         } else {
-          addDataObject();
+          addDataObject(false, false, x, y);
         }
       } else if (detail.type === 'datastore') {
-        addDataStore();
+        addDataStore(x, y);
       } else if (detail.type === 'textannotation') {
-        addTextAnnotation();
+        addTextAnnotation(x, y);
       } else if (detail.type === 'pool') {
-        addPool();
+        addPool(x, y);
       } else if (detail.type === 'lane') {
-        addLane();
+        addLane(x, y);
       }
     }}
     on:toggleConnectionPoints={toggleConnectionPoints}
@@ -595,7 +725,19 @@
     on:reset={() => bpmnStore.reset()}
   />
 
-  <div class="canvas-container" id="canvas-container">
+  <div
+    class="canvas-container"
+    id="canvas-container"
+    role="region"
+    aria-label="BPMN Editor Canvas"
+    on:dragover={handleDragOver}
+    on:drop={handleDrop}
+    on:dragleave={() => isDragOver = false}
+    class:drag-over={isDragOver}
+  >
+    {#if isDragOver}
+      <div class="drop-indicator" style="left: {dropX}px; top: {dropY}px;"></div>
+    {/if}
     <svg width={canvasWidth} height={canvasHeight} class="canvas">
       <!-- Draw grid -->
       <pattern id="grid" width="20" height="20" patternUnits="userSpaceOnUse">
@@ -1424,6 +1566,13 @@
   .canvas-container {
     overflow: auto;
     background-color: #f9f9f9;
+    position: relative;
+    transition: all 0.2s;
+  }
+
+  .canvas-container.drag-over {
+    background-color: #e6f7ff;
+    box-shadow: inset 0 0 0 2px #1890ff;
   }
 
   .canvas {
@@ -1448,5 +1597,18 @@
   .element-shape:hover {
     stroke: #2980b9;
     stroke-width: 2.5px;
+  }
+
+  /* Drop indicator */
+  .drop-indicator {
+    position: absolute;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background-color: rgba(24, 144, 255, 0.5);
+    border: 2px solid #1890ff;
+    transform: translate(-50%, -50%);
+    pointer-events: none;
+    z-index: 100;
   }
 </style>

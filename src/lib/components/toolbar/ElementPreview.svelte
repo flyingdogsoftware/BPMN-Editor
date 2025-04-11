@@ -1,17 +1,70 @@
 <script>
   import { createEventDispatcher } from 'svelte';
-  
+
   export let element;
-  
+
   const dispatch = createEventDispatcher();
-  
+
   function handleClick() {
-    dispatch('add', element);
+    // Default position when clicking from dialog
+    dispatch('add', { ...element, x: 300, y: 200 });
   }
-  
+
+  // Track if element is being dragged
+  let isDragging = false;
+
   function handleDragStart(event) {
-    event.dataTransfer.setData('application/bpmn-element', JSON.stringify(element));
-    event.dataTransfer.effectAllowed = 'copy';
+    // We'll add the mouse position when the element is dropped
+    // in the BpmnEditor component's handleDrop function
+    console.log('ElementPreview: Drag start with element:', element);
+    const elementData = JSON.stringify(element);
+    console.log('ElementPreview: Element data being set:', elementData);
+
+    try {
+      // Set data with multiple MIME types for better compatibility
+      event.dataTransfer.setData('application/bpmn-element', elementData);
+      console.log('ElementPreview: Set application/bpmn-element data');
+
+      event.dataTransfer.setData('text/plain', elementData);
+      console.log('ElementPreview: Set text/plain data');
+
+      event.dataTransfer.effectAllowed = 'copy';
+      console.log('ElementPreview: Set effectAllowed to copy');
+    } catch (error) {
+      console.error('ElementPreview: Error setting drag data:', error);
+    }
+
+    // Create a custom drag image if needed
+    // This is optional but can provide better visual feedback
+    const dragIcon = document.createElement('div');
+    dragIcon.innerHTML = `<svg width="40" height="40" viewBox="0 0 24 24">${getElementSvg(element)}</svg>`;
+    dragIcon.style.position = 'absolute';
+    dragIcon.style.top = '-1000px';
+    document.body.appendChild(dragIcon);
+
+    // Set the drag image with offset
+    event.dataTransfer.setDragImage(dragIcon, 20, 20);
+
+    // Set dragging state
+    isDragging = true;
+
+    // Add a class to the element being dragged
+    event.target.classList.add('dragging');
+
+    // Clean up the drag icon after a short delay
+    setTimeout(() => {
+      document.body.removeChild(dragIcon);
+    }, 0);
+  }
+
+  function handleDragEnd(event) {
+    console.log('ElementPreview: Drag end');
+
+    // Reset dragging state
+    isDragging = false;
+
+    // Remove the dragging class
+    event.target.classList.remove('dragging');
   }
 
   // Helper function to determine the SVG content based on element type
@@ -43,7 +96,7 @@
 
   function getTaskSvg(subtype) {
     let taskIcon = '';
-    
+
     switch(subtype) {
       case 'user':
         taskIcon = '<path d="M12,7 a3,3 0 1,0 0,6 a3,3 0 1,0 0,-6 M8,17 h8 a4,4 0 0,0 -8,0" stroke="black" fill="none" />';
@@ -67,7 +120,7 @@
         taskIcon = '<path d="M7,8 l2,0 l1,1 l-1,1 l-2,0 z M10,8 l4,0 M10,10 l4,0 M7,12 l7,0 M7,14 l7,0" stroke="black" fill="none" />';
         break;
     }
-    
+
     return `
       <rect x="2" y="4" width="20" height="16" rx="2" ry="2" fill="white" stroke="black" stroke-width="1.5" />
       ${taskIcon}
@@ -77,7 +130,7 @@
   function getEventSvg(subtype, eventDefinition) {
     let eventBorder = '';
     let eventIcon = '';
-    
+
     // Determine border style based on event type
     switch(subtype) {
       case 'start':
@@ -96,7 +149,7 @@
       default:
         eventBorder = '<circle cx="12" cy="12" r="10" fill="white" stroke="black" stroke-width="1.5" />';
     }
-    
+
     // Add event definition icon
     switch(eventDefinition) {
       case 'message':
@@ -124,13 +177,13 @@
         `;
         break;
     }
-    
+
     return `${eventBorder}${eventIcon}`;
   }
 
   function getGatewaySvg(subtype) {
     let gatewayIcon = '';
-    
+
     switch(subtype) {
       case 'exclusive':
         gatewayIcon = '<path d="M8,8 L16,16 M16,8 L8,16" stroke="black" stroke-width="1.5" />';
@@ -143,7 +196,7 @@
         break;
       case 'complex':
         gatewayIcon = `
-          <path d="M12,6 L12,18 M6,12 L18,12 M8,8 L16,16 M16,8 L8,16" 
+          <path d="M12,6 L12,18 M6,12 L18,12 M8,8 L16,16 M16,8 L8,16"
                 stroke="black" stroke-width="1" />
         `;
         break;
@@ -155,7 +208,7 @@
         `;
         break;
     }
-    
+
     return `
       <polygon points="12,2 22,12 12,22 2,12" fill="white" stroke="black" stroke-width="1.5" />
       ${gatewayIcon}
@@ -164,13 +217,13 @@
 
   function getDataObjectSvg(subtype) {
     let marker = '';
-    
+
     if (subtype === 'input') {
       marker = '<path d="M12,3 v-3 h-3 l3,3 l3,-3 h-3" fill="black" />';
     } else if (subtype === 'output') {
       marker = '<path d="M12,3 v-3 h3 l-3,3 l-3,-3 h3" fill="black" />';
     }
-    
+
     return `
       <path d="M6,5 h8 l4,4 v10 h-12 z M14,5 v4 h4" fill="white" stroke="black" stroke-width="1.5" />
       ${marker}
@@ -216,7 +269,7 @@
 
   function getSubprocessSvg(subtype) {
     let icon = '';
-    
+
     switch(subtype) {
       case 'event':
         icon = '<rect x="6" y="8" width="12" height="8" fill="none" stroke="black" stroke-width="1" stroke-dasharray="3,1" />';
@@ -230,7 +283,7 @@
       default: // embedded
         icon = '<rect x="6" y="8" width="12" height="8" fill="none" stroke="black" stroke-width="1" />';
     }
-    
+
     return `
       <rect x="2" y="4" width="20" height="16" rx="2" ry="2" fill="white" stroke="black" stroke-width="1.5" />
       <path d="M12,20 v-4 M10,18 h4" stroke="black" stroke-width="1.5" />
@@ -239,12 +292,16 @@
   }
 </script>
 
-<div 
+<div
   class="element-preview"
   draggable="true"
   on:click={handleClick}
+  on:keydown={(e) => e.key === 'Enter' && handleClick()}
   on:dragstart={handleDragStart}
+  on:dragend={handleDragEnd}
   title="Click to add or drag to position"
+  tabindex="0"
+  role="button"
 >
   <div class="element-icon">
     <svg width="24" height="24" viewBox="0 0 24 24">
@@ -263,20 +320,32 @@
     cursor: pointer;
     border: 1px solid transparent;
     transition: all 0.2s;
+    outline: none;
   }
-  
+
   .element-preview:hover {
     background-color: #f0f0f0;
     border-color: #d9d9d9;
   }
-  
+
+  .element-preview:focus {
+    box-shadow: 0 0 0 2px rgba(24, 144, 255, 0.2);
+    border-color: #1890ff;
+  }
+
+  .element-preview.dragging {
+    opacity: 0.6;
+    background-color: #e6f7ff;
+    border-color: #1890ff;
+  }
+
   .element-icon {
     margin-right: 8px;
     display: flex;
     align-items: center;
     justify-content: center;
   }
-  
+
   .element-name {
     font-size: 14px;
     color: #333;

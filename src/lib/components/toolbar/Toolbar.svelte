@@ -1,20 +1,27 @@
 <script>
   import { createEventDispatcher } from 'svelte';
   import ElementCreationDialog from './ElementCreationDialog.svelte';
-  
+
   const dispatch = createEventDispatcher();
   let showElementDialog = false;
-  
+
   function addCommonElement(type, subtype) {
-    dispatch('add', { type, subtype });
+    // Default position when clicking from toolbar
+    dispatch('add', { type, subtype, x: 300, y: 200 });
   }
-  
+
   function toggleElementDialog() {
     showElementDialog = !showElementDialog;
   }
 
   function handleAddElement(event) {
-    dispatch('add', event.detail);
+    // Add default position if not provided
+    const detail = event.detail;
+    if (!detail.x || !detail.y) {
+      detail.x = 300;
+      detail.y = 200;
+    }
+    dispatch('add', detail);
     showElementDialog = false;
   }
 
@@ -29,6 +36,42 @@
   function resetDiagram() {
     dispatch('reset');
   }
+
+  // Handle drag start for toolbar elements
+  function handleDragStart(event, element) {
+    console.log('Toolbar: Drag start with element:', element);
+    const elementData = JSON.stringify(element);
+    console.log('Toolbar: Element data being set:', elementData);
+
+    try {
+      // Set data with multiple MIME types for better compatibility
+      event.dataTransfer.setData('application/bpmn-element', elementData);
+      console.log('Toolbar: Set application/bpmn-element data');
+
+      event.dataTransfer.setData('text/plain', elementData);
+      console.log('Toolbar: Set text/plain data');
+
+      event.dataTransfer.effectAllowed = 'copy';
+      console.log('Toolbar: Set effectAllowed to copy');
+    } catch (error) {
+      console.error('Toolbar: Error setting drag data:', error);
+    }
+
+    // Create a custom drag image
+    const dragIcon = document.createElement('div');
+    dragIcon.innerHTML = `<div class="element-icon ${element.type}-icon"></div>`;
+    dragIcon.style.position = 'absolute';
+    dragIcon.style.top = '-1000px';
+    document.body.appendChild(dragIcon);
+
+    // Set the drag image with offset
+    event.dataTransfer.setDragImage(dragIcon, 20, 20);
+
+    // Clean up the drag icon after a short delay
+    setTimeout(() => {
+      document.body.removeChild(dragIcon);
+    }, 0);
+  }
 </script>
 
 <div class="toolbar">
@@ -36,19 +79,39 @@
   <div class="toolbar-section">
     <h3>Common Elements</h3>
     <div class="button-group">
-      <button on:click={() => addCommonElement('task', 'task')} class="element-button">
+      <button
+        on:click={() => addCommonElement('task', 'task')}
+        class="element-button"
+        draggable="true"
+        on:dragstart={(e) => handleDragStart(e, {type: 'task', subtype: 'task'})}
+      >
         <div class="element-icon task-icon"></div>
         <span>Task</span>
       </button>
-      <button on:click={() => addCommonElement('event', 'start')} class="element-button">
+      <button
+        on:click={() => addCommonElement('event', 'start')}
+        class="element-button"
+        draggable="true"
+        on:dragstart={(e) => handleDragStart(e, {type: 'event', subtype: 'start'})}
+      >
         <div class="element-icon start-event-icon"></div>
         <span>Start</span>
       </button>
-      <button on:click={() => addCommonElement('event', 'end')} class="element-button">
+      <button
+        on:click={() => addCommonElement('event', 'end')}
+        class="element-button"
+        draggable="true"
+        on:dragstart={(e) => handleDragStart(e, {type: 'event', subtype: 'end'})}
+      >
         <div class="element-icon end-event-icon"></div>
         <span>End</span>
       </button>
-      <button on:click={() => addCommonElement('gateway', 'exclusive')} class="element-button">
+      <button
+        on:click={() => addCommonElement('gateway', 'exclusive')}
+        class="element-button"
+        draggable="true"
+        on:dragstart={(e) => handleDragStart(e, {type: 'gateway', subtype: 'exclusive'})}
+      >
         <div class="element-icon gateway-icon"></div>
         <span>Gateway</span>
       </button>
@@ -57,7 +120,7 @@
       </button>
     </div>
   </div>
-  
+
   <!-- Tools section -->
   <div class="toolbar-section">
     <h3>Tools</h3>
@@ -76,7 +139,7 @@
 </div>
 
 {#if showElementDialog}
-  <ElementCreationDialog 
+  <ElementCreationDialog
     on:close={toggleElementDialog}
     on:add={handleAddElement}
   />
