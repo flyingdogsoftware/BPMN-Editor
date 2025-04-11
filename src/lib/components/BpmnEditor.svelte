@@ -56,6 +56,7 @@
   // Label editing state
   let isLabelDialogOpen = false;
   let currentEditingConnection = null;
+  let currentEditingNode = null;
   let currentLabelText = '';
 
   // Helper function to check if element is a node (task, event, gateway)
@@ -342,10 +343,21 @@
   }
 
   // Label dialog functions
-  function openLabelDialog(connection, isCondition = false) {
-    console.log('BpmnEditor: openLabelDialog called for connection', connection.id);
-    currentEditingConnection = connection;
-    currentLabelText = connection.label || '';
+  function openLabelDialog(element, isCondition = false) {
+    console.log('BpmnEditor: openLabelDialog called for element', element.id);
+
+    if (element.type === 'connection') {
+      currentEditingConnection = element;
+      currentEditingNode = null;
+    } else if (isNode(element)) {
+      currentEditingNode = element;
+      currentEditingConnection = null;
+    } else {
+      console.error('BpmnEditor: Unknown element type', element.type);
+      return;
+    }
+
+    currentLabelText = element.label || '';
     isLabelDialogOpen = true;
     console.log('BpmnEditor: isLabelDialogOpen set to', isLabelDialogOpen);
   }
@@ -366,13 +378,25 @@
         bpmnStore.updateConnectionLabel(currentEditingConnection.id, text);
       }
       closeLabelDialog();
+    } else if (currentEditingNode) {
+      // Update node label
+      bpmnStore.updateNodeLabel(currentEditingNode.id, text);
+      closeLabelDialog();
     }
   }
 
   function closeLabelDialog() {
     isLabelDialogOpen = false;
     currentEditingConnection = null;
+    currentEditingNode = null;
     currentLabelText = '';
+  }
+
+  // Handle double-click on a node to edit its label
+  function handleNodeDoubleClick(element) {
+    if (isNode(element)) {
+      openLabelDialog(element);
+    }
   }
 
   // Start adjusting a connection endpoint
@@ -502,6 +526,7 @@
           <g
             class="bpmn-element {draggedElementId === element.id ? 'dragging' : ''}"
             on:mousedown={e => handleMouseDown(e, element)}
+            on:dblclick={() => handleNodeDoubleClick(element)}
             on:keydown={e => handleKeyDown(e, element)}
             role="button"
             tabindex="0"
@@ -520,6 +545,7 @@
                 stroke-width="2"
                 class="element-shape"
               />
+              <!-- Internal label for the task -->
               <text
                 x={element.x + element.width/2}
                 y={element.y + element.height/2}

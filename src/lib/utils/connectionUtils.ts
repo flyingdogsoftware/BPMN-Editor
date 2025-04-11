@@ -1,4 +1,4 @@
-import type { AnchorPosition, BpmnNode, ConnectionPoint, Position } from '$lib/types/bpmn';
+import type { AnchorPosition, BpmnNode, ConnectionPoint, Position } from '$lib/models/bpmnElements';
 import { snapToGrid } from './gridUtils';
 
 /**

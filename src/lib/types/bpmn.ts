@@ -26,6 +26,8 @@ export interface Size {
 // Node element (task, event, gateway)
 export interface BpmnNode extends BpmnElement, Position, Size {
   // Additional properties specific to nodes
+  labelPosition?: Position; // Custom position for the label
+  labelVisible?: boolean; // Whether the label is visible
 }
 
 // Task element

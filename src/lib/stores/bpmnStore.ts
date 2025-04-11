@@ -1,5 +1,5 @@
 import { writable } from 'svelte/store';
-import type { BpmnConnection, BpmnElementUnion, ConnectionPoint, Position } from '$lib/types/bpmn';
+import type { BpmnConnection, BpmnElementUnion, ConnectionPoint, Position } from '$lib/models/bpmnElements';
 import { calculateConnectionPoints } from '$lib/utils/connectionUtils';
 
 // Initial elements
@@ -133,6 +133,36 @@ const createBpmnStore = () => {
     updateConnectionCondition: (id: string, condition: string) =>
       update(elements =>
         elements.map(el => el.id === id && el.type === 'connection' ? { ...el, condition } : el)
+      ),
+    // Update node label
+    updateNodeLabel: (id: string, label: string) =>
+      update(elements =>
+        elements.map(el => {
+          if (el.id === id && (el.type === 'task' || el.type === 'event' || el.type === 'gateway')) {
+            return { ...el, label };
+          }
+          return el;
+        })
+      ),
+    // Update node label position
+    updateNodeLabelPosition: (id: string, position: Position) =>
+      update(elements =>
+        elements.map(el => {
+          if (el.id === id && (el.type === 'task' || el.type === 'event' || el.type === 'gateway')) {
+            return { ...el, labelPosition: position };
+          }
+          return el;
+        })
+      ),
+    // Toggle node label visibility
+    toggleNodeLabelVisibility: (id: string) =>
+      update(elements =>
+        elements.map(el => {
+          if (el.id === id && (el.type === 'task' || el.type === 'event' || el.type === 'gateway')) {
+            return { ...el, labelVisible: el.labelVisible === undefined ? false : !el.labelVisible };
+          }
+          return el;
+        })
       ),
     // Reset to initial state
     reset: () => set(initialElements)
