@@ -68,7 +68,7 @@
   function getAllConnectionPoints() {
     const points = [];
 
-    $bpmnStore.forEach(element => {
+    $bpmnStore.forEach((element) => {
       if (isNode(element)) {
         const elementPoints = calculateConnectionPoints(element);
         points.push(...elementPoints);
@@ -250,13 +250,13 @@
     if (isCreatingConnection && connectionStartPoint && connectionEndPosition) {
       // Check if we're over a valid connection point
       const points = getAllConnectionPoints();
-      const targetPoint = points.find(p => {
+      const targetPoint = connectionEndPosition ? points.find(p => {
         const dx = p.x - connectionEndPosition.x;
         const dy = p.y - connectionEndPosition.y;
         return Math.sqrt(dx * dx + dy * dy) < 10; // Within 10px radius
-      });
+      }) : null;
 
-      if (targetPoint && connectionPreviewValid) {
+      if (targetPoint && connectionPreviewValid && connectionStartPoint) {
         // Create a new connection
         const sourceElement = $bpmnStore.find(el => el.id === connectionStartPoint.elementId);
         const targetElement = $bpmnStore.find(el => el.id === targetPoint.elementId);
