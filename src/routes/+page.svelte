@@ -2,7 +2,15 @@
   import BpmnEditor from '$lib/components/BpmnEditor.svelte';
 </script>
 
-<h1>BPMN Editor</h1>
-<p>Welcome to the BPMN Editor project</p>
+<div class="editor-container">
+  <BpmnEditor />
+</div>
 
-<BpmnEditor />
+<style>
+  .editor-container {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+  }
+</style>

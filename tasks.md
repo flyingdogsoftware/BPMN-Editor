@@ -32,6 +32,7 @@
 - [x] Implement grid with snapping functionality
 - [ ] Implement coordinate system transformations
 - [ ] Create minimap for navigation in large diagrams
+- [x] Make the editor full browser size with scrollbars for larger graphs
 
 ### BPMN Element Components
 - [x] Create base component for all BPMN elements

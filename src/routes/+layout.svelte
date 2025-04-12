@@ -19,10 +19,11 @@
     flex: 1;
     display: flex;
     flex-direction: column;
-    padding: 1rem;
     width: 100%;
-    max-width: 1200px;
-    margin: 0 auto;
+    height: 100vh;
     box-sizing: border-box;
+    padding: 0;
+    margin: 0;
+    overflow: hidden;
   }
 </style>

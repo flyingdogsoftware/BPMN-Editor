@@ -31,9 +31,24 @@
     }
   }
 
-  // Canvas dimensions
-  let canvasWidth = 800;
-  let canvasHeight = 600;
+  // Canvas dimensions - will be set dynamically based on window size
+  let canvasWidth = 800; // Default size before client-side rendering
+  let canvasHeight = 600; // Default size before client-side rendering
+
+  // Update canvas dimensions when window is resized
+  onMount(() => {
+    const updateCanvasSize = () => {
+      canvasWidth = window.innerWidth;
+      canvasHeight = window.innerHeight;
+    };
+
+    window.addEventListener('resize', updateCanvasSize);
+    updateCanvasSize(); // Initial size
+
+    return () => {
+      window.removeEventListener('resize', updateCanvasSize);
+    };
+  });
 
   // Grid size for snapping
   const gridSize = 20;
@@ -2357,8 +2372,8 @@
   .bpmn-editor {
     display: flex;
     flex-direction: column;
-    border: 1px solid #ccc;
-    border-radius: 4px;
+    width: 100%;
+    height: 100vh;
     overflow: hidden;
   }
 
@@ -2369,6 +2384,8 @@
     background-color: #f9f9f9;
     position: relative;
     transition: all 0.2s;
+    height: 100vh;
+    width: 100%;
   }
 
   .canvas-container.drag-over {
@@ -2389,7 +2406,7 @@
 
   .canvas {
     min-width: 100%;
-    min-height: 600px;
+    min-height: 100vh;
   }
 
   /* Element styling */
