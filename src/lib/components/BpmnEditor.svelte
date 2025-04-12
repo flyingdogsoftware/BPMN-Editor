@@ -1,6 +1,6 @@
 <script>
   import { bpmnStore } from '$lib/stores/bpmnStore';
-  import { snapPositionToGrid } from '$lib/utils/gridUtils';
+  import { snapPositionToGrid, snapToGrid } from '$lib/utils/gridUtils';
   import { isValidConnection, calculateConnectionPoints } from '$lib/utils/connectionUtils';
   import { onMount } from 'svelte';
   import ConnectionPoint from './ConnectionPoint.svelte';
@@ -8,6 +8,7 @@
   import Connection from './Connection.svelte';
   import LabelEditDialog from './LabelEditDialog.svelte';
   import Toolbar from './toolbar/Toolbar.svelte';
+  import ResizeHandle from './ResizeHandle.svelte';
 
   // Listen for edit-label events from Connection components
   onMount(() => {
@@ -44,6 +45,13 @@
   let dragStartY = 0;
   // These variables are used for storing original positions during drag
   let originalPositions = {}; // Store original positions of elements being moved together
+
+  // Resizing state
+  let isResizing = false;
+  let resizingElementId = null;
+  let resizeHandlePosition = null;
+  let originalSize = { width: 0, height: 0 };
+  let originalPos = { x: 0, y: 0 };
 
   // Drop zone state
   let isDragOver = false;
@@ -429,7 +437,133 @@
     }
   }
 
-  // Handle mouse movement during drag
+  // Handle resize start
+  function handleResizeStart(element, position) {
+    isResizing = true;
+    resizingElementId = element.id;
+    resizeHandlePosition = position;
+
+    // Store original size and position
+    originalSize = { width: element.width, height: element.height };
+    originalPos = { x: element.x, y: element.y };
+
+    // Add event listeners for mouse move and mouse up
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+  }
+
+  // Handle resize drag
+  function handleResizeDrag(dx, dy, position, element) {
+    if (!isResizing || !element) return;
+
+    let newWidth = originalSize.width;
+    let newHeight = originalSize.height;
+    let newX = originalPos.x;
+    let newY = originalPos.y;
+
+    // Calculate new size and position based on the handle being dragged
+    switch (position) {
+      case 'right':
+        newWidth = Math.max(100, originalSize.width + dx);
+        break;
+      case 'bottom':
+        newHeight = Math.max(100, originalSize.height + dy);
+        break;
+      case 'bottom-right':
+        newWidth = Math.max(100, originalSize.width + dx);
+        newHeight = Math.max(100, originalSize.height + dy);
+        break;
+    }
+
+    // Update the element with the new size
+    bpmnStore.updateElement(element.id, {
+      width: newWidth,
+      height: newHeight,
+      x: newX,
+      y: newY
+    });
+
+    // If this is a pool, also update its lanes
+    if (element.type === 'pool' && element.lanes && element.lanes.length > 0) {
+      // Update all lanes in this pool
+      element.lanes.forEach(laneId => {
+        const lane = $bpmnStore.find(el => el.id === laneId && el.type === 'lane');
+        if (lane) {
+          // Update lane width and height based on pool's new dimensions
+          bpmnStore.updateElement(lane.id, {
+            width: newWidth - 30, // Pool width minus label area
+            height: newHeight / element.lanes.length // Divide height equally among lanes
+          });
+        }
+      });
+
+      // Reposition lanes vertically if needed
+      const laneHeight = newHeight / element.lanes.length;
+      element.lanes.forEach((laneId, index) => {
+        const lane = $bpmnStore.find(el => el.id === laneId && el.type === 'lane');
+        if (lane) {
+          bpmnStore.updateElement(lane.id, {
+            y: element.y + (index * laneHeight)
+          });
+        }
+      });
+    }
+  }
+
+  // Handle resize end
+  function handleResizeEnd(dx, dy, position, element) {
+    if (!isResizing || !element) return;
+
+    // Calculate final size with snapping to grid
+    let finalWidth = originalSize.width;
+    let finalHeight = originalSize.height;
+    let finalX = originalPos.x;
+    let finalY = originalPos.y;
+
+    switch (position) {
+      case 'right':
+        finalWidth = Math.max(100, snapToGrid(originalSize.width + dx, gridSize));
+        break;
+      case 'bottom':
+        finalHeight = Math.max(100, snapToGrid(originalSize.height + dy, gridSize));
+        break;
+      case 'bottom-right':
+        finalWidth = Math.max(100, snapToGrid(originalSize.width + dx, gridSize));
+        finalHeight = Math.max(100, snapToGrid(originalSize.height + dy, gridSize));
+        break;
+    }
+
+    // Update the element with the final snapped size
+    bpmnStore.updateElement(element.id, {
+      width: finalWidth,
+      height: finalHeight,
+      x: finalX,
+      y: finalY
+    });
+
+    // If this is a pool, also update its lanes
+    if (element.type === 'pool' && element.lanes && element.lanes.length > 0) {
+      // Update all lanes in this pool
+      const laneHeight = finalHeight / element.lanes.length;
+      element.lanes.forEach((laneId, index) => {
+        const lane = $bpmnStore.find(el => el.id === laneId && el.type === 'lane');
+        if (lane) {
+          bpmnStore.updateElement(lane.id, {
+            width: finalWidth - 30, // Pool width minus label area
+            height: laneHeight,
+            y: element.y + (index * laneHeight)
+          });
+        }
+      });
+    }
+
+    // Reset resizing state
+    isResizing = false;
+    resizingElementId = null;
+    resizeHandlePosition = null;
+  }
+
+  // Handle mouse movement during drag or resize
   function handleMouseMove(event) {
     if (isCreatingConnection && connectionStartPoint) {
       // Update the end position of the connection preview
@@ -617,7 +751,7 @@
     }
   }
 
-  // End dragging
+  // End dragging or resizing
   function handleMouseUp() {
     if (isCreatingConnection && connectionStartPoint && connectionEndPosition) {
       // Check if we're over a valid connection point
@@ -714,9 +848,12 @@
       }
     }
 
-    // Reset dragging state
+    // Reset dragging and resizing states
     isDragging = false;
     draggedElementId = null;
+    isResizing = false;
+    resizingElementId = null;
+    resizeHandlePosition = null;
 
     // Remove event listeners
     window.removeEventListener('mousemove', handleMouseMove);
@@ -973,6 +1110,34 @@
                 stroke="black"
                 stroke-width="2"
                 class="element-shape"
+              />
+
+              <!-- Resize handles for pool -->
+              <ResizeHandle
+                x={element.x + element.width}
+                y={element.y + element.height/2}
+                position="right"
+                onDragStart={() => handleResizeStart(element, 'right')}
+                onDrag={(dx, dy) => handleResizeDrag(dx, dy, 'right', element)}
+                onDragEnd={(dx, dy) => handleResizeEnd(dx, dy, 'right', element)}
+              />
+
+              <ResizeHandle
+                x={element.x + element.width/2}
+                y={element.y + element.height}
+                position="bottom"
+                onDragStart={() => handleResizeStart(element, 'bottom')}
+                onDrag={(dx, dy) => handleResizeDrag(dx, dy, 'bottom', element)}
+                onDragEnd={(dx, dy) => handleResizeEnd(dx, dy, 'bottom', element)}
+              />
+
+              <ResizeHandle
+                x={element.x + element.width}
+                y={element.y + element.height}
+                position="bottom-right"
+                onDragStart={() => handleResizeStart(element, 'bottom-right')}
+                onDrag={(dx, dy) => handleResizeDrag(dx, dy, 'bottom-right', element)}
+                onDragEnd={(dx, dy) => handleResizeEnd(dx, dy, 'bottom-right', element)}
               />
 
               <!-- Add Lane Button (always visible) -->
