@@ -65,6 +65,18 @@
 - [ ] Implement multi-selection and group operations
 - [x] Implement deleting elements
 - [ ] Implement copy/paste functionality
+
+### Pools and Lanes
+- [x] Implement pool data model
+- [x] Implement lane data model
+- [x] Create visual representation for pools
+- [x] Create visual representation for lanes
+- [x] Implement pool label editing
+- [x] Implement lane label editing
+- [x] Implement adding new lanes to pools
+- [x] Implement moving pools with contained lanes
+- [x] Implement element containment in pools and lanes
+- [x] Implement pool resizing
 - [x] Implement labels for nodes
   - [x] Add text labels to tasks, events, and gateways
   - [x] Implement label editing functionality
