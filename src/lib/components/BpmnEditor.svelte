@@ -543,69 +543,79 @@
       const maxAllowedHeight = pool.height - totalMinSize;
       const adjustedHeight = Math.min(newSize, maxAllowedHeight);
 
-      // Update the resized lane
-      bpmnStore.updateElement(lane.id, {
-        height: adjustedHeight
-      });
+      // Sort lanes by y position to maintain order
+      const sortedLanes = [...lanes].sort((a, b) => a.y - b.y);
 
-      // Calculate remaining height for other lanes
-      const remainingHeight = pool.height - adjustedHeight;
+      // Find the index of the lane being resized
+      const resizeIndex = sortedLanes.findIndex(l => l.id === lane.id);
+      if (resizeIndex === -1) return;
 
-      // Distribute remaining height proportionally among other lanes
-      if (otherLanes.length > 0) {
-        // Sort lanes by y position to maintain order
-        const sortedLanes = [...otherLanes].sort((a, b) => a.y - b.y);
 
-        // Calculate new heights and positions
-        let currentY = pool.y;
+      // Calculate the height difference from the original lane height
+      const heightDiff = adjustedHeight - lane.height;
 
-        // If the resized lane is at the top, start with it
-        if (lane.y === pool.y) {
-          currentY += adjustedHeight;
-        } else {
-          // Otherwise, start with lanes above the resized lane
-          const lanesAbove = sortedLanes.filter(l => l.y < lane.y);
-          const heightPerLaneAbove = lanesAbove.length > 0 ? remainingHeight / 2 / lanesAbove.length : 0;
+      // If we're resizing the last lane, only adjust that lane
+      if (resizeIndex === sortedLanes.length - 1) {
+        // Update the resized lane
+        bpmnStore.updateElement(lane.id, {
+          height: adjustedHeight
+        });
 
-          lanesAbove.forEach(l => {
-            bpmnStore.updateElement(l.id, {
-              y: currentY,
-              height: heightPerLaneAbove
-            });
-            currentY += heightPerLaneAbove;
+        // Adjust the lane above it (if any)
+        if (resizeIndex > 0) {
+          const laneAbove = sortedLanes[resizeIndex - 1];
+          bpmnStore.updateElement(laneAbove.id, {
+            height: laneAbove.height - heightDiff
           });
+        }
+      }
+      // If we're resizing the first lane, adjust it and the lane below
+      else if (resizeIndex === 0) {
+        // Update the resized lane
+        bpmnStore.updateElement(lane.id, {
+          height: adjustedHeight
+        });
 
-          // Add the resized lane
-          bpmnStore.updateElement(lane.id, {
+        // Adjust the lane below it
+        const laneBelow = sortedLanes[1];
+        bpmnStore.updateElement(laneBelow.id, {
+          y: pool.y + adjustedHeight,
+          height: laneBelow.height - heightDiff
+        });
+
+        // Adjust all other lanes below
+        let currentY = pool.y + adjustedHeight + laneBelow.height - heightDiff;
+        for (let i = 2; i < sortedLanes.length; i++) {
+          const nextLane = sortedLanes[i];
+          bpmnStore.updateElement(nextLane.id, {
             y: currentY
           });
-          currentY += adjustedHeight;
-
-          // Handle lanes below
-          const lanesBelow = sortedLanes.filter(l => l.y > lane.y);
-          const heightPerLaneBelow = lanesBelow.length > 0 ? remainingHeight / 2 / lanesBelow.length : 0;
-
-          lanesBelow.forEach(l => {
-            bpmnStore.updateElement(l.id, {
-              y: currentY,
-              height: heightPerLaneBelow
-            });
-            currentY += heightPerLaneBelow;
-          });
-
-          return; // We've handled all lanes
+          currentY += nextLane.height;
         }
-
-        // If we're here, the resized lane was at the top
-        // Distribute remaining height among lanes below
-        const heightPerLane = remainingHeight / otherLanes.length;
-        sortedLanes.forEach(l => {
-          bpmnStore.updateElement(l.id, {
-            y: currentY,
-            height: heightPerLane
-          });
-          currentY += heightPerLane;
+      }
+      // If we're resizing a middle lane, adjust it and the lane below
+      else {
+        // Update the resized lane
+        bpmnStore.updateElement(lane.id, {
+          height: adjustedHeight
         });
+
+        // Adjust the lane below it
+        const laneBelow = sortedLanes[resizeIndex + 1];
+        bpmnStore.updateElement(laneBelow.id, {
+          y: lane.y + adjustedHeight,
+          height: laneBelow.height - heightDiff
+        });
+
+        // Adjust all other lanes below
+        let currentY = lane.y + adjustedHeight + laneBelow.height - heightDiff;
+        for (let i = resizeIndex + 2; i < sortedLanes.length; i++) {
+          const nextLane = sortedLanes[i];
+          bpmnStore.updateElement(nextLane.id, {
+            y: currentY
+          });
+          currentY += nextLane.height;
+        }
       }
     } else if (position === 'right') {
       // Horizontal resizing (changing width)
@@ -613,69 +623,78 @@
       const maxAllowedWidth = pool.width - totalMinSize;
       const adjustedWidth = Math.min(newSize, maxAllowedWidth);
 
-      // Update the resized lane
-      bpmnStore.updateElement(lane.id, {
-        width: adjustedWidth
-      });
+      // Sort lanes by x position to maintain order
+      const sortedLanes = [...lanes].sort((a, b) => a.x - b.x);
 
-      // Calculate remaining width for other lanes
-      const remainingWidth = pool.width - adjustedWidth;
+      // Find the index of the lane being resized
+      const resizeIndex = sortedLanes.findIndex(l => l.id === lane.id);
+      if (resizeIndex === -1) return;
 
-      // Distribute remaining width proportionally among other lanes
-      if (otherLanes.length > 0) {
-        // Sort lanes by x position to maintain order
-        const sortedLanes = [...otherLanes].sort((a, b) => a.x - b.x);
+      // Calculate the width difference from the original lane width
+      const widthDiff = adjustedWidth - lane.width;
 
-        // Calculate new widths and positions
-        let currentX = pool.x;
+      // If we're resizing the last lane, only adjust that lane
+      if (resizeIndex === sortedLanes.length - 1) {
+        // Update the resized lane
+        bpmnStore.updateElement(lane.id, {
+          width: adjustedWidth
+        });
 
-        // If the resized lane is at the left, start with it
-        if (lane.x === pool.x) {
-          currentX += adjustedWidth;
-        } else {
-          // Otherwise, start with lanes to the left of the resized lane
-          const lanesToLeft = sortedLanes.filter(l => l.x < lane.x);
-          const widthPerLaneLeft = lanesToLeft.length > 0 ? remainingWidth / 2 / lanesToLeft.length : 0;
-
-          lanesToLeft.forEach(l => {
-            bpmnStore.updateElement(l.id, {
-              x: currentX,
-              width: widthPerLaneLeft
-            });
-            currentX += widthPerLaneLeft;
+        // Adjust the lane to the left (if any)
+        if (resizeIndex > 0) {
+          const laneLeft = sortedLanes[resizeIndex - 1];
+          bpmnStore.updateElement(laneLeft.id, {
+            width: laneLeft.width - widthDiff
           });
+        }
+      }
+      // If we're resizing the first lane, adjust it and the lane to the right
+      else if (resizeIndex === 0) {
+        // Update the resized lane
+        bpmnStore.updateElement(lane.id, {
+          width: adjustedWidth
+        });
 
-          // Add the resized lane
-          bpmnStore.updateElement(lane.id, {
+        // Adjust the lane to the right
+        const laneRight = sortedLanes[1];
+        bpmnStore.updateElement(laneRight.id, {
+          x: pool.x + adjustedWidth,
+          width: laneRight.width - widthDiff
+        });
+
+        // Adjust all other lanes to the right
+        let currentX = pool.x + adjustedWidth + laneRight.width - widthDiff;
+        for (let i = 2; i < sortedLanes.length; i++) {
+          const nextLane = sortedLanes[i];
+          bpmnStore.updateElement(nextLane.id, {
             x: currentX
           });
-          currentX += adjustedWidth;
-
-          // Handle lanes to the right
-          const lanesToRight = sortedLanes.filter(l => l.x > lane.x);
-          const widthPerLaneRight = lanesToRight.length > 0 ? remainingWidth / 2 / lanesToRight.length : 0;
-
-          lanesToRight.forEach(l => {
-            bpmnStore.updateElement(l.id, {
-              x: currentX,
-              width: widthPerLaneRight
-            });
-            currentX += widthPerLaneRight;
-          });
-
-          return; // We've handled all lanes
+          currentX += nextLane.width;
         }
-
-        // If we're here, the resized lane was at the left
-        // Distribute remaining width among lanes to the right
-        const widthPerLane = remainingWidth / otherLanes.length;
-        sortedLanes.forEach(l => {
-          bpmnStore.updateElement(l.id, {
-            x: currentX,
-            width: widthPerLane
-          });
-          currentX += widthPerLane;
+      }
+      // If we're resizing a middle lane, adjust it and the lane to the right
+      else {
+        // Update the resized lane
+        bpmnStore.updateElement(lane.id, {
+          width: adjustedWidth
         });
+
+        // Adjust the lane to the right
+        const laneRight = sortedLanes[resizeIndex + 1];
+        bpmnStore.updateElement(laneRight.id, {
+          x: lane.x + adjustedWidth,
+          width: laneRight.width - widthDiff
+        });
+
+        // Adjust all other lanes to the right
+        let currentX = lane.x + adjustedWidth + laneRight.width - widthDiff;
+        for (let i = resizeIndex + 2; i < sortedLanes.length; i++) {
+          const nextLane = sortedLanes[i];
+          bpmnStore.updateElement(nextLane.id, {
+            x: currentX
+          });
+          currentX += nextLane.width;
+        }
       }
     }
   }
