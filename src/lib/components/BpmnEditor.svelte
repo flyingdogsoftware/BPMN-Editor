@@ -1048,11 +1048,11 @@
                       />
                       <!-- Lane label -->
                       <text
-                        x={element.x + 15}
+                        x={element.x + 25}
                         y={lane.y + lane.height/2}
                         text-anchor="middle"
                         dominant-baseline="middle"
-                        transform={`rotate(-90, ${element.x + 15}, ${lane.y + lane.height/2})`}
+                        transform={`rotate(-90, ${element.x + 25}, ${lane.y + lane.height/2})`}
                         pointer-events="none"
                       >
                         {lane.label}
@@ -1803,11 +1803,11 @@
                       />
                       <!-- Lane label -->
                       <text
-                        x={element.x + 15}
+                        x={element.x + 25}
                         y={lane.y + lane.height/2}
                         text-anchor="middle"
                         dominant-baseline="middle"
-                        transform={`rotate(-90, ${element.x + 15}, ${lane.y + lane.height/2})`}
+                        transform={`rotate(-90, ${element.x + 25}, ${lane.y + lane.height/2})`}
                         pointer-events="none"
                       >
                         {lane.label}
