@@ -508,6 +508,176 @@
         }
       });
     }
+    // If this is a lane, handle lane resizing
+    else if (element.type === 'lane') {
+      if (position === 'bottom') {
+        handleLaneResize(element, newHeight, position);
+      } else if (position === 'right') {
+        handleLaneResize(element, newWidth, position);
+      }
+    }
+  }
+
+  // Handle lane resizing
+  function handleLaneResize(lane, newSize, position) {
+    // Find the parent pool
+    const pool = $bpmnStore.find(el => el.id === lane.parentRef && el.type === 'pool');
+    if (!pool) return;
+
+    // Find all lanes in this pool
+    const lanes = $bpmnStore.filter(el =>
+      el.type === 'lane' &&
+      el.parentRef === pool.id
+    );
+
+    // Calculate the total size of all lanes except the one being resized
+    const otherLanes = lanes.filter(l => l.id !== lane.id);
+
+    // Minimum size for other lanes
+    const minLaneSize = 50;
+    const totalMinSize = otherLanes.length * minLaneSize;
+
+    if (position === 'bottom') {
+      // Vertical resizing (changing height)
+      // Ensure we don't make the lane too large
+      const maxAllowedHeight = pool.height - totalMinSize;
+      const adjustedHeight = Math.min(newSize, maxAllowedHeight);
+
+      // Update the resized lane
+      bpmnStore.updateElement(lane.id, {
+        height: adjustedHeight
+      });
+
+      // Calculate remaining height for other lanes
+      const remainingHeight = pool.height - adjustedHeight;
+
+      // Distribute remaining height proportionally among other lanes
+      if (otherLanes.length > 0) {
+        // Sort lanes by y position to maintain order
+        const sortedLanes = [...otherLanes].sort((a, b) => a.y - b.y);
+
+        // Calculate new heights and positions
+        let currentY = pool.y;
+
+        // If the resized lane is at the top, start with it
+        if (lane.y === pool.y) {
+          currentY += adjustedHeight;
+        } else {
+          // Otherwise, start with lanes above the resized lane
+          const lanesAbove = sortedLanes.filter(l => l.y < lane.y);
+          const heightPerLaneAbove = lanesAbove.length > 0 ? remainingHeight / 2 / lanesAbove.length : 0;
+
+          lanesAbove.forEach(l => {
+            bpmnStore.updateElement(l.id, {
+              y: currentY,
+              height: heightPerLaneAbove
+            });
+            currentY += heightPerLaneAbove;
+          });
+
+          // Add the resized lane
+          bpmnStore.updateElement(lane.id, {
+            y: currentY
+          });
+          currentY += adjustedHeight;
+
+          // Handle lanes below
+          const lanesBelow = sortedLanes.filter(l => l.y > lane.y);
+          const heightPerLaneBelow = lanesBelow.length > 0 ? remainingHeight / 2 / lanesBelow.length : 0;
+
+          lanesBelow.forEach(l => {
+            bpmnStore.updateElement(l.id, {
+              y: currentY,
+              height: heightPerLaneBelow
+            });
+            currentY += heightPerLaneBelow;
+          });
+
+          return; // We've handled all lanes
+        }
+
+        // If we're here, the resized lane was at the top
+        // Distribute remaining height among lanes below
+        const heightPerLane = remainingHeight / otherLanes.length;
+        sortedLanes.forEach(l => {
+          bpmnStore.updateElement(l.id, {
+            y: currentY,
+            height: heightPerLane
+          });
+          currentY += heightPerLane;
+        });
+      }
+    } else if (position === 'right') {
+      // Horizontal resizing (changing width)
+      // Ensure we don't make the lane too large
+      const maxAllowedWidth = pool.width - totalMinSize;
+      const adjustedWidth = Math.min(newSize, maxAllowedWidth);
+
+      // Update the resized lane
+      bpmnStore.updateElement(lane.id, {
+        width: adjustedWidth
+      });
+
+      // Calculate remaining width for other lanes
+      const remainingWidth = pool.width - adjustedWidth;
+
+      // Distribute remaining width proportionally among other lanes
+      if (otherLanes.length > 0) {
+        // Sort lanes by x position to maintain order
+        const sortedLanes = [...otherLanes].sort((a, b) => a.x - b.x);
+
+        // Calculate new widths and positions
+        let currentX = pool.x;
+
+        // If the resized lane is at the left, start with it
+        if (lane.x === pool.x) {
+          currentX += adjustedWidth;
+        } else {
+          // Otherwise, start with lanes to the left of the resized lane
+          const lanesToLeft = sortedLanes.filter(l => l.x < lane.x);
+          const widthPerLaneLeft = lanesToLeft.length > 0 ? remainingWidth / 2 / lanesToLeft.length : 0;
+
+          lanesToLeft.forEach(l => {
+            bpmnStore.updateElement(l.id, {
+              x: currentX,
+              width: widthPerLaneLeft
+            });
+            currentX += widthPerLaneLeft;
+          });
+
+          // Add the resized lane
+          bpmnStore.updateElement(lane.id, {
+            x: currentX
+          });
+          currentX += adjustedWidth;
+
+          // Handle lanes to the right
+          const lanesToRight = sortedLanes.filter(l => l.x > lane.x);
+          const widthPerLaneRight = lanesToRight.length > 0 ? remainingWidth / 2 / lanesToRight.length : 0;
+
+          lanesToRight.forEach(l => {
+            bpmnStore.updateElement(l.id, {
+              x: currentX,
+              width: widthPerLaneRight
+            });
+            currentX += widthPerLaneRight;
+          });
+
+          return; // We've handled all lanes
+        }
+
+        // If we're here, the resized lane was at the left
+        // Distribute remaining width among lanes to the right
+        const widthPerLane = remainingWidth / otherLanes.length;
+        sortedLanes.forEach(l => {
+          bpmnStore.updateElement(l.id, {
+            x: currentX,
+            width: widthPerLane
+          });
+          currentX += widthPerLane;
+        });
+      }
+    }
   }
 
   // Handle resize end
@@ -1215,7 +1385,7 @@
 
                 <!-- Render lanes within this pool -->
                 {#if element.lanes && element.lanes.length > 0}
-                  {#each element.lanes as laneId}
+                  {#each element.lanes as laneId, index}
                     {@const lane = $bpmnStore.find(el => el.id === laneId && el.type === 'lane')}
                     {#if lane}
                       <!-- Lane separator line -->
@@ -1254,6 +1424,18 @@
                           {lane.label}
                         </text>
                       </g>
+
+                      <!-- Resize handle for lane (bottom edge) -->
+                      {#if index < element.lanes.length - 1}
+                        <ResizeHandle
+                          x={element.x + element.width/2}
+                          y={lane.y + lane.height}
+                          position="bottom"
+                          onDragStart={() => handleResizeStart(lane, 'bottom')}
+                          onDrag={(dx, dy) => handleResizeDrag(dx, dy, 'bottom', lane)}
+                          onDragEnd={(dx, dy) => handleResizeEnd(dx, dy, 'bottom', lane)}
+                        />
+                      {/if}
                     {/if}
                   {/each}
                 {/if}
@@ -1289,7 +1471,7 @@
 
                 <!-- Render lanes within this pool -->
                 {#if element.lanes && element.lanes.length > 0}
-                  {#each element.lanes as laneId}
+                  {#each element.lanes as laneId, index}
                     {@const lane = $bpmnStore.find(el => el.id === laneId && el.type === 'lane')}
                     {#if lane}
                       <!-- Lane separator line -->
@@ -1327,6 +1509,18 @@
                           {lane.label}
                         </text>
                       </g>
+
+                      <!-- Resize handle for lane (right edge) -->
+                      {#if index < element.lanes.length - 1}
+                        <ResizeHandle
+                          x={lane.x + lane.width}
+                          y={element.y + element.height/2}
+                          position="right"
+                          onDragStart={() => handleResizeStart(lane, 'right')}
+                          onDrag={(dx, dy) => handleResizeDrag(dx, dy, 'right', lane)}
+                          onDragEnd={(dx, dy) => handleResizeEnd(dx, dy, 'right', lane)}
+                        />
+                      {/if}
                     {/if}
                   {/each}
                 {/if}

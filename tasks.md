@@ -77,6 +77,7 @@
 - [x] Implement moving pools with contained lanes
 - [x] Implement element containment in pools and lanes
 - [x] Implement pool resizing
+- [x] Implement lane resizing
 - [x] Implement labels for nodes
   - [x] Add text labels to tasks, events, and gateways
   - [x] Implement label editing functionality
