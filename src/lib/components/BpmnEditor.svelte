@@ -945,6 +945,13 @@
     }
   }
 
+  // Handle double-click on a lane to edit its label
+  function handleLaneDoubleClick(lane) {
+    if (lane && lane.type === 'lane') {
+      openLabelDialog(lane);
+    }
+  }
+
   // Start adjusting a connection endpoint
   function handleConnectionEndpointAdjustment(isAdjusting) {
     isAdjustingConnectionEndpoint = isAdjusting;
@@ -1177,25 +1184,34 @@
 
               <!-- Pool Label Area -->
               {#if element.isHorizontal}
-                <rect
-                  x={element.x}
-                  y={element.y}
-                  width="30"
-                  height={element.height}
-                  fill="white"
-                  stroke="black"
-                  stroke-width="1"
-                />
-                <text
-                  x={element.x + 15}
-                  y={element.y + element.height/2}
-                  text-anchor="middle"
-                  dominant-baseline="middle"
-                  transform={`rotate(-90, ${element.x + 15}, ${element.y + element.height/2})`}
-                  pointer-events="none"
+                <!-- Pool Label Area with clickable rect -->
+                <g
+                  class="pool-label-area"
+                  on:dblclick|stopPropagation={() => handleNodeDoubleClick(element)}
+                  role="button"
+                  tabindex="0"
+                  aria-label="Edit pool label"
                 >
-                  {element.label}
-                </text>
+                  <rect
+                    x={element.x}
+                    y={element.y}
+                    width="30"
+                    height={element.height}
+                    fill="white"
+                    stroke="black"
+                    stroke-width="1"
+                  />
+                  <text
+                    x={element.x + 15}
+                    y={element.y + element.height/2}
+                    text-anchor="middle"
+                    dominant-baseline="middle"
+                    transform={`rotate(-90, ${element.x + 15}, ${element.y + element.height/2})`}
+                    pointer-events="none"
+                  >
+                    {element.label}
+                  </text>
+                </g>
 
                 <!-- Render lanes within this pool -->
                 {#if element.lanes && element.lanes.length > 0}
@@ -1211,40 +1227,65 @@
                         stroke="black"
                         stroke-width="1"
                       />
-                      <!-- Lane label -->
-                      <text
-                        x={element.x + 45}
-                        y={lane.y + lane.height/2}
-                        text-anchor="middle"
-                        dominant-baseline="middle"
-                        transform={`rotate(-90, ${element.x + 45}, ${lane.y + lane.height/2})`}
-                        pointer-events="none"
+                      <!-- Lane label with clickable area -->
+                      <g
+                        class="lane-label-area"
+                        on:dblclick|stopPropagation={() => handleLaneDoubleClick(lane)}
+                        role="button"
+                        tabindex="0"
+                        aria-label="Edit lane label"
                       >
-                        {lane.label}
-                      </text>
+                        <rect
+                          x={element.x + 30}
+                          y={lane.y}
+                          width="30"
+                          height={lane.height}
+                          fill="transparent"
+                          stroke="none"
+                        />
+                        <text
+                          x={element.x + 45}
+                          y={lane.y + lane.height/2}
+                          text-anchor="middle"
+                          dominant-baseline="middle"
+                          transform={`rotate(-90, ${element.x + 45}, ${lane.y + lane.height/2})`}
+                          pointer-events="none"
+                        >
+                          {lane.label}
+                        </text>
+                      </g>
                     {/if}
                   {/each}
                 {/if}
               {:else}
                 <!-- Vertical pool rendering -->
-                <rect
-                  x={element.x}
-                  y={element.y}
-                  width={element.width}
-                  height="30"
-                  fill="white"
-                  stroke="black"
-                  stroke-width="1"
-                />
-                <text
-                  x={element.x + element.width/2}
-                  y={element.y + 15}
-                  text-anchor="middle"
-                  dominant-baseline="middle"
-                  pointer-events="none"
+                <!-- Vertical pool label area with clickable rect -->
+                <g
+                  class="pool-label-area"
+                  on:dblclick|stopPropagation={() => handleNodeDoubleClick(element)}
+                  role="button"
+                  tabindex="0"
+                  aria-label="Edit pool label"
                 >
-                  {element.label}
-                </text>
+                  <rect
+                    x={element.x}
+                    y={element.y}
+                    width={element.width}
+                    height="30"
+                    fill="white"
+                    stroke="black"
+                    stroke-width="1"
+                  />
+                  <text
+                    x={element.x + element.width/2}
+                    y={element.y + 15}
+                    text-anchor="middle"
+                    dominant-baseline="middle"
+                    pointer-events="none"
+                  >
+                    {element.label}
+                  </text>
+                </g>
 
                 <!-- Render lanes within this pool -->
                 {#if element.lanes && element.lanes.length > 0}
@@ -1260,16 +1301,32 @@
                         stroke="black"
                         stroke-width="1"
                       />
-                      <!-- Lane label -->
-                      <text
-                        x={lane.x + lane.width/2}
-                        y={element.y + 21}
-                        text-anchor="middle"
-                        dominant-baseline="middle"
-                        pointer-events="none"
+                      <!-- Lane label with clickable area -->
+                      <g
+                        class="lane-label-area"
+                        on:dblclick|stopPropagation={() => handleLaneDoubleClick(lane)}
+                        role="button"
+                        tabindex="0"
+                        aria-label="Edit lane label"
                       >
-                        {lane.label}
-                      </text>
+                        <rect
+                          x={lane.x}
+                          y={element.y}
+                          width={lane.width}
+                          height="30"
+                          fill="transparent"
+                          stroke="none"
+                        />
+                        <text
+                          x={lane.x + lane.width/2}
+                          y={element.y + 21}
+                          text-anchor="middle"
+                          dominant-baseline="middle"
+                          pointer-events="none"
+                        >
+                          {lane.label}
+                        </text>
+                      </g>
                     {/if}
                   {/each}
                 {/if}

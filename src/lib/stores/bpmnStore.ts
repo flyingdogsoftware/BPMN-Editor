@@ -138,7 +138,7 @@ const createBpmnStore = () => {
     updateNodeLabel: (id: string, label: string) =>
       update(elements =>
         elements.map(el => {
-          if (el.id === id && (el.type === 'task' || el.type === 'event' || el.type === 'gateway')) {
+          if (el.id === id && (el.type === 'task' || el.type === 'event' || el.type === 'gateway' || el.type === 'pool' || el.type === 'lane')) {
             return { ...el, label };
           }
           return el;
@@ -148,7 +148,7 @@ const createBpmnStore = () => {
     updateNodeLabelPosition: (id: string, position: Position) =>
       update(elements =>
         elements.map(el => {
-          if (el.id === id && (el.type === 'task' || el.type === 'event' || el.type === 'gateway')) {
+          if (el.id === id && (el.type === 'task' || el.type === 'event' || el.type === 'gateway' || el.type === 'pool' || el.type === 'lane')) {
             return { ...el, labelPosition: position };
           }
           return el;
@@ -158,7 +158,7 @@ const createBpmnStore = () => {
     toggleNodeLabelVisibility: (id: string) =>
       update(elements =>
         elements.map(el => {
-          if (el.id === id && (el.type === 'task' || el.type === 'event' || el.type === 'gateway')) {
+          if (el.id === id && (el.type === 'task' || el.type === 'event' || el.type === 'gateway' || el.type === 'pool' || el.type === 'lane')) {
             return { ...el, labelVisible: el.labelVisible === undefined ? false : !el.labelVisible };
           }
           return el;
