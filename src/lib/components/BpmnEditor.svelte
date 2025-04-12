@@ -8,7 +8,6 @@
   import Connection from './Connection.svelte';
   import LabelEditDialog from './LabelEditDialog.svelte';
   import Toolbar from './toolbar/Toolbar.svelte';
-  import ContextMenu from './ContextMenu.svelte';
 
   // Listen for edit-label events from Connection components
   onMount(() => {
@@ -66,12 +65,7 @@
   let currentEditingNode = null;
   let currentLabelText = '';
 
-  // Context menu state
-  let contextMenuVisible = false;
-  let contextMenuX = 0;
-  let contextMenuY = 0;
-  let contextMenuItems = [];
-  let contextMenuTarget = null;
+  // Context menu state variables removed
 
   // Add lane button state
   let showAddLaneButton = null;
@@ -341,36 +335,7 @@
     });
   }
 
-  // Handle right-click on an element
-  function handleContextMenu(event, element) {
-    // Prevent the default context menu
-    event.preventDefault();
-
-    // Only show context menu for pools
-    if (element.type === 'pool') {
-      contextMenuX = event.clientX;
-      contextMenuY = event.clientY;
-      contextMenuTarget = element;
-      contextMenuItems = [
-        { id: 'add-lane', label: 'Add Lane' }
-      ];
-      contextMenuVisible = true;
-    }
-  }
-
-  // Handle context menu item selection
-  function handleContextMenuSelect(event) {
-    const item = event.detail;
-
-    if (item.id === 'add-lane' && contextMenuTarget) {
-      // Add a new lane to the selected pool
-      addLane(contextMenuTarget.id);
-    }
-
-    // Hide the context menu
-    contextMenuVisible = false;
-    contextMenuTarget = null;
-  }
+  // Right-click handlers removed
 
   // Start dragging an element
   function handleMouseDown(event, element) {
@@ -993,7 +958,6 @@
             on:mousedown={e => handleMouseDown(e, element)}
             on:dblclick={() => handleNodeDoubleClick(element)}
             on:keydown={e => handleKeyDown(e, element)}
-            on:contextmenu={e => handleContextMenu(e, element)}
             role="button"
             tabindex="0"
             aria-label="Draggable {element.type} element: {element.label}"
@@ -1179,7 +1143,6 @@
             on:mousedown={e => handleMouseDown(e, element)}
             on:dblclick={() => handleNodeDoubleClick(element)}
             on:keydown={e => handleKeyDown(e, element)}
-            on:contextmenu={e => handleContextMenu(e, element)}
             role="button"
             tabindex="0"
             aria-label="Draggable {element.type} element: {element.label}"
@@ -1952,14 +1915,7 @@
     on:close={closeLabelDialog}
   />
 
-  <!-- Context Menu -->
-  <ContextMenu
-    visible={contextMenuVisible}
-    x={contextMenuX}
-    y={contextMenuY}
-    items={contextMenuItems}
-    on:select={handleContextMenuSelect}
-  />
+  <!-- Context Menu removed -->
 </div>
 
 <style>
