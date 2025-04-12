@@ -73,6 +73,9 @@
   let contextMenuItems = [];
   let contextMenuTarget = null;
 
+  // Add lane button state
+  let showAddLaneButton = null;
+
   // Helper function to check if element is a node (any element with position and size)
   function isNode(element) {
     return element.type === 'task' ||
@@ -1008,6 +1011,41 @@
                 class="element-shape"
               />
 
+              <!-- Add Lane Button (always visible) -->
+              {#if element.type === 'pool'}
+                  {#if element.isHorizontal}
+                    <!-- Horizontal pool add lane button -->
+                    <g
+                      class="add-lane-button"
+                      role="button"
+                      tabindex="0"
+                      aria-label="Add Lane"
+                      on:click={() => addLane(element.id)}
+                      on:keydown={e => e.key === 'Enter' && addLane(element.id)}
+                      transform={`translate(${element.x + element.width/2}, ${element.y + element.height - 5})`}
+                    >
+                      <rect x="-10" y="-10" width="20" height="20" rx="3" fill="#1890ff" stroke="#0050b3" stroke-width="1.5" />
+                      <text x="0" y="0" text-anchor="middle" dominant-baseline="middle" font-size="16" font-weight="bold" fill="white">+</text>
+                      <title>Add Lane</title>
+                    </g>
+                  {:else}
+                    <!-- Vertical pool add lane button -->
+                    <g
+                      class="add-lane-button"
+                      role="button"
+                      tabindex="0"
+                      aria-label="Add Lane"
+                      on:click={() => addLane(element.id)}
+                      on:keydown={e => e.key === 'Enter' && addLane(element.id)}
+                      transform={`translate(${element.x + element.width - 5}, ${element.y + element.height/2})`}
+                    >
+                      <rect x="-10" y="-10" width="20" height="20" rx="3" fill="#1890ff" stroke="#0050b3" stroke-width="1.5" />
+                      <text x="0" y="0" text-anchor="middle" dominant-baseline="middle" font-size="16" font-weight="bold" fill="white">+</text>
+                      <title>Add Lane</title>
+                    </g>
+                  {/if}
+              {/if}
+
               <!-- Pool Label Area -->
               {#if element.isHorizontal}
                 <rect
@@ -1107,6 +1145,8 @@
                   {/each}
                 {/if}
               {/if}
+
+
             {/if}
           </g>
         {/if}
@@ -1760,38 +1800,6 @@
                   stroke-width="2"
                   class="element-shape"
                 />
-
-                <!-- Add Lane Button (horizontal pool) -->
-                {#if element.isHorizontal}
-                  <g
-                    class="add-lane-button"
-                    role="button"
-                    tabindex="0"
-                    aria-label="Add Lane"
-                    on:click={() => addLane(element.id)}
-                    on:keydown={e => e.key === 'Enter' && addLane(element.id)}
-                    transform={`translate(${element.x + element.width/2}, ${element.y + element.height + 25})`}
-                  >
-                    <rect x="-15" y="-15" width="30" height="30" rx="5" fill="#e6f7ff" stroke="#1890ff" stroke-width="2" />
-                    <text x="0" y="0" text-anchor="middle" dominant-baseline="middle" font-size="18" font-weight="bold" fill="#1890ff">+</text>
-                    <title>Add Lane</title>
-                  </g>
-                {:else}
-                  <!-- Add Lane Button (vertical pool) -->
-                  <g
-                    class="add-lane-button"
-                    role="button"
-                    tabindex="0"
-                    aria-label="Add Lane"
-                    on:click={() => addLane(element.id)}
-                    on:keydown={e => e.key === 'Enter' && addLane(element.id)}
-                    transform={`translate(${element.x + element.width + 25}, ${element.y + element.height/2})`}
-                  >
-                    <rect x="-15" y="-15" width="30" height="30" rx="5" fill="#e6f7ff" stroke="#1890ff" stroke-width="2" />
-                    <text x="0" y="0" text-anchor="middle" dominant-baseline="middle" font-size="18" font-weight="bold" fill="#1890ff">+</text>
-                    <title>Add Lane</title>
-                  </g>
-                {/if}
               </g>
 
               <!-- Pool Label Area -->
@@ -2028,8 +2036,8 @@
   /* Add Lane Button styling */
   .add-lane-button {
     cursor: pointer;
-    opacity: 0.7;
-    transition: opacity 0.2s ease-in-out;
+    opacity: 0.9;
+    transition: opacity 0.3s ease-in-out;
   }
 
   .add-lane-button:hover {
@@ -2037,15 +2045,28 @@
   }
 
   .add-lane-button rect {
-    transition: fill 0.2s ease-in-out, stroke 0.2s ease-in-out;
+    transition: fill 0.3s ease-in-out, stroke 0.3s ease-in-out, filter 0.3s ease-in-out;
+    filter: drop-shadow(0px 2px 3px rgba(0, 0, 0, 0.2));
+    transform-origin: center;
+    transform-box: fill-box;
   }
 
   .add-lane-button:hover rect {
     fill: #bae7ff;
     stroke: #0050b3;
+    filter: drop-shadow(0px 4px 6px rgba(0, 0, 0, 0.3));
+    transform: scale(1.1);
   }
 
   .add-lane-button text {
     pointer-events: none;
+    transition: fill 0.3s ease-in-out;
+    transform-origin: center;
+    transform-box: fill-box;
+  }
+
+  .add-lane-button:hover text {
+    fill: #0050b3;
+    transform: scale(1.1);
   }
 </style>
