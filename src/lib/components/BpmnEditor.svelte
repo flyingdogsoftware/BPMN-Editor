@@ -12,11 +12,13 @@
 
   // Listen for edit-label events from Connection components
   onMount(() => {
-    document.addEventListener('edit-label', handleEditLabelEvent);
+    if (isBrowser) {
+      document.addEventListener('edit-label', handleEditLabelEvent);
 
-    return () => {
-      document.removeEventListener('edit-label', handleEditLabelEvent);
-    };
+      return () => {
+        document.removeEventListener('edit-label', handleEditLabelEvent);
+      };
+    }
   });
 
   // Handle edit-label events from Connection components
@@ -35,19 +37,62 @@
   let canvasWidth = 800; // Default size before client-side rendering
   let canvasHeight = 600; // Default size before client-side rendering
 
+  // Viewport state for panning/scrolling
+  let viewportX = 0;
+  let viewportY = 0;
+  let isDraggingCanvas = false;
+  let dragCanvasStartX = 0;
+  let dragCanvasStartY = 0;
+  let canvasContainerElement;
+
+  // Check if we're in a browser environment
+  const isBrowser = typeof window !== 'undefined';
+
+  // Calculate the minimum canvas size based on element positions
+  $: {
+    // Default minimum size
+    let minWidth = isBrowser ? window.innerWidth : 1200; // Fallback size for SSR
+    let minHeight = isBrowser ? window.innerHeight : 800; // Fallback size for SSR
+
+    // Find the furthest element to determine required canvas size
+    $bpmnStore.forEach(element => {
+      if (element.type !== 'connection') {
+        const rightEdge = element.x + element.width + 200; // Add some padding
+        const bottomEdge = element.y + element.height + 200; // Add some padding
+
+        minWidth = Math.max(minWidth, rightEdge);
+        minHeight = Math.max(minHeight, bottomEdge);
+      }
+    });
+
+    // Update canvas dimensions if needed
+    canvasWidth = Math.max(canvasWidth, minWidth);
+    canvasHeight = Math.max(canvasHeight, minHeight);
+  }
+
   // Update canvas dimensions when window is resized
   onMount(() => {
-    const updateCanvasSize = () => {
-      canvasWidth = window.innerWidth;
-      canvasHeight = window.innerHeight;
-    };
+    if (isBrowser) {
+      const updateCanvasSize = () => {
+        // Update the visible area size
+        const visibleWidth = window.innerWidth;
+        const visibleHeight = window.innerHeight;
 
-    window.addEventListener('resize', updateCanvasSize);
-    updateCanvasSize(); // Initial size
+        // Ensure canvas is at least as large as the window
+        canvasWidth = Math.max(visibleWidth, canvasWidth);
+        canvasHeight = Math.max(visibleHeight, canvasHeight);
+      };
 
-    return () => {
-      window.removeEventListener('resize', updateCanvasSize);
-    };
+      window.addEventListener('resize', updateCanvasSize);
+      updateCanvasSize(); // Initial size
+
+      // Initialize the canvas container reference
+      canvasContainerElement = document.getElementById('canvas-container');
+
+      return () => {
+        window.removeEventListener('resize', updateCanvasSize);
+      };
+    }
   });
 
   // Grid size for snapping
@@ -408,8 +453,10 @@
     }
 
     // Add event listeners for mouse move and mouse up
-    window.addEventListener('mousemove', handleMouseMove);
-    window.addEventListener('mouseup', handleMouseUp);
+    if (isBrowser) {
+      window.addEventListener('mousemove', handleMouseMove);
+      window.addEventListener('mouseup', handleMouseUp);
+    }
   }
 
   // Handle keyboard events for accessibility
@@ -955,6 +1002,74 @@
     }
   }
 
+  // Handle canvas mouse down for panning
+  function handleCanvasMouseDown(event) {
+    // Only handle if it's directly on the canvas, not on an element
+    if (event.target.tagName === 'svg' || event.target.tagName === 'rect' && event.target.getAttribute('fill') === 'url(#grid)') {
+      // Only handle left mouse button
+      if (event.button !== 0) return;
+
+      event.preventDefault();
+
+      // Start canvas dragging
+      isDraggingCanvas = true;
+      dragCanvasStartX = event.clientX - viewportX;
+      dragCanvasStartY = event.clientY - viewportY;
+
+      // Add event listeners for mouse move and mouse up
+      if (isBrowser) {
+        window.addEventListener('mousemove', handleCanvasMouseMove);
+        window.addEventListener('mouseup', handleCanvasMouseUp);
+      }
+    }
+  }
+
+  // Handle canvas mouse move for panning
+  function handleCanvasMouseMove(event) {
+    if (isDraggingCanvas) {
+      // Calculate new viewport position
+      viewportX = event.clientX - dragCanvasStartX;
+      viewportY = event.clientY - dragCanvasStartY;
+    }
+  }
+
+  // Handle canvas mouse up for panning
+  function handleCanvasMouseUp() {
+    isDraggingCanvas = false;
+
+    // Remove event listeners
+    if (isBrowser) {
+      window.removeEventListener('mousemove', handleCanvasMouseMove);
+      window.removeEventListener('mouseup', handleCanvasMouseUp);
+    }
+  }
+
+  // Handle canvas wheel for zooming (future enhancement)
+  function handleCanvasWheel(event) {
+    // Prevent default scrolling behavior
+    event.preventDefault();
+
+    // Calculate scroll direction and adjust viewport
+    if (event.deltaY < 0) {
+      // Scroll up - move viewport down
+      viewportY += 50;
+    } else {
+      // Scroll down - move viewport up
+      viewportY -= 50;
+    }
+
+    // Horizontal scrolling with shift key
+    if (event.shiftKey) {
+      if (event.deltaY < 0) {
+        // Scroll right
+        viewportX -= 50;
+      } else {
+        // Scroll left
+        viewportX += 50;
+      }
+    }
+  }
+
   // End dragging or resizing
   function handleMouseUp() {
     if (isCreatingConnection && connectionStartPoint && connectionEndPosition) {
@@ -1060,8 +1175,10 @@
     resizeHandlePosition = null;
 
     // Remove event listeners
-    window.removeEventListener('mousemove', handleMouseMove);
-    window.removeEventListener('mouseup', handleMouseUp);
+    if (isBrowser) {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    }
   }
 
   // Start creating a connection
@@ -1074,8 +1191,10 @@
     connectionEndPosition = { x: point.x, y: point.y };
 
     // Add event listeners for mouse move and mouse up
-    window.addEventListener('mousemove', handleMouseMove);
-    window.addEventListener('mouseup', handleMouseUp);
+    if (isBrowser) {
+      window.addEventListener('mousemove', handleMouseMove);
+      window.addEventListener('mouseup', handleMouseUp);
+    }
   }
 
   // Toggle connection selection
@@ -1251,17 +1370,30 @@
   <div
     class="canvas-container"
     id="canvas-container"
-    role="region"
-    aria-label="BPMN Editor Canvas"
     on:dragover={handleDragOver}
     on:drop={handleDrop}
     on:dragleave={() => isDragOver = false}
     class:drag-over={isDragOver}
+    role="region"
+    aria-label="BPMN Editor Drop Zone"
   >
-    {#if isDragOver}
-      <div class="drop-indicator" style="left: {dropX}px; top: {dropY}px;"></div>
-    {/if}
-    <svg width={canvasWidth} height={canvasHeight} class="canvas">
+    <button
+      class="canvas-scroll-container"
+      on:mousedown={handleCanvasMouseDown}
+      on:wheel={handleCanvasWheel}
+      class:dragging={isDraggingCanvas}
+      aria-label="BPMN Editor Canvas"
+      type="button"
+    >
+      {#if isDragOver}
+        <div class="drop-indicator" style="left: {dropX}px; top: {dropY}px;"></div>
+      {/if}
+      <svg
+        width={canvasWidth}
+        height={canvasHeight}
+        class="canvas"
+        style="transform: translate({viewportX}px, {viewportY}px);"
+      >
       <!-- Draw grid -->
       <pattern id="grid" width="20" height="20" patternUnits="userSpaceOnUse">
         <path d="M 20 0 L 0 0 0 20" fill="none" stroke="gray" stroke-width="0.5" />
@@ -2354,6 +2486,7 @@
         />
       {/if}
     </svg>
+    </div>
   </div>
 
   <!-- Label Edit Dialog -->
@@ -2364,9 +2497,6 @@
     on:save={(e) => handleLabelSave(e.detail)}
     on:close={closeLabelDialog}
   />
-
-  <!-- Context Menu removed -->
-</div>
 
 <style>
   .bpmn-editor {
@@ -2380,12 +2510,17 @@
   /* Toolbar styles moved to Toolbar.svelte component */
 
   .canvas-container {
-    overflow: auto;
+    overflow: hidden; /* Changed from auto to hidden to handle our own scrolling */
     background-color: #f9f9f9;
     position: relative;
     transition: all 0.2s;
     height: 100vh;
     width: 100%;
+    cursor: grab; /* Show grab cursor to indicate the canvas can be panned */
+  }
+
+  .canvas-scroll-container.dragging {
+    cursor: grabbing; /* Show grabbing cursor when actively panning */
   }
 
   .canvas-container.drag-over {
