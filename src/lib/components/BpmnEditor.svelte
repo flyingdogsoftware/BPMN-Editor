@@ -8,6 +8,7 @@
   import Connection from './Connection.svelte';
   import LabelEditDialog from './LabelEditDialog.svelte';
   import Toolbar from './toolbar/Toolbar.svelte';
+  import ContextMenu from './ContextMenu.svelte';
 
   // Listen for edit-label events from Connection components
   onMount(() => {
@@ -42,8 +43,8 @@
   let draggedElementId = null;
   let dragStartX = 0;
   let dragStartY = 0;
-  let elementStartX = 0;
-  let elementStartY = 0;
+  // These variables are used for storing original positions during drag
+  let originalPositions = {}; // Store original positions of elements being moved together
 
   // Drop zone state
   let isDragOver = false;
@@ -65,6 +66,13 @@
   let currentEditingNode = null;
   let currentLabelText = '';
 
+  // Context menu state
+  let contextMenuVisible = false;
+  let contextMenuX = 0;
+  let contextMenuY = 0;
+  let contextMenuItems = [];
+  let contextMenuTarget = null;
+
   // Helper function to check if element is a node (any element with position and size)
   function isNode(element) {
     return element.type === 'task' ||
@@ -80,6 +88,17 @@
            element.type === 'lane' ||
            element.type === 'conversation' ||
            element.type === 'choreography';
+  }
+
+  // Helper function to check if an element is inside a pool
+  function isElementInsidePool(element, pool) {
+    if (!isNode(element) || !isNode(pool)) return false;
+
+    // Check if the element is fully contained within the pool boundaries
+    return element.x >= pool.x &&
+           element.y >= pool.y &&
+           element.x + element.width <= pool.x + pool.width &&
+           element.y + element.height <= pool.y + pool.height;
   }
 
   // Get all connection points for all elements
@@ -232,6 +251,10 @@
     // Snap the position to grid
     const [snappedX, snappedY] = snapPositionToGrid(x, y);
 
+    // Create a default lane ID
+    const laneId = `lane-${Date.now()}`;
+
+    // Create a new pool with a default lane
     const newPool = {
       id: `pool-${Date.now()}`,
       type: 'pool',
@@ -241,27 +264,109 @@
       width: 600,
       height: 200,
       isHorizontal: true,
-      participants: []
+      lanes: [laneId]
     };
+
+    // Create the default lane
+    const defaultLane = {
+      id: laneId,
+      type: 'lane',
+      label: 'Lane',
+      x: snappedX + 30, // Account for pool label area
+      y: snappedY,
+      width: 570, // Pool width minus label area
+      height: 200,
+      isHorizontal: true,
+      parentRef: newPool.id,
+      heightPercentage: 100, // 100% of pool height
+      flowNodeRefs: []
+    };
+
+    // Add both elements to the store
     bpmnStore.addElement(newPool);
+    bpmnStore.addElement(defaultLane);
   }
 
-  // Add a new lane
-  function addLane(x = 100, y = 400) {
-    // Snap the position to grid
-    const [snappedX, snappedY] = snapPositionToGrid(x, y);
+  // Add a new lane to an existing pool
+  function addLane(poolId, label = 'Lane') {
+    // Find the pool
+    const pool = $bpmnStore.find(el => el.id === poolId && el.type === 'pool');
+    if (!pool) return;
 
+    // Find existing lanes in this pool
+    const existingLanes = $bpmnStore.filter(el =>
+      el.type === 'lane' &&
+      pool.lanes && pool.lanes.includes(el.id)
+    );
+
+    // Calculate the height for each lane (including the new one)
+    const laneCount = existingLanes.length + 1;
+    const laneHeight = pool.height / laneCount;
+
+    // Create a new lane
     const newLane = {
       id: `lane-${Date.now()}`,
       type: 'lane',
-      label: 'Lane',
-      x: snappedX,
-      y: snappedY,
-      width: 600,
-      height: 100,
-      isHorizontal: true
+      label: label,
+      x: pool.x + 30, // Account for pool label area
+      y: pool.y, // Will be set correctly below
+      width: pool.width - 30, // Pool width minus label area
+      height: laneHeight,
+      isHorizontal: pool.isHorizontal,
+      parentRef: pool.id,
+      flowNodeRefs: []
     };
+
+    // Update existing lanes to adjust their heights and positions
+    existingLanes.forEach((lane, index) => {
+      bpmnStore.updateElement(lane.id, {
+        height: laneHeight,
+        // Adjust y positions to stack lanes vertically
+        y: pool.y + (index * laneHeight)
+      });
+    });
+
+    // Position the new lane at the bottom
+    newLane.y = pool.y + (existingLanes.length * laneHeight);
+
+    // Add the new lane to the store
     bpmnStore.addElement(newLane);
+
+    // Update the pool to include the new lane
+    bpmnStore.updateElement(pool.id, {
+      lanes: [...(pool.lanes || []), newLane.id]
+    });
+  }
+
+  // Handle right-click on an element
+  function handleContextMenu(event, element) {
+    // Prevent the default context menu
+    event.preventDefault();
+
+    // Only show context menu for pools
+    if (element.type === 'pool') {
+      contextMenuX = event.clientX;
+      contextMenuY = event.clientY;
+      contextMenuTarget = element;
+      contextMenuItems = [
+        { id: 'add-lane', label: 'Add Lane' }
+      ];
+      contextMenuVisible = true;
+    }
+  }
+
+  // Handle context menu item selection
+  function handleContextMenuSelect(event) {
+    const item = event.detail;
+
+    if (item.id === 'add-lane' && contextMenuTarget) {
+      // Add a new lane to the selected pool
+      addLane(contextMenuTarget.id);
+    }
+
+    // Hide the context menu
+    contextMenuVisible = false;
+    contextMenuTarget = null;
   }
 
   // Start dragging an element
@@ -283,8 +388,32 @@
 
     // Store the initial element position
     if (isNode(element)) {
-      elementStartX = element.x;
-      elementStartY = element.y;
+      // Reset the original positions object
+      originalPositions = {};
+
+      // Store the original position of the dragged element
+      originalPositions[element.id] = { x: element.x, y: element.y };
+
+      // If this is a pool, store positions of all lanes and contained elements
+      if (element.type === 'pool' && element.lanes && element.lanes.length > 0) {
+        // Store positions of all lanes in this pool
+        element.lanes.forEach(laneId => {
+          const lane = $bpmnStore.find(el => el.id === laneId && el.type === 'lane');
+          if (lane) {
+            originalPositions[lane.id] = { x: lane.x, y: lane.y };
+          }
+        });
+
+        // Store positions of all elements contained within the pool
+        $bpmnStore.forEach(el => {
+          if (isNode(el) && el.type !== 'pool' && el.type !== 'lane') {
+            // Check if element is inside the pool
+            if (isElementInsidePool(el, element)) {
+              originalPositions[el.id] = { x: el.x, y: el.y };
+            }
+          }
+        });
+      }
     }
 
     // Add event listeners for mouse move and mouse up
@@ -309,8 +438,9 @@
         draggedElementId = null;
       } else {
         draggedElementId = element.id;
-        elementStartX = element.x;
-        elementStartY = element.y;
+        // Store original position for dragging
+        originalPositions = {};
+        originalPositions[element.id] = { x: element.x, y: element.y };
       }
     } else if (event.key === 'ArrowUp') {
       // Move up
@@ -376,12 +506,51 @@
       const dx = event.clientX - dragStartX;
       const dy = event.clientY - dragStartY;
 
-      // Calculate new position
-      const newX = elementStartX + dx;
-      const newY = elementStartY + dy;
+      // Get the element being dragged
+      const element = $bpmnStore.find(el => el.id === draggedElementId);
+      if (!element || !isNode(element)) return;
+
+      // Get the original position of the dragged element
+      const originalPos = originalPositions[draggedElementId];
+      if (!originalPos) return;
+
+      // Calculate the new position based on the original position and the drag distance
+      const newX = originalPos.x + dx;
+      const newY = originalPos.y + dy;
 
       // Update the element position in the store (without snapping during drag for smooth movement)
       bpmnStore.updateElement(draggedElementId, { x: newX, y: newY });
+
+      // If this is a pool, also move all its lanes and contained elements
+      if (element.type === 'pool' && element.lanes && element.lanes.length > 0) {
+        // Move all lanes in this pool
+        element.lanes.forEach(laneId => {
+          const lane = $bpmnStore.find(el => el.id === laneId && el.type === 'lane');
+          const laneOriginalPos = originalPositions[laneId];
+          if (lane && laneOriginalPos) {
+
+            // Move the lane based on its original position plus the drag distance
+            bpmnStore.updateElement(lane.id, {
+              x: laneOriginalPos.x + dx,
+              y: laneOriginalPos.y + dy
+            });
+          }
+        });
+
+        // Move all elements contained within the pool
+        $bpmnStore.forEach(el => {
+          if (isNode(el) && el.type !== 'pool' && el.type !== 'lane') {
+            const elOriginalPos = originalPositions[el.id];
+            if (elOriginalPos) {
+              // Move the element based on its original position plus the drag distance
+              bpmnStore.updateElement(el.id, {
+                x: elOriginalPos.x + dx,
+                y: elOriginalPos.y + dy
+              });
+            }
+          }
+        });
+      }
     }
   }
 
@@ -471,7 +640,8 @@
         } else if (element.type === 'pool') {
           addPool(dropX, dropY);
         } else if (element.type === 'lane') {
-          addLane(dropX, dropY);
+          // When dropping a lane directly, create a new pool with a lane
+          addPool(dropX, dropY);
         }
       } catch (error) {
         console.error('Error parsing dropped element data:', error);
@@ -531,11 +701,48 @@
       const element = $bpmnStore.find(el => el.id === draggedElementId);
 
       if (element && isNode(element)) {
+        // Get the current position
+        const currentX = element.x;
+        const currentY = element.y;
+
         // Snap the final position to the grid
-        const [snappedX, snappedY] = snapPositionToGrid(element.x, element.y, gridSize);
+        const [snappedX, snappedY] = snapPositionToGrid(currentX, currentY, gridSize);
 
         // Update the element with the snapped position
         bpmnStore.updateElement(draggedElementId, { x: snappedX, y: snappedY });
+
+        // If this is a pool, also update all its lanes and contained elements to maintain their relative positions
+        if (element.type === 'pool' && element.lanes && element.lanes.length > 0) {
+          // Calculate the offset from the current position to the snapped position
+          const offsetX = snappedX - currentX;
+          const offsetY = snappedY - currentY;
+
+          // Update all lanes in this pool
+          element.lanes.forEach(laneId => {
+            const lane = $bpmnStore.find(el => el.id === laneId && el.type === 'lane');
+            if (lane) {
+              // Apply the same offset to the lane
+              bpmnStore.updateElement(lane.id, {
+                x: lane.x + offsetX,
+                y: lane.y + offsetY
+              });
+            }
+          });
+
+          // Update all elements contained within the pool
+          $bpmnStore.forEach(el => {
+            if (isNode(el) && el.type !== 'pool' && el.type !== 'lane') {
+              // Check if element is inside the pool
+              if (isElementInsidePool(el, element)) {
+                // Apply the same offset to the contained element
+                bpmnStore.updateElement(el.id, {
+                  x: el.x + offsetX,
+                  y: el.y + offsetY
+                });
+              }
+            }
+          });
+        }
       }
     }
 
@@ -772,6 +979,139 @@
         </marker>
       </defs>
 
+      <!-- Draw pools and lanes first (background) -->
+      {#each $bpmnStore as element (element.id)}
+        {#if element.type === 'pool' || element.type === 'lane'}
+          <!-- Use a lower z-index for pools and lanes to ensure other elements appear on top -->
+          <!-- Group for each element to handle events together -->
+          <g
+            class="bpmn-element {draggedElementId === element.id ? 'dragging' : ''}"
+            data-element-type={element.type}
+            on:mousedown={e => handleMouseDown(e, element)}
+            on:dblclick={() => handleNodeDoubleClick(element)}
+            on:keydown={e => handleKeyDown(e, element)}
+            on:contextmenu={e => handleContextMenu(e, element)}
+            role="button"
+            tabindex="0"
+            aria-label="Draggable {element.type} element: {element.label}"
+          >
+            {#if element.type === 'pool'}
+              <!-- Pool -->
+              <rect
+                x={element.x}
+                y={element.y}
+                width={element.width}
+                height={element.height}
+                fill="white"
+                stroke="black"
+                stroke-width="2"
+                class="element-shape"
+              />
+
+              <!-- Pool Label Area -->
+              {#if element.isHorizontal}
+                <rect
+                  x={element.x}
+                  y={element.y}
+                  width="30"
+                  height={element.height}
+                  fill="white"
+                  stroke="black"
+                  stroke-width="1"
+                />
+                <text
+                  x={element.x + 15}
+                  y={element.y + element.height/2}
+                  text-anchor="middle"
+                  dominant-baseline="middle"
+                  transform={`rotate(-90, ${element.x + 15}, ${element.y + element.height/2})`}
+                  pointer-events="none"
+                >
+                  {element.label}
+                </text>
+
+                <!-- Render lanes within this pool -->
+                {#if element.lanes && element.lanes.length > 0}
+                  {#each element.lanes as laneId}
+                    {@const lane = $bpmnStore.find(el => el.id === laneId && el.type === 'lane')}
+                    {#if lane}
+                      <!-- Lane separator line -->
+                      <line
+                        x1={element.x + 30}
+                        y1={lane.y}
+                        x2={element.x + element.width}
+                        y2={lane.y}
+                        stroke="black"
+                        stroke-width="1"
+                      />
+                      <!-- Lane label -->
+                      <text
+                        x={element.x + 15}
+                        y={lane.y + lane.height/2}
+                        text-anchor="middle"
+                        dominant-baseline="middle"
+                        transform={`rotate(-90, ${element.x + 15}, ${lane.y + lane.height/2})`}
+                        pointer-events="none"
+                      >
+                        {lane.label}
+                      </text>
+                    {/if}
+                  {/each}
+                {/if}
+              {:else}
+                <!-- Vertical pool rendering -->
+                <rect
+                  x={element.x}
+                  y={element.y}
+                  width={element.width}
+                  height="30"
+                  fill="white"
+                  stroke="black"
+                  stroke-width="1"
+                />
+                <text
+                  x={element.x + element.width/2}
+                  y={element.y + 15}
+                  text-anchor="middle"
+                  dominant-baseline="middle"
+                  pointer-events="none"
+                >
+                  {element.label}
+                </text>
+
+                <!-- Render lanes within this pool -->
+                {#if element.lanes && element.lanes.length > 0}
+                  {#each element.lanes as laneId}
+                    {@const lane = $bpmnStore.find(el => el.id === laneId && el.type === 'lane')}
+                    {#if lane}
+                      <!-- Lane separator line -->
+                      <line
+                        x1={lane.x}
+                        y1={element.y + 30}
+                        x2={lane.x}
+                        y2={element.y + element.height}
+                        stroke="black"
+                        stroke-width="1"
+                      />
+                      <!-- Lane label -->
+                      <text
+                        x={lane.x + lane.width/2}
+                        y={element.y + 15}
+                        text-anchor="middle"
+                        dominant-baseline="middle"
+                        pointer-events="none"
+                      >
+                        {lane.label}
+                      </text>
+                    {/if}
+                  {/each}
+                {/if}
+              {/if}
+            {/if}
+          </g>
+        {/if}
+      {/each}
+
       <!-- Draw connections -->
       {#each connections as connection (connection.id)}
         {#if connection.type === 'connection'}
@@ -789,15 +1129,17 @@
         {/if}
       {/each}
 
-      <!-- Draw BPMN elements -->
+      <!-- Draw other BPMN elements (on top of pools and lanes) -->
       {#each $bpmnStore as element (element.id)}
-        {#if isNode(element)}
+        {#if element.type !== 'pool' && element.type !== 'lane' && isNode(element)}
           <!-- Group for each element to handle events together -->
           <g
             class="bpmn-element {draggedElementId === element.id ? 'dragging' : ''}"
+            data-element-type={element.type}
             on:mousedown={e => handleMouseDown(e, element)}
             on:dblclick={() => handleNodeDoubleClick(element)}
             on:keydown={e => handleKeyDown(e, element)}
+            on:contextmenu={e => handleContextMenu(e, element)}
             role="button"
             tabindex="0"
             aria-label="Draggable {element.type} element: {element.label}"
@@ -1407,16 +1749,50 @@
 
             {:else if element.type === 'pool'}
               <!-- Pool -->
-              <rect
-                x={element.x}
-                y={element.y}
-                width={element.width}
-                height={element.height}
-                fill="white"
-                stroke="black"
-                stroke-width="2"
-                class="element-shape"
-              />
+              <g class="pool-container">
+                <rect
+                  x={element.x}
+                  y={element.y}
+                  width={element.width}
+                  height={element.height}
+                  fill="white"
+                  stroke="black"
+                  stroke-width="2"
+                  class="element-shape"
+                />
+
+                <!-- Add Lane Button (horizontal pool) -->
+                {#if element.isHorizontal}
+                  <g
+                    class="add-lane-button"
+                    role="button"
+                    tabindex="0"
+                    aria-label="Add Lane"
+                    on:click={() => addLane(element.id)}
+                    on:keydown={e => e.key === 'Enter' && addLane(element.id)}
+                    transform={`translate(${element.x + element.width/2}, ${element.y + element.height + 25})`}
+                  >
+                    <rect x="-15" y="-15" width="30" height="30" rx="5" fill="#e6f7ff" stroke="#1890ff" stroke-width="2" />
+                    <text x="0" y="0" text-anchor="middle" dominant-baseline="middle" font-size="18" font-weight="bold" fill="#1890ff">+</text>
+                    <title>Add Lane</title>
+                  </g>
+                {:else}
+                  <!-- Add Lane Button (vertical pool) -->
+                  <g
+                    class="add-lane-button"
+                    role="button"
+                    tabindex="0"
+                    aria-label="Add Lane"
+                    on:click={() => addLane(element.id)}
+                    on:keydown={e => e.key === 'Enter' && addLane(element.id)}
+                    transform={`translate(${element.x + element.width + 25}, ${element.y + element.height/2})`}
+                  >
+                    <rect x="-15" y="-15" width="30" height="30" rx="5" fill="#e6f7ff" stroke="#1890ff" stroke-width="2" />
+                    <text x="0" y="0" text-anchor="middle" dominant-baseline="middle" font-size="18" font-weight="bold" fill="#1890ff">+</text>
+                    <title>Add Lane</title>
+                  </g>
+                {/if}
+              </g>
 
               <!-- Pool Label Area -->
               {#if element.isHorizontal}
@@ -1439,6 +1815,35 @@
                 >
                   {element.label}
                 </text>
+
+                <!-- Render lanes within this pool -->
+                {#if element.lanes && element.lanes.length > 0}
+                  {#each element.lanes as laneId}
+                    {@const lane = $bpmnStore.find(el => el.id === laneId && el.type === 'lane')}
+                    {#if lane}
+                      <!-- Lane separator line -->
+                      <line
+                        x1={element.x + 30}
+                        y1={lane.y}
+                        x2={element.x + element.width}
+                        y2={lane.y}
+                        stroke="black"
+                        stroke-width="1"
+                      />
+                      <!-- Lane label -->
+                      <text
+                        x={element.x + 15}
+                        y={lane.y + lane.height/2}
+                        text-anchor="middle"
+                        dominant-baseline="middle"
+                        transform={`rotate(-90, ${element.x + 15}, ${lane.y + lane.height/2})`}
+                        pointer-events="none"
+                      >
+                        {lane.label}
+                      </text>
+                    {/if}
+                  {/each}
+                {/if}
               {:else}
                 <rect
                   x={element.x}
@@ -1458,62 +1863,50 @@
                 >
                   {element.label}
                 </text>
+
+                <!-- Render lanes within this pool (vertical) -->
+                {#if element.lanes && element.lanes.length > 0}
+                  {#each element.lanes as laneId}
+                    {@const lane = $bpmnStore.find(el => el.id === laneId && el.type === 'lane')}
+                    {#if lane}
+                      <!-- Lane separator line -->
+                      <line
+                        x1={lane.x}
+                        y1={element.y + 30}
+                        x2={lane.x}
+                        y2={element.y + element.height}
+                        stroke="black"
+                        stroke-width="1"
+                      />
+                      <!-- Lane label -->
+                      <text
+                        x={lane.x + lane.width/2}
+                        y={element.y + 15}
+                        text-anchor="middle"
+                        dominant-baseline="middle"
+                        pointer-events="none"
+                      >
+                        {lane.label}
+                      </text>
+                    {/if}
+                  {/each}
+                {/if}
               {/if}
 
             {:else if element.type === 'lane'}
-              <!-- Lane -->
+              <!-- Lane is rendered as part of the pool, not separately -->
+              <!-- This is just a placeholder for selection and dragging -->
               <rect
                 x={element.x}
                 y={element.y}
                 width={element.width}
                 height={element.height}
-                fill="white"
-                stroke="black"
-                stroke-width="1"
+                fill="none"
+                stroke="none"
+                stroke-width="0"
+                fill-opacity="0.1"
                 class="element-shape"
               />
-
-              <!-- Lane Label Area -->
-              {#if element.isHorizontal}
-                <rect
-                  x={element.x}
-                  y={element.y}
-                  width="30"
-                  height={element.height}
-                  fill="white"
-                  stroke="black"
-                  stroke-width="1"
-                />
-                <text
-                  x={element.x + 15}
-                  y={element.y + element.height/2}
-                  text-anchor="middle"
-                  dominant-baseline="middle"
-                  transform={`rotate(-90, ${element.x + 15}, ${element.y + element.height/2})`}
-                  pointer-events="none"
-                >
-                  {element.label}
-                </text>
-              {:else}
-                <rect
-                  x={element.x}
-                  y={element.y}
-                  width={element.width}
-                  height="30"
-                  fill="white"
-                  stroke="black"
-                  stroke-width="1"
-                />
-                <text
-                  x={element.x + element.width/2}
-                  y={element.y + 15}
-                  text-anchor="middle"
-                  dominant-baseline="middle"
-                  pointer-events="none"
-                >
-                  {element.label}
-                </text>
-              {/if}
             {/if}
 
             <!-- Connection points -->
@@ -1550,6 +1943,15 @@
     on:save={(e) => handleLabelSave(e.detail)}
     on:close={closeLabelDialog}
   />
+
+  <!-- Context Menu -->
+  <ContextMenu
+    visible={contextMenuVisible}
+    x={contextMenuX}
+    y={contextMenuY}
+    items={contextMenuItems}
+    on:select={handleContextMenuSelect}
+  />
 </div>
 
 <style>
@@ -1573,6 +1975,17 @@
   .canvas-container.drag-over {
     background-color: #e6f7ff;
     box-shadow: inset 0 0 0 2px #1890ff;
+  }
+
+  /* Ensure pools and lanes are rendered below other elements */
+  g.bpmn-element[data-element-type="pool"],
+  g.bpmn-element[data-element-type="lane"] {
+    z-index: 1;
+  }
+
+  /* Ensure other elements are rendered above pools and lanes */
+  g.bpmn-element:not([data-element-type="pool"]):not([data-element-type="lane"]) {
+    z-index: 2;
   }
 
   .canvas {
@@ -1610,5 +2023,29 @@
     transform: translate(-50%, -50%);
     pointer-events: none;
     z-index: 100;
+  }
+
+  /* Add Lane Button styling */
+  .add-lane-button {
+    cursor: pointer;
+    opacity: 0.7;
+    transition: opacity 0.2s ease-in-out;
+  }
+
+  .add-lane-button:hover {
+    opacity: 1;
+  }
+
+  .add-lane-button rect {
+    transition: fill 0.2s ease-in-out, stroke 0.2s ease-in-out;
+  }
+
+  .add-lane-button:hover rect {
+    fill: #bae7ff;
+    stroke: #0050b3;
+  }
+
+  .add-lane-button text {
+    pointer-events: none;
   }
 </style>

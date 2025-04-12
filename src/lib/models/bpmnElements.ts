@@ -178,7 +178,7 @@ export interface BpmnGroup extends BpmnNode {
 export interface BpmnPool extends BpmnNode {
   type: 'pool';
   isHorizontal: boolean;
-  participants?: string[]; // IDs of lanes
+  lanes: string[]; // IDs of lanes contained in this pool
   processRef?: string; // Reference to the process contained in the pool
   isExecutable?: boolean; // Whether the process is executable
 }
@@ -187,8 +187,9 @@ export interface BpmnPool extends BpmnNode {
 export interface BpmnLane extends BpmnNode {
   type: 'lane';
   isHorizontal: boolean;
-  parentRef?: string; // ID of parent pool or lane
-  flowNodeRefs?: string[]; // IDs of flow nodes contained in this lane
+  parentRef: string; // ID of parent pool
+  heightPercentage?: number; // Height as percentage of parent pool (default: divided equally)
+  flowNodeRefs: string[]; // IDs of flow nodes contained in this lane
 }
 
 // ---- CONNECTIONS ----
