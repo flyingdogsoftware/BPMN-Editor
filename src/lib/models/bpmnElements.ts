@@ -1,6 +1,23 @@
 // BPMN Element Types
 // This file defines all the BPMN 2.0 element types and their properties
 
+// Element Types
+export type ElementType =
+  | 'task'
+  | 'event'
+  | 'gateway'
+  | 'connection'
+  | 'pool'
+  | 'lane'
+  | 'subprocess'
+  | 'dataobject'
+  | 'datastore'
+  | 'textannotation'
+  | 'group'
+  | 'callactivity'
+  | 'conversation'
+  | 'choreography';
+
 // Position interface
 export interface Position {
   x: number;
@@ -229,8 +246,8 @@ export interface BpmnConnection extends BpmnElementBase {
   connectionType: ConnectionType;
   sourceId: string;
   targetId: string;
-  sourcePointId: string;
-  targetPointId: string;
+  sourcePointId?: string;
+  targetPointId?: string;
   waypoints: Array<Position>;
   condition?: string;
   isDefault?: boolean;
@@ -302,3 +319,8 @@ export type BpmnElementUnion =
   | BpmnConversation
   | BpmnChoreography
   | BpmnConnection;
+
+// Type guard to check if an element is a node (has position and size)
+export function isNode(element: BpmnElementUnion): element is Exclude<BpmnElementUnion, BpmnConnection> {
+  return element.type !== 'connection';
+}

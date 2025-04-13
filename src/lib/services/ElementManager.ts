@@ -1,5 +1,6 @@
 import { bpmnStore } from '$lib/stores/bpmnStore';
 import type { BpmnElementUnion, Position } from '$lib/models/bpmnElements';
+import { isNode } from '$lib/models/bpmnElements';
 import { snapPositionToGrid, snapToGrid } from '$lib/utils/gridUtils';
 import {
   createTask,
@@ -27,8 +28,8 @@ class ElementManager {
    * @param y The y position
    * @returns The created task element
    */
-  addTask(taskType = 'user', x = 200, y = 200): BpmnElementUnion {
-    const newTask = createTask(taskType, x, y);
+  addTask(taskType: any = 'user', x = 200, y = 200): BpmnElementUnion {
+    const newTask = createTask(taskType as any, x, y);
     bpmnStore.addElement(newTask);
     return newTask;
   }
@@ -41,8 +42,8 @@ class ElementManager {
    * @param y The y position
    * @returns The created event element
    */
-  addEvent(eventType = 'start', eventDefinition = 'none', x = 400, y = 200): BpmnElementUnion {
-    const newEvent = createEvent(eventType, eventDefinition, x, y);
+  addEvent(eventType: any = 'start', eventDefinition: any = 'none', x = 400, y = 200): BpmnElementUnion {
+    const newEvent = createEvent(eventType as any, eventDefinition as any, x, y);
     bpmnStore.addElement(newEvent);
     return newEvent;
   }
@@ -54,8 +55,8 @@ class ElementManager {
    * @param y The y position
    * @returns The created gateway element
    */
-  addGateway(gatewayType = 'exclusive', x = 300, y = 300): BpmnElementUnion {
-    const newGateway = createGateway(gatewayType, x, y);
+  addGateway(gatewayType: any = 'exclusive', x = 300, y = 300): BpmnElementUnion {
+    const newGateway = createGateway(gatewayType as any, x, y);
     bpmnStore.addElement(newGateway);
     return newGateway;
   }
@@ -72,18 +73,18 @@ class ElementManager {
 
     const newSubProcess = {
       id: `subprocess-${Date.now()}`,
-      type: 'subprocess',
+      type: 'subprocess' as const,
       label: `${subProcessType.charAt(0).toUpperCase() + subProcessType.slice(1)} SubProcess`,
       x: snappedX,
       y: snappedY,
       width: 180,
       height: 120,
-      subProcessType: subProcessType,
+      subProcessType: subProcessType as any,
       isExpanded: true,
       children: []
     };
-    bpmnStore.addElement(newSubProcess);
-    return newSubProcess;
+    bpmnStore.addElement(newSubProcess as BpmnElementUnion);
+    return newSubProcess as BpmnElementUnion;
   }
 
   /**
@@ -99,7 +100,7 @@ class ElementManager {
 
     const newDataObject = {
       id: `dataobject-${Date.now()}`,
-      type: 'dataobject',
+      type: 'dataobject' as const,
       label: isInput ? 'Data Input' : (isOutput ? 'Data Output' : 'Data Object'),
       x: snappedX,
       y: snappedY,
@@ -109,8 +110,8 @@ class ElementManager {
       isInput: isInput,
       isOutput: isOutput
     };
-    bpmnStore.addElement(newDataObject);
-    return newDataObject;
+    bpmnStore.addElement(newDataObject as BpmnElementUnion);
+    return newDataObject as BpmnElementUnion;
   }
 
   /**
@@ -124,7 +125,7 @@ class ElementManager {
 
     const newDataStore = {
       id: `datastore-${Date.now()}`,
-      type: 'datastore',
+      type: 'datastore' as const,
       label: 'Data Store',
       x: snappedX,
       y: snappedY,
@@ -132,8 +133,8 @@ class ElementManager {
       height: 50,
       isCollection: false
     };
-    bpmnStore.addElement(newDataStore);
-    return newDataStore;
+    bpmnStore.addElement(newDataStore as BpmnElementUnion);
+    return newDataStore as BpmnElementUnion;
   }
 
   /**
@@ -147,7 +148,7 @@ class ElementManager {
 
     const newTextAnnotation = {
       id: `annotation-${Date.now()}`,
-      type: 'textannotation',
+      type: 'textannotation' as const,
       label: 'Annotation',
       text: 'Text Annotation',
       x: snappedX,
@@ -155,8 +156,8 @@ class ElementManager {
       width: 100,
       height: 80
     };
-    bpmnStore.addElement(newTextAnnotation);
-    return newTextAnnotation;
+    bpmnStore.addElement(newTextAnnotation as BpmnElementUnion);
+    return newTextAnnotation as BpmnElementUnion;
   }
 
   /**
@@ -189,8 +190,8 @@ class ElementManager {
     });
     unsubscribe();
 
-    if (!pool) {
-      console.error(`Pool with ID ${poolId} not found`);
+    if (!pool || !isNode(pool)) {
+      console.error(`Pool with ID ${poolId} not found or is not a node`);
       return null;
     }
 
@@ -201,7 +202,7 @@ class ElementManager {
     // Create a new lane
     const newLane = {
       id: `lane-${Date.now()}`,
-      type: 'lane',
+      type: 'lane' as const, // Use const assertion to make it a literal type
       label: label,
       x: pool.x + 30, // Account for pool label area
       y: pool.y, // Will be set correctly below
@@ -214,25 +215,27 @@ class ElementManager {
 
     // Update existing lanes to adjust their heights and positions
     existingLanes.forEach((lane, index) => {
-      bpmnStore.updateElement(lane.id, {
-        height: laneHeight,
-        // Adjust y positions to stack lanes vertically
-        y: pool.y + (index * laneHeight)
-      });
+      if (isNode(lane) && pool && isNode(pool)) {
+        bpmnStore.updateElement(lane.id, {
+          height: laneHeight,
+          // Adjust y positions to stack lanes vertically
+          y: pool.y + (index * laneHeight)
+        });
+      }
     });
 
     // Position the new lane at the bottom
     newLane.y = pool.y + (existingLanes.length * laneHeight);
 
     // Add the new lane to the store
-    bpmnStore.addElement(newLane);
+    bpmnStore.addElement(newLane as BpmnElementUnion);
 
     // Update the pool to include the new lane
     bpmnStore.updateElement(pool.id, {
       lanes: [...(pool.lanes || []), newLane.id]
     });
 
-    return newLane;
+    return newLane as BpmnElementUnion;
   }
 
   /**
@@ -481,7 +484,7 @@ class ElementManager {
     });
 
     // If this is a pool, also update its lanes
-    if (element.type === 'pool' && element.lanes && element.lanes.length > 0 && 'y' in element) {
+    if (element.type === 'pool' && element.lanes && element.lanes.length > 0 && isNode(element)) {
       // Update all lanes in this pool
       const laneHeight = finalHeight / element.lanes.length;
       element.lanes.forEach((laneId, index) => {
@@ -491,7 +494,7 @@ class ElementManager {
         });
         laneUnsubscribe();
 
-        if (lane) {
+        if (lane && element && isNode(element)) {
           bpmnStore.updateElement(lane.id, {
             width: finalWidth - 30, // Pool width minus label area
             height: laneHeight,
@@ -509,11 +512,7 @@ class ElementManager {
    * @returns Whether the element is inside the pool
    */
   isElementInsidePool(element: BpmnElementUnion, pool: BpmnElementUnion): boolean {
-    if (!('x' in element) || !('y' in element) || !('width' in element) || !('height' in element)) {
-      return false;
-    }
-
-    if (!('x' in pool) || !('y' in pool) || !('width' in pool) || !('height' in pool)) {
+    if (!isNode(element) || !isNode(pool)) {
       return false;
     }
 

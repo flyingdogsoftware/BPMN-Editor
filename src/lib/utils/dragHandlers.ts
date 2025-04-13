@@ -1,4 +1,5 @@
 import type { BpmnElementUnion } from '$lib/models/bpmnElements';
+import { isNode } from '$lib/models/bpmnElements';
 import { snapPositionToGrid } from './gridUtils';
 
 /**
@@ -8,6 +9,11 @@ import { snapPositionToGrid } from './gridUtils';
  * @returns Object containing the original position and mouse position
  */
 export function handleDragStart(element: BpmnElementUnion, event: MouseEvent) {
+  // Check if the element is a node (has position and size)
+  if (!isNode(element)) {
+    throw new Error('Cannot drag a connection');
+  }
+  
   // Store original position and mouse position
   const originalPos = { x: element.x, y: element.y };
   const mousePos = { x: event.clientX, y: event.clientY };

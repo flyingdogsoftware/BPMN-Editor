@@ -1,4 +1,24 @@
-import type { BpmnElementUnion } from '$lib/models/bpmnElements';
+
+import type {
+  BpmnTask,
+  BpmnEvent,
+  BpmnGateway,
+  BpmnPool,
+  BpmnLane,
+  BpmnSubProcess,
+  BpmnDataObject,
+  BpmnDataStore,
+  BpmnTextAnnotation,
+  BpmnConnection,
+  BpmnElementUnion,
+  TaskType,
+  EventType,
+  EventDefinition,
+  GatewayType,
+  SubProcessType,
+  ConnectionType,
+  ElementType
+} from '$lib/types/bpmn';
 import { snapPositionToGrid } from './gridUtils';
 
 /**
@@ -8,7 +28,7 @@ import { snapPositionToGrid } from './gridUtils';
  * @param y The y position
  * @returns A new task element
  */
-export function createTask(taskType = 'user', x = 200, y = 200): BpmnElementUnion {
+export function createTask(taskType: TaskType = 'user', x = 200, y = 200): BpmnTask {
   // Snap the position to grid
   const [snappedX, snappedY] = snapPositionToGrid(x, y);
 
@@ -32,7 +52,7 @@ export function createTask(taskType = 'user', x = 200, y = 200): BpmnElementUnio
  * @param y The y position
  * @returns A new event element
  */
-export function createEvent(eventType = 'start', eventDefinition = 'none', x = 200, y = 200): BpmnElementUnion {
+export function createEvent(eventType: EventType = 'start', eventDefinition: EventDefinition = 'none', x = 200, y = 200): BpmnEvent {
   // Snap the position to grid
   const [snappedX, snappedY] = snapPositionToGrid(x, y);
 
@@ -58,7 +78,7 @@ export function createEvent(eventType = 'start', eventDefinition = 'none', x = 2
  * @param y The y position
  * @returns A new gateway element
  */
-export function createGateway(gatewayType = 'exclusive', x = 200, y = 200): BpmnElementUnion {
+export function createGateway(gatewayType: GatewayType = 'exclusive', x = 200, y = 200): BpmnGateway {
   // Snap the position to grid
   const [snappedX, snappedY] = snapPositionToGrid(x, y);
 
@@ -83,7 +103,7 @@ export function createGateway(gatewayType = 'exclusive', x = 200, y = 200): Bpmn
  * @param isHorizontal Whether the pool is horizontal
  * @returns A new pool element
  */
-export function createPool(x = 100, y = 100, isHorizontal = true): BpmnElementUnion {
+export function createPool(x = 100, y = 100, isHorizontal = true): BpmnPool {
   // Snap the position to grid
   const [snappedX, snappedY] = snapPositionToGrid(x, y);
 
@@ -110,7 +130,7 @@ export function createPool(x = 100, y = 100, isHorizontal = true): BpmnElementUn
  * @param isHorizontal Whether the lane is horizontal
  * @returns A new lane element
  */
-export function createLane(poolId: string, x = 100, y = 100, width = 600, height = 100, isHorizontal = true): BpmnElementUnion {
+export function createLane(poolId: string, x = 100, y = 100, width = 600, height = 100, isHorizontal = true): BpmnLane {
   // Snap the position to grid
   const [snappedX, snappedY] = snapPositionToGrid(x, y);
 
@@ -135,7 +155,7 @@ export function createLane(poolId: string, x = 100, y = 100, width = 600, height
  * @param y The y position
  * @returns A new sub-process element
  */
-export function createSubProcess(subProcessType = 'embedded', x = 200, y = 300): BpmnElementUnion {
+export function createSubProcess(subProcessType: SubProcessType = 'embedded', x = 200, y = 300): BpmnSubProcess {
   // Snap the position to grid
   const [snappedX, snappedY] = snapPositionToGrid(x, y);
 
@@ -161,7 +181,7 @@ export function createSubProcess(subProcessType = 'embedded', x = 200, y = 300):
  * @param y The y position
  * @returns A new data object element
  */
-export function createDataObject(isInput = false, isOutput = false, x = 500, y = 200): BpmnElementUnion {
+export function createDataObject(isInput = false, isOutput = false, x = 500, y = 200): BpmnDataObject {
   // Snap the position to grid
   const [snappedX, snappedY] = snapPositionToGrid(x, y);
 
@@ -185,7 +205,7 @@ export function createDataObject(isInput = false, isOutput = false, x = 500, y =
  * @param y The y position
  * @returns A new data store element
  */
-export function createDataStore(x = 500, y = 300): BpmnElementUnion {
+export function createDataStore(x = 500, y = 300): BpmnDataStore {
   // Snap the position to grid
   const [snappedX, snappedY] = snapPositionToGrid(x, y);
 
@@ -207,7 +227,7 @@ export function createDataStore(x = 500, y = 300): BpmnElementUnion {
  * @param y The y position
  * @returns A new text annotation element
  */
-export function createTextAnnotation(x = 600, y = 200): BpmnElementUnion {
+export function createTextAnnotation(x = 600, y = 200): BpmnTextAnnotation {
   // Snap the position to grid
   const [snappedX, snappedY] = snapPositionToGrid(x, y);
 
@@ -230,7 +250,7 @@ export function createTextAnnotation(x = 600, y = 200): BpmnElementUnion {
  * @param connectionType The type of connection
  * @returns A new connection element
  */
-export function createConnection(sourceId: string, targetId: string, connectionType = 'sequence'): BpmnElementUnion {
+export function createConnection(sourceId: string, targetId: string, connectionType: ConnectionType = 'sequence'): BpmnConnection {
   return {
     id: `connection-${Date.now()}`,
     type: 'connection',
@@ -250,18 +270,22 @@ export function createConnection(sourceId: string, targetId: string, connectionT
  * @param y The y position
  * @returns A new BPMN element
  */
-export function createElement(elementType: string, subtype: string, x = 200, y = 200): BpmnElementUnion | null {
+export function createElement(elementType: ElementType, subtype: string, x = 200, y = 200): BpmnElementUnion | null {
   switch (elementType) {
     case 'task':
-      return createTask(subtype, x, y);
+      // Ensure subtype is a valid TaskType
+      return createTask(subtype as TaskType, x, y);
     case 'event':
-      return createEvent(subtype, 'none', x, y);
+      // Ensure subtype is a valid EventType
+      return createEvent(subtype as EventType, 'none', x, y);
     case 'gateway':
-      return createGateway(subtype, x, y);
+      // Ensure subtype is a valid GatewayType
+      return createGateway(subtype as GatewayType, x, y);
     case 'pool':
       return createPool(x, y, subtype === 'horizontal');
     case 'subprocess':
-      return createSubProcess(subtype, x, y);
+      // Ensure subtype is a valid SubProcessType
+      return createSubProcess(subtype as SubProcessType, x, y);
     case 'dataobject':
       if (subtype === 'input') {
         return createDataObject(true, false, x, y);
@@ -274,8 +298,9 @@ export function createElement(elementType: string, subtype: string, x = 200, y =
       return createDataStore(x, y);
     case 'textannotation':
       return createTextAnnotation(x, y);
+    // Note: 'lane' and 'connection' are typically created differently, not via this generic function
     default:
-      console.error(`Unknown element type: ${elementType}`);
+      console.error(`Unsupported element type for generic creation: ${elementType}`);
       return null;
   }
 }

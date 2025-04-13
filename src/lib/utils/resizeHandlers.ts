@@ -1,4 +1,5 @@
 import type { BpmnElementUnion } from '$lib/models/bpmnElements';
+import { isNode } from '$lib/models/bpmnElements';
 import { snapToGrid } from './gridUtils';
 
 /**
@@ -8,6 +9,11 @@ import { snapToGrid } from './gridUtils';
  * @returns Object containing the original size and position
  */
 export function handleResizeStart(element: BpmnElementUnion) {
+  // Check if the element is a node (has position and size)
+  if (!isNode(element)) {
+    throw new Error('Cannot resize a connection');
+  }
+  
   // Store original size and position
   const originalSize = { width: element.width, height: element.height };
   const originalPos = { x: element.x, y: element.y };
