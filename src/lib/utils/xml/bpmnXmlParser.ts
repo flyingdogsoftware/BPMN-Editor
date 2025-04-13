@@ -46,7 +46,7 @@ const parserOptions = {
  * @returns The parsed XML as a JavaScript object
  * @throws Error if the XML is invalid
  */
-export function parseBpmnXml(xmlString: string): any {
+export function parseBpmnXml(xmlString: string): unknown {
   // Validate the XML
   const validationResult = XMLValidator.validate(xmlString);
   if (validationResult !== true) {
@@ -70,9 +70,13 @@ export function importBpmnXml(xmlString: string): BpmnElementUnion[] {
 
     // Map the XML to the internal data model
     return mapXmlToModel(parsedXml);
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('Error importing BPMN XML:', error);
-    throw new Error(`Failed to import BPMN XML: ${error.message}`);
+    if (error instanceof Error) {
+      throw new Error(`Failed to import BPMN XML: ${error.message}`);
+    } else {
+      throw new Error('Failed to import BPMN XML: Unknown error');
+    }
   }
 }
 
@@ -81,13 +85,16 @@ export function importBpmnXml(xmlString: string): BpmnElementUnion[] {
  * @param parsedXml The parsed BPMN XML
  * @returns The process definition object
  */
-export function extractProcessDefinition(parsedXml: any): any {
-  // Check if we have a definitions element
-  if (!parsedXml['bpmn:definitions']) {
+export function extractProcessDefinition(parsedXml: unknown): unknown {
+  if (
+    typeof parsedXml !== 'object' ||
+    parsedXml === null ||
+    !('bpmn:definitions' in parsedXml)
+  ) {
     throw new Error('Invalid BPMN XML: Missing bpmn:definitions element');
   }
 
-  const definitions = parsedXml['bpmn:definitions'];
+  const definitions = (parsedXml as Record<string, any>)['bpmn:definitions'];
 
   // Extract process
   if (definitions['bpmn:process']) {
@@ -110,13 +117,16 @@ export function extractProcessDefinition(parsedXml: any): any {
  * @param parsedXml The parsed BPMN XML
  * @returns The diagram information object
  */
-export function extractDiagramInfo(parsedXml: any): any {
-  // Check if we have a definitions element
-  if (!parsedXml['bpmn:definitions']) {
+export function extractDiagramInfo(parsedXml: unknown): unknown {
+  if (
+    typeof parsedXml !== 'object' ||
+    parsedXml === null ||
+    !('bpmn:definitions' in parsedXml)
+  ) {
     throw new Error('Invalid BPMN XML: Missing bpmn:definitions element');
   }
 
-  const definitions = parsedXml['bpmn:definitions'];
+  const definitions = (parsedXml as Record<string, any>)['bpmn:definitions'];
 
   // Extract BPMNDiagram
   if (definitions['bpmndi:BPMNDiagram']) {
