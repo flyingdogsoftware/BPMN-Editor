@@ -35,9 +35,9 @@ export function createTask(taskType = 'user', x = 200, y = 200): BpmnElementUnio
 export function createEvent(eventType = 'start', eventDefinition = 'none', x = 200, y = 200): BpmnElementUnion {
   // Snap the position to grid
   const [snappedX, snappedY] = snapPositionToGrid(x, y);
-  
+
   const size = 36; // Default size for events
-  
+
   return {
     id: `event-${Date.now()}`,
     type: 'event',
@@ -61,9 +61,9 @@ export function createEvent(eventType = 'start', eventDefinition = 'none', x = 2
 export function createGateway(gatewayType = 'exclusive', x = 200, y = 200): BpmnElementUnion {
   // Snap the position to grid
   const [snappedX, snappedY] = snapPositionToGrid(x, y);
-  
+
   const size = 50; // Default size for gateways
-  
+
   return {
     id: `gateway-${Date.now()}`,
     type: 'gateway',
@@ -86,7 +86,7 @@ export function createGateway(gatewayType = 'exclusive', x = 200, y = 200): Bpmn
 export function createPool(x = 100, y = 100, isHorizontal = true): BpmnElementUnion {
   // Snap the position to grid
   const [snappedX, snappedY] = snapPositionToGrid(x, y);
-  
+
   return {
     id: `pool-${Date.now()}`,
     type: 'pool',
@@ -113,7 +113,7 @@ export function createPool(x = 100, y = 100, isHorizontal = true): BpmnElementUn
 export function createLane(poolId: string, x = 100, y = 100, width = 600, height = 100, isHorizontal = true): BpmnElementUnion {
   // Snap the position to grid
   const [snappedX, snappedY] = snapPositionToGrid(x, y);
-  
+
   return {
     id: `lane-${Date.now()}`,
     type: 'lane',
@@ -125,6 +125,101 @@ export function createLane(poolId: string, x = 100, y = 100, width = 600, height
     isHorizontal: isHorizontal,
     parentRef: poolId,
     flowNodeRefs: []
+  };
+}
+
+/**
+ * Creates a new sub-process element
+ * @param subProcessType The type of sub-process
+ * @param x The x position
+ * @param y The y position
+ * @returns A new sub-process element
+ */
+export function createSubProcess(subProcessType = 'embedded', x = 200, y = 300): BpmnElementUnion {
+  // Snap the position to grid
+  const [snappedX, snappedY] = snapPositionToGrid(x, y);
+
+  return {
+    id: `subprocess-${Date.now()}`,
+    type: 'subprocess',
+    label: `${subProcessType.charAt(0).toUpperCase() + subProcessType.slice(1)} SubProcess`,
+    x: snappedX,
+    y: snappedY,
+    width: 180,
+    height: 120,
+    subProcessType: subProcessType,
+    isExpanded: true,
+    children: []
+  };
+}
+
+/**
+ * Creates a new data object element
+ * @param isInput Whether this is a data input
+ * @param isOutput Whether this is a data output
+ * @param x The x position
+ * @param y The y position
+ * @returns A new data object element
+ */
+export function createDataObject(isInput = false, isOutput = false, x = 500, y = 200): BpmnElementUnion {
+  // Snap the position to grid
+  const [snappedX, snappedY] = snapPositionToGrid(x, y);
+
+  return {
+    id: `dataobject-${Date.now()}`,
+    type: 'dataobject',
+    label: isInput ? 'Data Input' : (isOutput ? 'Data Output' : 'Data Object'),
+    x: snappedX,
+    y: snappedY,
+    width: 36,
+    height: 50,
+    isCollection: false,
+    isInput: isInput,
+    isOutput: isOutput
+  };
+}
+
+/**
+ * Creates a new data store element
+ * @param x The x position
+ * @param y The y position
+ * @returns A new data store element
+ */
+export function createDataStore(x = 500, y = 300): BpmnElementUnion {
+  // Snap the position to grid
+  const [snappedX, snappedY] = snapPositionToGrid(x, y);
+
+  return {
+    id: `datastore-${Date.now()}`,
+    type: 'datastore',
+    label: 'Data Store',
+    x: snappedX,
+    y: snappedY,
+    width: 50,
+    height: 50,
+    isCollection: false
+  };
+}
+
+/**
+ * Creates a new text annotation element
+ * @param x The x position
+ * @param y The y position
+ * @returns A new text annotation element
+ */
+export function createTextAnnotation(x = 600, y = 200): BpmnElementUnion {
+  // Snap the position to grid
+  const [snappedX, snappedY] = snapPositionToGrid(x, y);
+
+  return {
+    id: `annotation-${Date.now()}`,
+    type: 'textannotation',
+    label: 'Annotation',
+    text: 'Text Annotation',
+    x: snappedX,
+    y: snappedY,
+    width: 100,
+    height: 80
   };
 }
 
@@ -150,6 +245,7 @@ export function createConnection(sourceId: string, targetId: string, connectionT
 /**
  * Creates a new BPMN element based on the element type
  * @param elementType The type of element to create
+ * @param subtype The subtype of the element
  * @param x The x position
  * @param y The y position
  * @returns A new BPMN element
@@ -164,6 +260,20 @@ export function createElement(elementType: string, subtype: string, x = 200, y =
       return createGateway(subtype, x, y);
     case 'pool':
       return createPool(x, y, subtype === 'horizontal');
+    case 'subprocess':
+      return createSubProcess(subtype, x, y);
+    case 'dataobject':
+      if (subtype === 'input') {
+        return createDataObject(true, false, x, y);
+      } else if (subtype === 'output') {
+        return createDataObject(false, true, x, y);
+      } else {
+        return createDataObject(false, false, x, y);
+      }
+    case 'datastore':
+      return createDataStore(x, y);
+    case 'textannotation':
+      return createTextAnnotation(x, y);
     default:
       console.error(`Unknown element type: ${elementType}`);
       return null;

@@ -11,6 +11,9 @@
   import { handleResizeStart, calculateResizeValues } from '$lib/utils/resizeHandlers';
   import { findClosestConnectionPoint, handleConnectionStart, handleConnectionComplete } from '$lib/utils/connectionHandlers';
 
+  // Import ElementManagerComponent
+  import ElementManagerComponent from './ElementManagerComp.svelte';
+
   // Function to import a test BPMN file with pools and lanes
   async function importTestPoolsFile() {
     try {
@@ -352,136 +355,8 @@
     return points;
   }
 
-  // Add a new task
-  function addTask(taskType = 'user', x = 200, y = 200) {
-    // Snap the position to grid
-    const [snappedX, snappedY] = snapPositionToGrid(x, y);
-
-    const newTask = {
-      id: `task-${Date.now()}`,
-      type: 'task',
-      label: `${taskType.charAt(0).toUpperCase() + taskType.slice(1)} Task`,
-      x: snappedX,
-      y: snappedY,
-      width: 120,
-      height: 80,
-      taskType: taskType
-    };
-    bpmnStore.addElement(newTask);
-  }
-
-  // Add a new event
-  function addEvent(eventType = 'start', eventDefinition = 'none', x = 400, y = 200) {
-    // Snap the position to grid
-    const [snappedX, snappedY] = snapPositionToGrid(x, y);
-
-    const newEvent = {
-      id: `event-${Date.now()}`,
-      type: 'event',
-      label: `${eventDefinition.charAt(0).toUpperCase() + eventDefinition.slice(1)} ${eventType.charAt(0).toUpperCase() + eventType.slice(1)} Event`,
-      x: snappedX,
-      y: snappedY,
-      width: 36,
-      height: 36,
-      eventType: eventType,
-      eventDefinition: eventDefinition
-    };
-    bpmnStore.addElement(newEvent);
-  }
-
-  // Add a new gateway
-  function addGateway(gatewayType = 'exclusive', x = 300, y = 300) {
-    // Snap the position to grid
-    const [snappedX, snappedY] = snapPositionToGrid(x, y);
-
-    const newGateway = {
-      id: `gateway-${Date.now()}`,
-      type: 'gateway',
-      label: `${gatewayType.charAt(0).toUpperCase() + gatewayType.slice(1)} Gateway`,
-      x: snappedX,
-      y: snappedY,
-      width: 50,
-      height: 50,
-      gatewayType: gatewayType
-    };
-    bpmnStore.addElement(newGateway);
-  }
-
-  // Add a new subprocess
-  function addSubProcess(subProcessType = 'embedded', x = 200, y = 300) {
-    // Snap the position to grid
-    const [snappedX, snappedY] = snapPositionToGrid(x, y);
-
-    const newSubProcess = {
-      id: `subprocess-${Date.now()}`,
-      type: 'subprocess',
-      label: `${subProcessType.charAt(0).toUpperCase() + subProcessType.slice(1)} SubProcess`,
-      x: snappedX,
-      y: snappedY,
-      width: 180,
-      height: 120,
-      subProcessType: subProcessType,
-      isExpanded: true,
-      children: []
-    };
-    bpmnStore.addElement(newSubProcess);
-  }
-
-  // Add a new data object
-  function addDataObject(isInput = false, isOutput = false, x = 500, y = 200) {
-    // Snap the position to grid
-    const [snappedX, snappedY] = snapPositionToGrid(x, y);
-
-    const newDataObject = {
-      id: `dataobject-${Date.now()}`,
-      type: 'dataobject',
-      label: isInput ? 'Data Input' : (isOutput ? 'Data Output' : 'Data Object'),
-      x: snappedX,
-      y: snappedY,
-      width: 36,
-      height: 50,
-      isCollection: false,
-      isInput: isInput,
-      isOutput: isOutput
-    };
-    bpmnStore.addElement(newDataObject);
-  }
-
-  // Add a new data store
-  function addDataStore(x = 500, y = 300) {
-    // Snap the position to grid
-    const [snappedX, snappedY] = snapPositionToGrid(x, y);
-
-    const newDataStore = {
-      id: `datastore-${Date.now()}`,
-      type: 'datastore',
-      label: 'Data Store',
-      x: snappedX,
-      y: snappedY,
-      width: 50,
-      height: 50,
-      isCollection: false
-    };
-    bpmnStore.addElement(newDataStore);
-  }
-
-  // Add a new text annotation
-  function addTextAnnotation(x = 600, y = 200) {
-    // Snap the position to grid
-    const [snappedX, snappedY] = snapPositionToGrid(x, y);
-
-    const newTextAnnotation = {
-      id: `annotation-${Date.now()}`,
-      type: 'textannotation',
-      label: 'Annotation',
-      text: 'Text Annotation',
-      x: snappedX,
-      y: snappedY,
-      width: 100,
-      height: 80
-    };
-    bpmnStore.addElement(newTextAnnotation);
-  }
+  // Element Manager Component reference
+  let elementManagerComponent;
 
   // Add a new pool
   function addPool(x = 100, y = 400) {
@@ -602,21 +477,23 @@
       originalPositions = {};
 
       // Store the original position of the dragged element
-      originalPositions[element.id] = { x: element.x, y: element.y };
+      if ('x' in element && 'y' in element) {
+        originalPositions[element.id] = { x: element.x, y: element.y };
+      }
 
       // If this is a pool, store positions of all lanes and contained elements
       if (element.type === 'pool' && element.lanes && element.lanes.length > 0) {
         // Store positions of all lanes in this pool
         element.lanes.forEach(laneId => {
           const lane = $bpmnStore.find(el => el.id === laneId && el.type === 'lane');
-          if (lane) {
+          if (lane && 'x' in lane && 'y' in lane) {
             originalPositions[lane.id] = { x: lane.x, y: lane.y };
           }
         });
 
         // Store positions of all elements contained within the pool
         $bpmnStore.forEach(el => {
-          if (isNode(el) && el.type !== 'pool' && el.type !== 'lane') {
+          if (isNode(el) && el.type !== 'pool' && el.type !== 'lane' && 'x' in el && 'y' in el) {
             // Check if element is inside the pool
             if (isElementInsidePool(el, element)) {
               originalPositions[el.id] = { x: el.x, y: el.y };
@@ -1041,50 +918,9 @@
       const dx = event.clientX - dragStartX;
       const dy = event.clientY - dragStartY;
 
-      // Get the element being dragged
-      const element = $bpmnStore.find(el => el.id === draggedElementId);
-      if (!element || !isNode(element)) return;
-
-      // Get the original position of the dragged element
-      const originalPos = originalPositions[draggedElementId];
-      if (!originalPos) return;
-
-      // Calculate the new position based on the original position and the drag distance
-      const newX = originalPos.x + dx;
-      const newY = originalPos.y + dy;
-
-      // Update the element position in the store (without snapping during drag for smooth movement)
-      bpmnStore.updateElement(draggedElementId, { x: newX, y: newY });
-
-      // If this is a pool, also move all its lanes and contained elements
-      if (element.type === 'pool' && element.lanes && element.lanes.length > 0) {
-        // Move all lanes in this pool
-        element.lanes.forEach(laneId => {
-          const lane = $bpmnStore.find(el => el.id === laneId && el.type === 'lane');
-          const laneOriginalPos = originalPositions[laneId];
-          if (lane && laneOriginalPos) {
-
-            // Move the lane based on its original position plus the drag distance
-            bpmnStore.updateElement(lane.id, {
-              x: laneOriginalPos.x + dx,
-              y: laneOriginalPos.y + dy
-            });
-          }
-        });
-
-        // Move all elements contained within the pool
-        $bpmnStore.forEach(el => {
-          if (isNode(el) && el.type !== 'pool' && el.type !== 'lane') {
-            const elOriginalPos = originalPositions[el.id];
-            if (elOriginalPos) {
-              // Move the element based on its original position plus the drag distance
-              bpmnStore.updateElement(el.id, {
-                x: elOriginalPos.x + dx,
-                y: elOriginalPos.y + dy
-              });
-            }
-          }
-        });
+      // Use the ElementManagerComponent to handle element dragging
+      if (elementManagerComponent) {
+        elementManagerComponent.handleElementDrag(draggedElementId, dx, dy);
       }
     }
   }
@@ -1153,30 +989,30 @@
 
         // Create a new element at the drop position
         if (element.type === 'task') {
-          addTask(element.subtype, dropX, dropY);
+          elementManagerComponent.addTask(element.subtype, dropX, dropY);
         } else if (element.type === 'event') {
-          addEvent(element.subtype, element.eventDefinition || 'none', dropX, dropY);
+          elementManagerComponent.addEvent(element.subtype, element.eventDefinition || 'none', dropX, dropY);
         } else if (element.type === 'gateway') {
-          addGateway(element.subtype, dropX, dropY);
+          elementManagerComponent.addGateway(element.subtype, dropX, dropY);
         } else if (element.type === 'subprocess') {
-          addSubProcess(element.subtype, dropX, dropY);
+          elementManagerComponent.addSubProcess(element.subtype, dropX, dropY);
         } else if (element.type === 'dataobject') {
           if (element.subtype === 'input') {
-            addDataObject(true, false, dropX, dropY);
+            elementManagerComponent.addDataObject(true, false, dropX, dropY);
           } else if (element.subtype === 'output') {
-            addDataObject(false, true, dropX, dropY);
+            elementManagerComponent.addDataObject(false, true, dropX, dropY);
           } else {
-            addDataObject(false, false, dropX, dropY);
+            elementManagerComponent.addDataObject(false, false, dropX, dropY);
           }
         } else if (element.type === 'datastore') {
-          addDataStore(dropX, dropY);
+          elementManagerComponent.addDataStore(dropX, dropY);
         } else if (element.type === 'textannotation') {
-          addTextAnnotation(dropX, dropY);
+          elementManagerComponent.addTextAnnotation(dropX, dropY);
         } else if (element.type === 'pool') {
-          addPool(dropX, dropY);
+          elementManagerComponent.addPool(dropX, dropY);
         } else if (element.type === 'lane') {
           // When dropping a lane directly, create a new pool with a lane
-          addPool(dropX, dropY);
+          elementManagerComponent.addPool(dropX, dropY);
         }
       } catch (error) {
         console.error('Error parsing dropped element data:', error);
@@ -1305,52 +1141,9 @@
       connectionStartPoint = null;
       connectionEndPosition = null;
     } else if (isDragging && draggedElementId) {
-      // Find the element that was being dragged
-      const element = $bpmnStore.find(el => el.id === draggedElementId);
-
-      if (element && isNode(element)) {
-        // Get the current position
-        const currentX = element.x;
-        const currentY = element.y;
-
-        // Snap the final position to the grid
-        const [snappedX, snappedY] = snapPositionToGrid(currentX, currentY, gridSize);
-
-        // Update the element with the snapped position
-        bpmnStore.updateElement(draggedElementId, { x: snappedX, y: snappedY });
-
-        // If this is a pool, also update all its lanes and contained elements to maintain their relative positions
-        if (element.type === 'pool' && element.lanes && element.lanes.length > 0) {
-          // Calculate the offset from the current position to the snapped position
-          const offsetX = snappedX - currentX;
-          const offsetY = snappedY - currentY;
-
-          // Update all lanes in this pool
-          element.lanes.forEach(laneId => {
-            const lane = $bpmnStore.find(el => el.id === laneId && el.type === 'lane');
-            if (lane) {
-              // Apply the same offset to the lane
-              bpmnStore.updateElement(lane.id, {
-                x: lane.x + offsetX,
-                y: lane.y + offsetY
-              });
-            }
-          });
-
-          // Update all elements contained within the pool
-          $bpmnStore.forEach(el => {
-            if (isNode(el) && el.type !== 'pool' && el.type !== 'lane') {
-              // Check if element is inside the pool
-              if (isElementInsidePool(el, element)) {
-                // Apply the same offset to the contained element
-                bpmnStore.updateElement(el.id, {
-                  x: el.x + offsetX,
-                  y: el.y + offsetY
-                });
-              }
-            }
-          });
-        }
+      // Use the ElementManagerComponent to handle element drag end
+      if (elementManagerComponent) {
+        elementManagerComponent.handleElementDragEnd(draggedElementId);
       }
     }
 
@@ -1504,6 +1297,9 @@
       Test Import Pools
     </button>
   </div>
+  <!-- Element Manager Component -->
+  <ElementManagerComponent bind:this={elementManagerComponent} bind:originalPositions />
+
   <Toolbar
     on:add={({detail}) => {
       // Get the current mouse position or use default position
@@ -1511,29 +1307,30 @@
       const y = detail.y || 200;
 
       if (detail.type === 'task') {
-        addTask(detail.subtype, x, y);
+        elementManagerComponent.addTask(detail.subtype, x, y);
       } else if (detail.type === 'event') {
-        addEvent(detail.subtype, detail.eventDefinition || 'none', x, y);
+        elementManagerComponent.addEvent(detail.subtype, detail.eventDefinition || 'none', x, y);
       } else if (detail.type === 'gateway') {
-        addGateway(detail.subtype, x, y);
+        elementManagerComponent.addGateway(detail.subtype, x, y);
       } else if (detail.type === 'subprocess') {
-        addSubProcess(detail.subtype, x, y);
+        elementManagerComponent.addSubProcess(detail.subtype, x, y);
       } else if (detail.type === 'dataobject') {
         if (detail.subtype === 'input') {
-          addDataObject(true, false, x, y);
+          elementManagerComponent.addDataObject(true, false, x, y);
         } else if (detail.subtype === 'output') {
-          addDataObject(false, true, x, y);
+          elementManagerComponent.addDataObject(false, true, x, y);
         } else {
-          addDataObject(false, false, x, y);
+          elementManagerComponent.addDataObject(false, false, x, y);
         }
       } else if (detail.type === 'datastore') {
-        addDataStore(x, y);
+        elementManagerComponent.addDataStore(x, y);
       } else if (detail.type === 'textannotation') {
-        addTextAnnotation(x, y);
+        elementManagerComponent.addTextAnnotation(x, y);
       } else if (detail.type === 'pool') {
-        addPool(x, y);
+        elementManagerComponent.addPool(x, y);
       } else if (detail.type === 'lane') {
-        addLane(x, y);
+        // Lane creation is handled differently
+        // elementManagerComponent.addLane(poolId, label);
       }
     }}
     on:toggleConnectionPoints={toggleConnectionPoints}
