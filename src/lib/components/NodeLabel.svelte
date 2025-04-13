@@ -1,28 +1,29 @@
-<script>
+<script lang="ts">
   import { bpmnStore } from '$lib/stores/bpmnStore';
   import { snapToGrid } from '$lib/utils/gridUtils';
+  import type { BpmnElementUnion, Position, BpmnNode } from '$lib/types/bpmn';
   import { onMount, tick } from 'svelte';
 
   // Props
-  export let element;
-  export let position;
-  export let isEditing = false;
-  export let onStartEdit;
-  export let onEndEdit;
+  export let element: BpmnElementUnion;
+  export let position: Position;
+  export let isEditing: boolean = false;
+  export let onStartEdit: ((id: string) => void) | undefined;
+  export let onEndEdit: ((id: string, label: string | null) => void) | undefined;
 
   // Local state
-  let isDragging = false;
-  let startX = 0;
-  let startY = 0;
-  let dragX = 0;
-  let dragY = 0;
-  let labelText = element.label || '';
-  let inputElement;
-  let svgElement;
-  let svgPosition = { x: 0, y: 0 };
+  let isDragging: boolean = false;
+  let startX: number = 0;
+  let startY: number = 0;
+  let dragX: number = 0;
+  let dragY: number = 0;
+  let labelText: string = element && typeof element.label === 'string' ? element.label : '';
+  let inputElement: HTMLInputElement | null = null;
+  let svgElement: SVGElement | null = null;
+  let svgPosition: Position = { x: 0, y: 0 };
 
   // Grid size for snapping
-  const gridSize = 20;
+  const gridSize: number = 20;
 
   // Calculate default position if none is provided
   $: defaultPosition = calculateDefaultPosition(element);
@@ -32,16 +33,28 @@
   $: displayX = position.x + dragX;
   $: displayY = position.y + dragY;
 
+  // Template-Hilfsvariable für isSelected
+  $: hasIsSelected = element && 'isSelected' in element && (element as any).isSelected === true;
+
+  // Type Guard: Prüft, ob das Element ein Node ist (x, y, width, height vorhanden)
+  function isNode(element: BpmnElementUnion): element is BpmnNode {
+    return (
+      element &&
+      typeof (element as any).x === 'number' &&
+      typeof (element as any).y === 'number' &&
+      typeof (element as any).width === 'number' &&
+      typeof (element as any).height === 'number'
+    );
+  }
+
   // Calculate default position based on element type
-  function calculateDefaultPosition(element) {
-    if (!element) return { x: 0, y: 0 };
+  function calculateDefaultPosition(element: BpmnElementUnion | undefined): Position {
+    if (!element || !isNode(element)) return { x: 0, y: 0 };
 
     // Default positions based on element type
     switch (element.type) {
       case 'task':
-        return { x: element.x + element.width / 2, y: element.y - 15 };
       case 'event':
-        return { x: element.x + element.width / 2, y: element.y - 15 };
       case 'gateway':
         return { x: element.x + element.width / 2, y: element.y - 15 };
       default:
@@ -50,8 +63,8 @@
   }
 
   // Mouse event handlers
-  function handleMouseDown(event) {
-    if (!element.isSelected) return;
+  function handleMouseDown(event: MouseEvent) {
+    if (!element || !('isSelected' in element) || !element.isSelected) return;
 
     event.stopPropagation();
 
@@ -62,11 +75,11 @@
     dragY = 0;
 
     // Add event listeners for drag
-    window.addEventListener('mousemove', handleMouseMove);
-    window.addEventListener('mouseup', handleMouseUp);
+    window.addEventListener('mousemove', handleMouseMove as EventListener);
+    window.addEventListener('mouseup', handleMouseUp as EventListener);
   }
 
-  function handleMouseMove(event) {
+  function handleMouseMove(event: MouseEvent) {
     if (!isDragging) return;
 
     const dx = event.clientX - startX;
@@ -76,14 +89,14 @@
     dragY = dy;
   }
 
-  function handleMouseUp(event) {
+  function handleMouseUp(event: MouseEvent) {
     if (!isDragging) return;
 
     isDragging = false;
 
     // Remove event listeners
-    window.removeEventListener('mousemove', handleMouseMove);
-    window.removeEventListener('mouseup', handleMouseUp);
+    window.removeEventListener('mousemove', handleMouseMove as EventListener);
+    window.removeEventListener('mouseup', handleMouseUp as EventListener);
 
     // Calculate final position with snapping
     const newX = snapToGrid(position.x + dragX, gridSize);
@@ -97,14 +110,14 @@
     dragY = 0;
   }
 
-  function handleDoubleClick(event) {
+  function handleDoubleClick(event: MouseEvent) {
     event.stopPropagation();
-    if (!isEditing && onStartEdit) {
+    if (!isEditing && onStartEdit && element) {
       onStartEdit(element.id);
     }
   }
 
-  function handleKeyDown(event) {
+  function handleKeyDown(event: KeyboardEvent) {
     if (isEditing && event.key === 'Enter') {
       saveLabel();
     } else if (isEditing && event.key === 'Escape') {
@@ -113,20 +126,20 @@
   }
 
   function saveLabel() {
-    if (isEditing && onEndEdit) {
+    if (isEditing && onEndEdit && element) {
       onEndEdit(element.id, labelText);
     }
   }
 
   function cancelEdit() {
-    labelText = element.label || '';
-    if (isEditing && onEndEdit) {
+    labelText = element && typeof element.label === 'string' ? element.label : '';
+    if (isEditing && onEndEdit && element) {
       onEndEdit(element.id, null);
     }
   }
 
   // Update local label text when element label changes
-  $: if (element && element.label !== undefined) {
+  $: if (element && typeof element.label === 'string') {
     labelText = element.label;
   }
 </script>
@@ -176,7 +189,7 @@
         <tspan x={displayX} dy={i === 0 ? 0 : 16}>{line}</tspan>
       {/each}
     </text>
-    {#if element.isSelected}
+    {#if hasIsSelected}
       <rect
         x={displayX - 5}
         y={displayY - 5}
