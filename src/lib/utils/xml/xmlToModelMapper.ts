@@ -546,6 +546,9 @@ export function mapXmlToModel(parsedXml: any): BpmnElementUnion[] {
 
             // Create the lane with original coordinates from the shape
             // We'll adjust positions in a second pass
+            // Calculate height percentage based on original height from XML
+            const heightPercentage = shape ? (laneHeight / pool.height) * 100 : 100 / lanes.length;
+
             const mappedLane: BpmnLane = {
               id: laneId,
               type: 'lane' as const,
@@ -556,7 +559,8 @@ export function mapXmlToModel(parsedXml: any): BpmnElementUnion[] {
               height: laneHeight,
               isHorizontal: pool.isHorizontal,
               parentRef: poolId,
-              flowNodeRefs: flowNodeRefs
+              flowNodeRefs: flowNodeRefs,
+              heightPercentage: heightPercentage
             };
 
             console.log('Created lane:', JSON.stringify(mappedLane, null, 2));
@@ -575,38 +579,66 @@ export function mapXmlToModel(parsedXml: any): BpmnElementUnion[] {
               // For horizontal pools, sort lanes by y-coordinate
               createdLanes.sort((a, b) => a.y - b.y);
 
-              // Calculate lane height based on pool height and number of lanes
-              const laneHeight = pool.height / createdLanes.length;
+              // Calculate lane heights based on height percentages
+              let currentY = pool.y;
 
               // Adjust each lane's position and size
-              createdLanes.forEach((lane, index) => {
+              createdLanes.forEach((lane) => {
                 const laneElement = elements.find(el => el.id === lane.id && el.type === 'lane') as BpmnLane;
                 if (laneElement) {
+                  // Use heightPercentage if available, otherwise divide equally
+                  const heightPercentage = laneElement.heightPercentage || (100 / createdLanes.length);
+                  const laneHeight = (pool.height * heightPercentage) / 100;
+
                   laneElement.x = pool.x + 30; // Account for pool label area (30px)
-                  laneElement.y = pool.y + (index * laneHeight);
+                  laneElement.y = currentY;
                   laneElement.width = pool.width - 30; // Pool width minus label area
                   laneElement.height = laneHeight;
+
+                  // Update currentY for the next lane
+                  currentY += laneHeight;
+
                   console.log(`Adjusted horizontal lane ${lane.id} position to:`,
-                    JSON.stringify({ x: laneElement.x, y: laneElement.y, width: laneElement.width, height: laneElement.height }, null, 2));
+                    JSON.stringify({
+                      x: laneElement.x,
+                      y: laneElement.y,
+                      width: laneElement.width,
+                      height: laneElement.height,
+                      heightPercentage: laneElement.heightPercentage
+                    }, null, 2));
                 }
               });
             } else {
               // For vertical pools, sort lanes by x-coordinate
               createdLanes.sort((a, b) => a.x - b.x);
 
-              // Calculate lane width based on pool width and number of lanes
-              const laneWidth = pool.width / createdLanes.length;
+              // Calculate lane widths based on width percentages
+              let currentX = pool.x;
 
               // Adjust each lane's position and size
-              createdLanes.forEach((lane, index) => {
+              createdLanes.forEach((lane) => {
                 const laneElement = elements.find(el => el.id === lane.id && el.type === 'lane') as BpmnLane;
                 if (laneElement) {
-                  laneElement.x = pool.x + (index * laneWidth);
+                  // Use widthPercentage if available, otherwise divide equally
+                  const widthPercentage = laneElement.widthPercentage || (100 / createdLanes.length);
+                  const laneWidth = (pool.width * widthPercentage) / 100;
+
+                  laneElement.x = currentX;
                   laneElement.y = pool.y + 30; // Account for pool label area (30px)
                   laneElement.width = laneWidth;
                   laneElement.height = pool.height - 30; // Pool height minus label area
+
+                  // Update currentX for the next lane
+                  currentX += laneWidth;
+
                   console.log(`Adjusted vertical lane ${lane.id} position to:`,
-                    JSON.stringify({ x: laneElement.x, y: laneElement.y, width: laneElement.width, height: laneElement.height }, null, 2));
+                    JSON.stringify({
+                      x: laneElement.x,
+                      y: laneElement.y,
+                      width: laneElement.width,
+                      height: laneElement.height,
+                      widthPercentage: laneElement.widthPercentage
+                    }, null, 2));
                 }
               });
             }
@@ -823,23 +855,47 @@ function validatePoolLaneRelationships(elements: BpmnElementUnion[]): void {
       // and ensure they don't overlap
       if (pool.isHorizontal) {
         // For horizontal pools, lanes should be stacked vertically
-        const laneHeight = pool.height / poolLanes.length;
-        poolLanes.forEach((lane, index) => {
+        // Calculate height percentages if not already set
+        poolLanes.forEach(lane => {
+          if (!lane.heightPercentage) {
+            lane.heightPercentage = 100 / poolLanes.length;
+          }
+        });
+
+        // Position lanes based on height percentages
+        let currentY = pool.y;
+        poolLanes.forEach(lane => {
+          const laneHeight = (pool.height * (lane.heightPercentage || (100 / poolLanes.length))) / 100;
           lane.x = pool.x + 30; // Account for pool label area
-          lane.y = pool.y + (index * laneHeight);
+          lane.y = currentY;
           lane.width = pool.width - 30;
           lane.height = laneHeight;
           lane.isHorizontal = true;
+
+          // Update currentY for the next lane
+          currentY += laneHeight;
         });
       } else {
         // For vertical pools, lanes should be arranged horizontally
-        const laneWidth = pool.width / poolLanes.length;
-        poolLanes.forEach((lane, index) => {
-          lane.x = pool.x + (index * laneWidth);
+        // Calculate width percentages if not already set
+        poolLanes.forEach(lane => {
+          if (!lane.widthPercentage) {
+            lane.widthPercentage = 100 / poolLanes.length;
+          }
+        });
+
+        // Position lanes based on width percentages
+        let currentX = pool.x;
+        poolLanes.forEach(lane => {
+          const laneWidth = (pool.width * (lane.widthPercentage || (100 / poolLanes.length))) / 100;
+          lane.x = currentX;
           lane.y = pool.y + 30; // Account for pool label area
           lane.width = laneWidth;
           lane.height = pool.height - 30;
           lane.isHorizontal = false;
+
+          // Update currentX for the next lane
+          currentX += laneWidth;
         });
       }
     }

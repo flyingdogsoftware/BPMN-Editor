@@ -283,6 +283,7 @@ export interface BpmnLane extends BpmnNodeBase {
   parentRef: string; // ID of the parent pool
   flowNodeRefs: string[]; // IDs of flow nodes contained in this lane
   heightPercentage?: number; // Height as percentage of parent pool (default: divided equally)
+  widthPercentage?: number; // Width as percentage of parent pool for vertical pools
 }
 
 // Union type for all BPMN elements

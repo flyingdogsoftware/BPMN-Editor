@@ -718,13 +718,21 @@
       });
 
       // Reposition lanes vertically if needed
-      const laneHeight = newHeight / element.lanes.length;
-      element.lanes.forEach((laneId, index) => {
+      let currentY = element.y;
+      element.lanes.forEach((laneId) => {
         const lane = $bpmnStore.find(el => el.id === laneId && el.type === 'lane');
         if (lane) {
+          // Use heightPercentage if available, otherwise divide equally
+          const heightPercentage = lane.type === 'lane' && lane.heightPercentage ? lane.heightPercentage : (100 / element.lanes.length);
+          const laneHeight = (newHeight * heightPercentage) / 100;
+
           bpmnStore.updateElement(lane.id, {
-            y: element.y + (index * laneHeight)
+            y: currentY,
+            height: laneHeight
           });
+
+          // Update currentY for the next lane
+          currentY += laneHeight;
         }
       });
     }
