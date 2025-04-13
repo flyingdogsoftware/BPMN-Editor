@@ -132,10 +132,27 @@ export function calculateConnectionPath(
     // Use waypoints if provided
     let path = `M ${start.x} ${start.y}`;
 
-    // Create orthogonal segments between waypoints
-    let prevPoint = start;
+    // Check if the first waypoint is close to the start point
+    const firstWaypoint = waypoints[0];
+    const distToFirstWaypoint = Math.sqrt(
+      Math.pow(start.x - firstWaypoint.x, 2) +
+      Math.pow(start.y - firstWaypoint.y, 2)
+    );
 
-    for (const point of waypoints) {
+    // If the first waypoint is far from the start, add a segment to it
+    if (distToFirstWaypoint > 10) {
+      if (routingType === 'orthogonal') {
+        path += calculateOrthogonalSegment(start, firstWaypoint);
+      } else {
+        path += ` L ${firstWaypoint.x} ${firstWaypoint.y}`;
+      }
+    }
+
+    // Create segments between waypoints
+    let prevPoint = firstWaypoint;
+
+    for (let i = 1; i < waypoints.length; i++) {
+      const point = waypoints[i];
       if (routingType === 'orthogonal') {
         // Create orthogonal segment between prevPoint and current point
         path += calculateOrthogonalSegment(prevPoint, point);
@@ -146,11 +163,20 @@ export function calculateConnectionPath(
       prevPoint = point;
     }
 
-    // Final segment to the end point
-    if (routingType === 'orthogonal') {
-      path += calculateOrthogonalSegment(prevPoint, end);
-    } else {
-      path += ` L ${end.x} ${end.y}`;
+    // Check if the last waypoint is close to the end point
+    const lastWaypoint = waypoints[waypoints.length - 1];
+    const distToLastWaypoint = Math.sqrt(
+      Math.pow(end.x - lastWaypoint.x, 2) +
+      Math.pow(end.y - lastWaypoint.y, 2)
+    );
+
+    // If the last waypoint is far from the end, add a segment to it
+    if (distToLastWaypoint > 10) {
+      if (routingType === 'orthogonal') {
+        path += calculateOrthogonalSegment(lastWaypoint, end);
+      } else {
+        path += ` L ${end.x} ${end.y}`;
+      }
     }
 
     return path;

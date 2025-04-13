@@ -158,6 +158,7 @@ export function mapXmlToModel(parsedXml: any): BpmnElementUnion[] {
     }));
     if (bpmnElement && waypoints.length) {
       edgeMap[bpmnElement] = waypoints;
+      console.log(`Found edge for ${bpmnElement} with ${waypoints.length} waypoints:`, JSON.stringify(waypoints, null, 2));
     }
   }
 
@@ -764,6 +765,16 @@ export function mapXmlToModel(parsedXml: any): BpmnElementUnion[] {
         const sourceId = flow['@_sourceRef'];
         const targetId = flow['@_targetRef'];
 
+        // Check if source and target elements exist
+        const sourceElement = elements.find(el => el.id === sourceId);
+        const targetElement = elements.find(el => el.id === targetId);
+
+        if (!sourceElement || !targetElement) {
+          console.warn(`Connection ${flow['@_id']} references missing elements: sourceId=${sourceId} (${sourceElement ? 'found' : 'missing'}), targetId=${targetId} (${targetElement ? 'found' : 'missing'})`);
+          // Skip this connection if source or target is missing
+          continue;
+        }
+
         // Create the connection with empty connection points for now
         const mappedConnection = {
           id: flow['@_id'],
@@ -778,6 +789,7 @@ export function mapXmlToModel(parsedXml: any): BpmnElementUnion[] {
         } as import("$lib/models/bpmnElements").BpmnConnection;
 
         elements.push(mappedConnection);
+        console.log(`Created connection ${mappedConnection.id} from ${sourceId} to ${targetId} with ${mappedConnection.waypoints.length} waypoints`);
       }
     }
   }
@@ -951,22 +963,29 @@ function assignConnectionPoints(elements: BpmnElementUnion[]): void {
 
           if (element.waypoints && element.waypoints.length > 1) {
             // If we have waypoints, use the first and last ones
-            firstWaypoint = element.waypoints[0];
-            lastWaypoint = element.waypoints[element.waypoints.length - 1];
+            // IMPORTANT: For source, we use the SECOND waypoint (not the first)
+            // For target, we use the SECOND-TO-LAST waypoint (not the last)
+            // This is because the first and last waypoints are often directly on the elements
+            // and don't give a good indication of the direction
+            firstWaypoint = element.waypoints.length > 1 ? element.waypoints[1] : element.waypoints[0];
+            lastWaypoint = element.waypoints.length > 1 ? element.waypoints[element.waypoints.length - 2] : element.waypoints[element.waypoints.length - 1];
           } else {
-            // If no waypoints, use the center of the target/source elements
+            // If no waypoints or only one, use the center of the target/source elements
             firstWaypoint = { x: targetElement.x + targetElement.width / 2, y: targetElement.y + targetElement.height / 2 };
             lastWaypoint = { x: sourceElement.x + sourceElement.width / 2, y: sourceElement.y + sourceElement.height / 2 };
           }
 
-          console.log('Connection waypoints:', element.waypoints);
-          console.log('Using firstWaypoint:', firstWaypoint, 'lastWaypoint:', lastWaypoint);
+          console.log(`Connection ${element.id} waypoints:`, element.waypoints);
+          console.log(`Using firstWaypoint for target:`, firstWaypoint, 'lastWaypoint for source:', lastWaypoint);
 
           // Find the best connection points based on waypoints or relative positions
-          // For source, we use the last waypoint (or target center)
-          // For target, we use the first waypoint (or source center)
+          // For source, we use the second waypoint (or target center)
+          // For target, we use the second-to-last waypoint (or source center)
           const bestSourcePoint = findBestConnectionPoint(sourcePoints, lastWaypoint);
           const bestTargetPoint = findBestConnectionPoint(targetPoints, firstWaypoint);
+
+          console.log(`Selected source point: ${bestSourcePoint.id} (${bestSourcePoint.position}) at (${bestSourcePoint.x}, ${bestSourcePoint.y})`);
+          console.log(`Selected target point: ${bestTargetPoint.id} (${bestTargetPoint.position}) at (${bestTargetPoint.x}, ${bestTargetPoint.y})`);
 
           // Assign the connection points
           element.sourcePointId = bestSourcePoint.id;
@@ -984,14 +1003,71 @@ function assignConnectionPoints(elements: BpmnElementUnion[]): void {
  * @returns The best connection point
  */
 function findBestConnectionPoint(points: ConnectionPoint[], targetPosition: Position): ConnectionPoint {
-  // Find the closest connection point to the target position
-  let bestPoint = points[0];
+  // First, try to find the best connection point based on direction
+  // This is more important than distance for visual appearance
+
+  // Group connection points by position (top, right, bottom, left)
+  const topPoints = points.filter(p => p.position === 'top');
+  const rightPoints = points.filter(p => p.position === 'right');
+  const bottomPoints = points.filter(p => p.position === 'bottom');
+  const leftPoints = points.filter(p => p.position === 'left');
+
+  // Determine the primary direction from the element to the target
+  const elementCenter = {
+    x: points[0].x, // Approximate center X based on first point
+    y: points[0].y  // Approximate center Y based on first point
+  };
+
+  // For the first point, find the element it belongs to
+  if (points.length > 0) {
+    const elementId = points[0].elementId;
+    // Find the center of the element based on the points
+    const xPoints = points.map(p => p.x);
+    const yPoints = points.map(p => p.y);
+    const minX = Math.min(...xPoints);
+    const maxX = Math.max(...xPoints);
+    const minY = Math.min(...yPoints);
+    const maxY = Math.max(...yPoints);
+    elementCenter.x = minX + (maxX - minX) / 2;
+    elementCenter.y = minY + (maxY - minY) / 2;
+  }
+
+  const dx = targetPosition.x - elementCenter.x;
+  const dy = targetPosition.y - elementCenter.y;
+  const adx = Math.abs(dx);
+  const ady = Math.abs(dy);
+
+  // Determine which direction has the strongest pull
+  let candidatePoints: ConnectionPoint[] = [];
+
+  if (adx > ady) {
+    // Horizontal direction is stronger
+    if (dx > 0) {
+      // Target is to the right
+      candidatePoints = rightPoints.length > 0 ? rightPoints : points;
+    } else {
+      // Target is to the left
+      candidatePoints = leftPoints.length > 0 ? leftPoints : points;
+    }
+  } else {
+    // Vertical direction is stronger
+    if (dy > 0) {
+      // Target is below
+      candidatePoints = bottomPoints.length > 0 ? bottomPoints : points;
+    } else {
+      // Target is above
+      candidatePoints = topPoints.length > 0 ? topPoints : points;
+    }
+  }
+
+  // Now find the closest point among the candidates
+  let bestPoint = candidatePoints[0] || points[0];
   let minDistance = Number.MAX_VALUE;
 
-  for (const point of points) {
-    const dx = point.x - targetPosition.x;
-    const dy = point.y - targetPosition.y;
-    const distance = Math.sqrt(dx * dx + dy * dy);
+  for (const point of candidatePoints) {
+    const pointDx = point.x - targetPosition.x;
+    const pointDy = point.y - targetPosition.y;
+    const distance = Math.sqrt(pointDx * pointDx + pointDy * pointDy);
 
     if (distance < minDistance) {
       minDistance = distance;
@@ -999,6 +1075,5 @@ function findBestConnectionPoint(points: ConnectionPoint[], targetPosition: Posi
     }
   }
 
-  console.log('Found best connection point:', bestPoint, 'for target position:', targetPosition);
   return bestPoint;
 }

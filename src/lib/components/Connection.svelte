@@ -59,6 +59,36 @@
     'orthogonal'
   );
 
+  // Ensure waypoints are properly initialized
+  $: {
+    // If we have a connection with waypoints but they're not being used correctly,
+    // make sure they're properly set up
+    if (connection && connection.waypoints && connection.waypoints.length > 0) {
+      // Check if the first and last waypoints match the source and target positions
+      const firstWaypoint = connection.waypoints[0];
+      const lastWaypoint = connection.waypoints[connection.waypoints.length - 1];
+
+      // If the first or last waypoint is far from the source/target position,
+      // we might need to update the connection points
+      const sourceDistance = Math.sqrt(
+        Math.pow(firstWaypoint.x - sourcePosition.x, 2) +
+        Math.pow(firstWaypoint.y - sourcePosition.y, 2)
+      );
+
+      const targetDistance = Math.sqrt(
+        Math.pow(lastWaypoint.x - targetPosition.x, 2) +
+        Math.pow(lastWaypoint.y - targetPosition.y, 2)
+      );
+
+      // If the distances are too large, log a warning
+      if (sourceDistance > 30 || targetDistance > 30) {
+        console.log(`Connection ${connection.id} has waypoints that don't match endpoints:`);
+        console.log(`- Source position: (${sourcePosition.x}, ${sourcePosition.y}), First waypoint: (${firstWaypoint.x}, ${firstWaypoint.y}), Distance: ${sourceDistance}`);
+        console.log(`- Target position: (${targetPosition.x}, ${targetPosition.y}), Last waypoint: (${lastWaypoint.x}, ${lastWaypoint.y}), Distance: ${targetDistance}`);
+      }
+    }
+  }
+
   $: labelPosition = calculateLabelPosition(
     sourcePosition,
     targetPosition,
