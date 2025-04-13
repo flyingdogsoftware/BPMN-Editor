@@ -1,6 +1,6 @@
 /**
  * BPMN XML Parser
- * 
+ *
  * This module provides functionality to parse BPMN 2.0 XML files and convert them
  * to the internal data model used by the BPMN editor.
  */
@@ -15,7 +15,7 @@ const parserOptions = {
   attributeNamePrefix: '@_',
   parseAttributeValue: true,
   allowBooleanAttributes: true,
-  isArray: (name: string) => {
+  isArray: (name: string, jpath: string) => {
     // Elements that should always be treated as arrays even when there's only one
     const arrayElements = [
       'bpmn:task', 'bpmn:userTask', 'bpmn:serviceTask', 'bpmn:sendTask', 'bpmn:receiveTask',
@@ -27,10 +27,17 @@ const parserOptions = {
       'bpmn:dataObjectReference', 'bpmn:dataStore', 'bpmn:dataStoreReference',
       'bpmn:textAnnotation', 'bpmn:group', 'bpmn:subProcess', 'bpmn:callActivity',
       'bpmn:process', 'bpmn:collaboration', 'bpmn:choreography', 'bpmn:waypoint',
-      'di:waypoint'
+      'di:waypoint', 'bpmn:flowNodeRef', 'bpmn:laneSet'
     ];
+
+    // Special case for bpmn:participant in a collaboration
+    if (name === 'bpmn:participant' && jpath.includes('bpmn:collaboration')) {
+      return true;
+    }
+
     return arrayElements.includes(name);
-  }
+  },
+  textNodeName: "#text"
 };
 
 /**
@@ -60,7 +67,7 @@ export function importBpmnXml(xmlString: string): BpmnElementUnion[] {
   try {
     // Parse the XML
     const parsedXml = parseBpmnXml(xmlString);
-    
+
     // Map the XML to the internal data model
     return mapXmlToModel(parsedXml);
   } catch (error) {
@@ -81,12 +88,12 @@ export function extractProcessDefinition(parsedXml: any): any {
   }
 
   const definitions = parsedXml['bpmn:definitions'];
-  
+
   // Extract process
   if (definitions['bpmn:process']) {
     return definitions['bpmn:process'];
   }
-  
+
   // If no process is found, check for collaboration
   if (definitions['bpmn:collaboration']) {
     // Collaboration might reference processes
@@ -94,7 +101,7 @@ export function extractProcessDefinition(parsedXml: any): any {
       return definitions['bpmn:process'];
     }
   }
-  
+
   throw new Error('Invalid BPMN XML: No process or collaboration found');
 }
 
@@ -110,11 +117,11 @@ export function extractDiagramInfo(parsedXml: any): any {
   }
 
   const definitions = parsedXml['bpmn:definitions'];
-  
+
   // Extract BPMNDiagram
   if (definitions['bpmndi:BPMNDiagram']) {
     return definitions['bpmndi:BPMNDiagram'];
   }
-  
+
   throw new Error('Invalid BPMN XML: No diagram information found');
 }

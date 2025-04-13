@@ -16,6 +16,7 @@ export interface Size {
 // Base interface for all BPMN elements
 export interface BpmnElementBase {
   id: string;
+  type: string;
   label: string;
   labelPosition?: Position;
   labelVisible?: boolean;
@@ -23,12 +24,31 @@ export interface BpmnElementBase {
 }
 
 // Base interface for all node elements (elements with position and size)
-export interface BpmnNode extends BpmnElementBase {
+export interface BpmnNodeBase extends BpmnElementBase {
   x: number;
   y: number;
   width: number;
   height: number;
+  lanes?: string[]; // For pools
+  isHorizontal?: boolean; // For pools and lanes
+  parentRef?: string; // For lanes
 }
+
+// Union type for all node elements (elements with position and size)
+export type BpmnNode =
+  | BpmnTask
+  | BpmnSubProcess
+  | BpmnCallActivity
+  | BpmnEvent
+  | BpmnGateway
+  | BpmnDataObject
+  | BpmnDataStore
+  | BpmnTextAnnotation
+  | BpmnGroup
+  | BpmnPool
+  | BpmnLane
+  | BpmnConversation
+  | BpmnChoreography;
 
 // ---- ACTIVITIES ----
 
@@ -44,7 +64,7 @@ export type TaskType =
   | 'script';        // Script task
 
 // Task element
-export interface BpmnTask extends BpmnNode {
+export interface BpmnTask extends BpmnNodeBase {
   type: 'task';
   taskType: TaskType;
   isExpanded?: boolean;
@@ -62,7 +82,7 @@ export type SubProcessType =
   | 'adhoc';         // Ad-hoc subprocess
 
 // Subprocess element
-export interface BpmnSubProcess extends BpmnNode {
+export interface BpmnSubProcess extends BpmnNodeBase {
   type: 'subprocess';
   subProcessType: SubProcessType;
   isExpanded: boolean;
@@ -74,7 +94,7 @@ export interface BpmnSubProcess extends BpmnNode {
 }
 
 // Call Activity element
-export interface BpmnCallActivity extends BpmnNode {
+export interface BpmnCallActivity extends BpmnNodeBase {
   type: 'callactivity';
   calledElement: string;
   isMultiInstance?: boolean;
@@ -109,7 +129,7 @@ export type EventDefinition =
   | 'parallel-multiple';
 
 // Event element
-export interface BpmnEvent extends BpmnNode {
+export interface BpmnEvent extends BpmnNodeBase {
   type: 'event';
   eventType: EventType;
   eventDefinition: EventDefinition;
@@ -131,7 +151,7 @@ export type GatewayType =
   | 'parallel-event-based'; // Parallel event-based gateway
 
 // Gateway element
-export interface BpmnGateway extends BpmnNode {
+export interface BpmnGateway extends BpmnNodeBase {
   type: 'gateway';
   gatewayType: GatewayType;
   isInstantiating?: boolean; // For event-based gateways
@@ -141,7 +161,7 @@ export interface BpmnGateway extends BpmnNode {
 // ---- DATA OBJECTS ----
 
 // Data Object element
-export interface BpmnDataObject extends BpmnNode {
+export interface BpmnDataObject extends BpmnNodeBase {
   type: 'dataobject';
   isCollection?: boolean;
   state?: string;
@@ -150,7 +170,7 @@ export interface BpmnDataObject extends BpmnNode {
 }
 
 // Data Store element
-export interface BpmnDataStore extends BpmnNode {
+export interface BpmnDataStore extends BpmnNodeBase {
   type: 'datastore';
   isCollection?: boolean;
   capacity?: number; // Optional capacity of the data store
@@ -160,37 +180,20 @@ export interface BpmnDataStore extends BpmnNode {
 // ---- ARTIFACTS ----
 
 // Text Annotation element
-export interface BpmnTextAnnotation extends BpmnNode {
+export interface BpmnTextAnnotation extends BpmnNodeBase {
   type: 'textannotation';
   text: string;
   textFormat?: string; // Format of the text (e.g., 'text/plain')
 }
 
 // Group element
-export interface BpmnGroup extends BpmnNode {
+export interface BpmnGroup extends BpmnNodeBase {
   type: 'group';
   categoryValue?: string;
 }
 
 // ---- SWIMLANES ----
-
-// Pool element
-export interface BpmnPool extends BpmnNode {
-  type: 'pool';
-  isHorizontal: boolean;
-  lanes: string[]; // IDs of lanes contained in this pool
-  processRef?: string; // Reference to the process contained in the pool
-  isExecutable?: boolean; // Whether the process is executable
-}
-
-// Lane element
-export interface BpmnLane extends BpmnNode {
-  type: 'lane';
-  isHorizontal: boolean;
-  parentRef: string; // ID of parent pool
-  heightPercentage?: number; // Height as percentage of parent pool (default: divided equally)
-  flowNodeRefs: string[]; // IDs of flow nodes contained in this lane
-}
+// See the full definitions at the end of this file
 
 // ---- CONNECTIONS ----
 
@@ -243,7 +246,7 @@ export type ConversationType =
   | 'call-conversation'; // Call conversation
 
 // Conversation element
-export interface BpmnConversation extends BpmnNode {
+export interface BpmnConversation extends BpmnNodeBase {
   type: 'conversation';
   conversationType: ConversationType;
   isMultiInstance?: boolean;
@@ -256,12 +259,30 @@ export type ChoreographyType =
   | 'call-choreography'; // Call choreography
 
 // Choreography element
-export interface BpmnChoreography extends BpmnNode {
+export interface BpmnChoreography extends BpmnNodeBase {
   type: 'choreography';
   choreographyType: ChoreographyType;
   participants: string[]; // IDs of participants
   initiatingParticipantRef?: string; // ID of the initiating participant
   isMultiInstance?: boolean;
+}
+
+// Pool element
+export interface BpmnPool extends BpmnNodeBase {
+  type: 'pool';
+  isHorizontal: boolean;
+  lanes: string[]; // IDs of lanes contained in this pool
+  processRef?: string; // Reference to the process this pool represents
+  isExecutable?: boolean; // Whether the process is executable
+}
+
+// Lane element
+export interface BpmnLane extends BpmnNodeBase {
+  type: 'lane';
+  isHorizontal: boolean;
+  parentRef: string; // ID of the parent pool
+  flowNodeRefs: string[]; // IDs of flow nodes contained in this lane
+  heightPercentage?: number; // Height as percentage of parent pool (default: divided equally)
 }
 
 // Union type for all BPMN elements

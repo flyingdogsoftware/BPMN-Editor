@@ -1,9 +1,43 @@
-<script>
+<script lang="ts">
   import { bpmnStore } from '$lib/stores/bpmnStore';
   import { snapPositionToGrid, snapToGrid } from '$lib/utils/gridUtils';
   import { isValidConnection, calculateConnectionPoints } from '$lib/utils/connectionUtils';
   import { onMount } from 'svelte';
   import { importBpmnXml } from '$lib/utils/xml/bpmnXmlParser';
+
+  // Function to import a test BPMN file with pools and lanes
+  async function importTestPoolsFile() {
+    try {
+      // Fetch the test file
+      const response = await fetch('/test-pools.bpmn');
+      if (!response.ok) {
+        throw new Error(`Failed to fetch test file: ${response.statusText}`);
+      }
+
+      const xmlString = await response.text();
+      console.log('Importing test BPMN XML...');
+      console.log('XML content:', xmlString);
+
+      const elements = importBpmnXml(xmlString);
+      console.log('Imported elements:', elements);
+
+      // Log pools and lanes specifically
+      const pools = elements.filter(el => el.type === 'pool');
+      const lanes = elements.filter(el => el.type === 'lane');
+      console.log('Imported pools:', JSON.stringify(pools, null, 2));
+      console.log('Imported lanes:', JSON.stringify(lanes, null, 2));
+
+      // Reset the store and add the imported elements
+      bpmnStore.reset();
+      elements.forEach(el => bpmnStore.addElement(el));
+
+      // Log the store after import
+      console.log('Store after import:', $bpmnStore);
+    } catch (err) {
+      console.error('Failed to import test BPMN XML:', err);
+      alert('Failed to import test BPMN XML: ' + err.message);
+    }
+  }
 
   // Import BPMN XML handler
   async function handleImportBpmnXml(event) {
@@ -14,8 +48,37 @@
       try {
         const xmlString = e.target.result;
         console.log('Importing BPMN XML...');
+        console.log('XML content:', xmlString);
         const elements = importBpmnXml(xmlString);
         console.log('Imported elements:', elements);
+
+        // Log pools and lanes specifically
+        const pools = elements.filter(el => el.type === 'pool');
+        const lanes = elements.filter(el => el.type === 'lane');
+        console.log('Imported pools:', JSON.stringify(pools, null, 2));
+        console.log('Imported lanes:', JSON.stringify(lanes, null, 2));
+
+        // Validate pool-lane relationships
+        pools.forEach(pool => {
+          console.log(`Validating pool ${pool.id} (${pool.label})`);
+          console.log(`  - Pool has ${pool.lanes?.length || 0} lanes:`, pool.lanes);
+
+          // Check if all referenced lanes exist
+          if (pool.lanes && pool.lanes.length > 0) {
+            pool.lanes.forEach(laneId => {
+              const lane = lanes.find(l => l.id === laneId);
+              if (lane) {
+                console.log(`  - Found lane ${laneId} (${lane.label})`);
+                // Verify lane references back to this pool
+                if (lane.parentRef !== pool.id) {
+                  console.warn(`  - Lane ${laneId} has incorrect parentRef: ${lane.parentRef}, should be ${pool.id}`);
+                }
+              } else {
+                console.error(`  - Lane ${laneId} referenced by pool ${pool.id} not found in imported elements!`);
+              }
+            });
+          }
+        });
 
         // Log connections specifically
         const connections = elements.filter(el => el.type === 'connection');
@@ -35,7 +98,7 @@
     // Reset the input so the same file can be selected again
     event.target.value = '';
   }
-  import ConnectionPoint from './ConnectionPoint.svelte';
+  import ConnectionPointWrapper from './ConnectionPointWrapper.svelte';
   import ConnectionPreview from './ConnectionPreview.svelte';
   import Connection from './Connection.svelte';
   import LabelEditDialog from './LabelEditDialog.svelte';
@@ -212,6 +275,8 @@
   let dropX = 0;
   let dropY = 0;
 
+  // Connection point type is imported from bpmnElements.ts
+
   // Connection state
   let isCreatingConnection = false;
   let isAdjustingConnectionEndpoint = false;
@@ -234,19 +299,7 @@
 
   // Helper function to check if element is a node (any element with position and size)
   function isNode(element) {
-    return element.type === 'task' ||
-           element.type === 'event' ||
-           element.type === 'gateway' ||
-           element.type === 'subprocess' ||
-           element.type === 'callactivity' ||
-           element.type === 'dataobject' ||
-           element.type === 'datastore' ||
-           element.type === 'textannotation' ||
-           element.type === 'group' ||
-           element.type === 'pool' ||
-           element.type === 'lane' ||
-           element.type === 'conversation' ||
-           element.type === 'choreography';
+    return element.type !== 'connection';
   }
 
   // Helper function to check if an element is inside a pool
@@ -254,10 +307,19 @@
     if (!isNode(element) || !isNode(pool)) return false;
 
     // Check if the element is fully contained within the pool boundaries
-    return element.x >= pool.x &&
-           element.y >= pool.y &&
-           element.x + element.width <= pool.x + pool.width &&
-           element.y + element.height <= pool.y + pool.height;
+    const elementX = element.x;
+    const elementY = element.y;
+    const elementWidth = element.width;
+    const elementHeight = element.height;
+    const poolX = pool.x;
+    const poolY = pool.y;
+    const poolWidth = pool.width;
+    const poolHeight = pool.height;
+
+    return elementX >= poolX &&
+           elementY >= poolY &&
+           elementX + elementWidth <= poolX + poolWidth &&
+           elementY + elementHeight <= poolY + poolHeight;
   }
 
   // Get all connection points for all elements
@@ -423,7 +485,9 @@
       width: 600,
       height: 200,
       isHorizontal: true,
-      lanes: [laneId]
+      lanes: [laneId],
+      processRef: undefined,
+      isExecutable: false
     };
 
     // Create the default lane
@@ -1442,6 +1506,9 @@
       style="display: none"
       on:change={handleImportBpmnXml}
     />
+    <button type="button" on:click={() => importTestPoolsFile()} style="margin-left: 8px;">
+      Test Import Pools
+    </button>
   </div>
   <Toolbar
     on:add={({detail}) => {
@@ -2578,7 +2645,7 @@
             <!-- Connection points -->
             {#if showConnectionPoints || isCreatingConnection}
               {#each calculateConnectionPoints(element) as point (point.id)}
-                <ConnectionPoint
+                <ConnectionPointWrapper
                   point={point}
                   isVisible={showConnectionPoints}
                   isHighlighted={isAdjustingConnectionEndpoint}

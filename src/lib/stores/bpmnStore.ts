@@ -2,30 +2,8 @@ import { writable } from 'svelte/store';
 import type { BpmnConnection, BpmnElementUnion, ConnectionPoint, Position } from '$lib/models/bpmnElements';
 import { calculateConnectionPoints } from '$lib/utils/connectionUtils';
 
-// Initial elements
-const initialElements: BpmnElementUnion[] = [
-  {
-    id: 'task1',
-    type: 'task',
-    label: 'Sample Task',
-    x: 100,
-    y: 100,
-    width: 120,
-    height: 80,
-    taskType: 'user'
-  },
-  {
-    id: 'event1',
-    type: 'event',
-    label: 'Start Event',
-    x: 300,
-    y: 100,
-    width: 36,
-    height: 36,
-    eventType: 'start',
-    eventDefinition: 'none'
-  }
-];
+// Initial elements - empty array for a blank canvas
+const initialElements: BpmnElementUnion[] = [];
 
 // Create a writable store
 const createBpmnStore = () => {
@@ -50,13 +28,14 @@ const createBpmnStore = () => {
     // Update an element
     updateElement: (id: string, changes: Partial<BpmnElementUnion>) =>
       update(elements => {
-        const updatedElements = elements.map(el => el.id === id ? { ...el, ...changes } : el);
+        const updatedElements = elements.map(el => el.id === id ? { ...el, ...changes } as BpmnElementUnion : el);
 
         // If the element is a node and its position changed, update any connected connections
         const updatedElement = updatedElements.find(el => el.id === id);
-        if (updatedElement && (updatedElement.type === 'task' || updatedElement.type === 'event' || updatedElement.type === 'gateway')) {
+        if (updatedElement && updatedElement.type !== 'connection' && 'x' in updatedElement && 'y' in updatedElement && 'width' in updatedElement && 'height' in updatedElement) {
           // Recalculate connection points for this element
-          const connectionPoints = calculateConnectionPoints(updatedElement);
+          // We've already checked that this element has x, y, width, and height properties
+          calculateConnectionPoints(updatedElement as any);
 
           // Update any connections that use this element
           updatedElements.forEach(el => {

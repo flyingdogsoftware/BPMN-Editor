@@ -1,40 +1,90 @@
-import type { AnchorPosition, BpmnNode, ConnectionPoint, Position } from '$lib/models/bpmnElements';
-import { snapToGrid } from './gridUtils';
+import type { AnchorPosition, BpmnElementUnion, ConnectionPoint, Position } from '$lib/models/bpmnElements';
+import { snapToGrid as gridSnap } from './gridUtils';
 
 /**
  * Calculate connection points for a BPMN node
  * @param element The BPMN node element
  * @returns Array of connection points
  */
-export function calculateConnectionPoints(element: BpmnNode): ConnectionPoint[] {
+export function calculateConnectionPoints(element: BpmnElementUnion): ConnectionPoint[] {
+  // Only calculate connection points for elements with position and size
+  if (element.type === 'connection' || !('x' in element) || !('y' in element) ||
+      !('width' in element) || !('height' in element)) {
+    return [];
+  }
   const points: ConnectionPoint[] = [];
   const centerX = element.x + element.width / 2;
   const centerY = element.y + element.height / 2;
 
   // Create connection points based on element type
-  if (element.type === 'task') {
-    // Tasks have connection points on all four sides
+  if (element.type === 'task' || element.type === 'event' || element.type === 'gateway' ||
+      element.type === 'dataobject' || element.type === 'datastore' ||
+      element.type === 'textannotation' || element.type === 'group' ||
+      element.type === 'subprocess' || element.type === 'callactivity') {
+    // These elements have connection points on all four sides
     points.push(
       createConnectionPoint(element.id, 'top', centerX, element.y),
       createConnectionPoint(element.id, 'right', element.x + element.width, centerY),
       createConnectionPoint(element.id, 'bottom', centerX, element.y + element.height),
       createConnectionPoint(element.id, 'left', element.x, centerY)
     );
-  } else if (element.type === 'event') {
-    // Events have connection points on all four sides
+  } else if (element.type === 'pool') {
+    // Pools have connection points on all four sides, but with more points for better connectivity
+    // Top edge
     points.push(
+      createConnectionPoint(element.id, 'top', element.x + element.width * 0.25, element.y),
       createConnectionPoint(element.id, 'top', centerX, element.y),
-      createConnectionPoint(element.id, 'right', element.x + element.width, centerY),
-      createConnectionPoint(element.id, 'bottom', centerX, element.y + element.height),
-      createConnectionPoint(element.id, 'left', element.x, centerY)
+      createConnectionPoint(element.id, 'top', element.x + element.width * 0.75, element.y)
     );
-  } else if (element.type === 'gateway') {
-    // Gateways have connection points on all four sides
+
+    // Right edge
     points.push(
-      createConnectionPoint(element.id, 'top', centerX, element.y),
+      createConnectionPoint(element.id, 'right', element.x + element.width, element.y + element.height * 0.25),
       createConnectionPoint(element.id, 'right', element.x + element.width, centerY),
+      createConnectionPoint(element.id, 'right', element.x + element.width, element.y + element.height * 0.75)
+    );
+
+    // Bottom edge
+    points.push(
+      createConnectionPoint(element.id, 'bottom', element.x + element.width * 0.25, element.y + element.height),
       createConnectionPoint(element.id, 'bottom', centerX, element.y + element.height),
-      createConnectionPoint(element.id, 'left', element.x, centerY)
+      createConnectionPoint(element.id, 'bottom', element.x + element.width * 0.75, element.y + element.height)
+    );
+
+    // Left edge
+    points.push(
+      createConnectionPoint(element.id, 'left', element.x, element.y + element.height * 0.25),
+      createConnectionPoint(element.id, 'left', element.x, centerY),
+      createConnectionPoint(element.id, 'left', element.x, element.y + element.height * 0.75)
+    );
+  } else if (element.type === 'lane') {
+    // Lanes have connection points similar to pools
+    // Top edge
+    points.push(
+      createConnectionPoint(element.id, 'top', element.x + element.width * 0.25, element.y),
+      createConnectionPoint(element.id, 'top', centerX, element.y),
+      createConnectionPoint(element.id, 'top', element.x + element.width * 0.75, element.y)
+    );
+
+    // Right edge
+    points.push(
+      createConnectionPoint(element.id, 'right', element.x + element.width, element.y + element.height * 0.25),
+      createConnectionPoint(element.id, 'right', element.x + element.width, centerY),
+      createConnectionPoint(element.id, 'right', element.x + element.width, element.y + element.height * 0.75)
+    );
+
+    // Bottom edge
+    points.push(
+      createConnectionPoint(element.id, 'bottom', element.x + element.width * 0.25, element.y + element.height),
+      createConnectionPoint(element.id, 'bottom', centerX, element.y + element.height),
+      createConnectionPoint(element.id, 'bottom', element.x + element.width * 0.75, element.y + element.height)
+    );
+
+    // Left edge
+    points.push(
+      createConnectionPoint(element.id, 'left', element.x, element.y + element.height * 0.25),
+      createConnectionPoint(element.id, 'left', element.x, centerY),
+      createConnectionPoint(element.id, 'left', element.x, element.y + element.height * 0.75)
     );
   }
 
@@ -138,7 +188,7 @@ function calculateOrthogonalPath(start: Position, end: Position): string {
   // Determine if we should go horizontal first or vertical first
   // This decision is based on the anchor position and the relative positions
   const startAnchor = getAnchorDirection(start, end);
-  const endAnchor = getAnchorDirection(end, start);
+  // const endAnchor = getAnchorDirection(end, start); // Not used currently
 
   if (startAnchor === 'right' && dx > 0) {
     // Going right from start
@@ -161,12 +211,12 @@ function calculateOrthogonalPath(start: Position, end: Position): string {
     if (adx > ady) {
       // Horizontal distance is greater, so go horizontal first
       const thirdX = start.x + dx / 3;
-      const twoThirdsX = start.x + 2 * dx / 3;
+      // const twoThirdsX = start.x + 2 * dx / 3; // Not used currently
       return `M ${start.x} ${start.y} L ${thirdX} ${start.y} L ${thirdX} ${end.y} L ${end.x} ${end.y}`;
     } else {
       // Vertical distance is greater, so go vertical first
       const thirdY = start.y + dy / 3;
-      const twoThirdsY = start.y + 2 * dy / 3;
+      // const twoThirdsY = start.y + 2 * dy / 3; // Not used currently
       return `M ${start.x} ${start.y} L ${start.x} ${thirdY} L ${end.x} ${thirdY} L ${end.x} ${end.y}`;
     }
   }
@@ -199,7 +249,7 @@ function getAnchorDirection(p1: Position, p2: Position): AnchorPosition {
  * @param targetType The type of the target element
  * @returns Whether the connection is valid
  */
-export function isValidConnection(sourceType: string, targetType: string): boolean {
+export function isValidConnection(_sourceType: string, _targetType: string): boolean {
   // Implement validation rules based on BPMN specification
   // For now, allow all connections
   return true;
@@ -212,11 +262,8 @@ export function isValidConnection(sourceType: string, targetType: string): boole
  * @returns SVG path data string (without the initial M command)
  */
 function calculateOrthogonalSegment(start: Position, end: Position): string {
-  // Determine the direction of the connection
-  const dx = end.x - start.x;
-  const dy = end.y - start.y;
-
   // If the points are aligned horizontally or vertically, use a direct line
+  // Direction variables not used in this simple case
   if (start.x === end.x || start.y === end.y) {
     return ` L ${end.x} ${end.y}`;
   }
@@ -304,8 +351,8 @@ export function updateWaypoint(
   const updatedWaypoints = [...waypoints];
 
   // Snap the coordinates to the grid if needed
-  const x = snapToGrid ? Math.round(newX / gridSize) * gridSize : newX;
-  const y = snapToGrid ? Math.round(newY / gridSize) * gridSize : newY;
+  const x = snapToGrid ? gridSnap(newX, gridSize) : newX;
+  const y = snapToGrid ? gridSnap(newY, gridSize) : newY;
 
   // Update the waypoint at the specified index
   updatedWaypoints[index] = { x, y };
@@ -330,8 +377,8 @@ export function addWaypoint(
   gridSize: number = 20
 ): Position[] {
   // Snap the coordinates to the grid if needed
-  const x = snapToGrid ? Math.round(newX / gridSize) * gridSize : newX;
-  const y = snapToGrid ? Math.round(newY / gridSize) * gridSize : newY;
+  const x = snapToGrid ? gridSnap(newX, gridSize) : newX;
+  const y = snapToGrid ? gridSnap(newY, gridSize) : newY;
 
   // Create a new waypoint
   const newWaypoint = { x, y };
