@@ -118,6 +118,7 @@
   import TaskRenderer from './renderers/TaskRenderer.svelte';
   import EventRenderer from './renderers/EventRenderer.svelte';
   import GatewayRenderer from './renderers/GatewayRenderer.svelte';
+  import ConnectionRenderer from './renderers/ConnectionRenderer.svelte';
 
   // Listen for edit-label events from Connection components
   onMount(() => {
@@ -1481,37 +1482,7 @@
   // This function is used for connection creation and preview
   // The actual connection points for rendering are calculated on-the-fly
 
-  // Filter connections
-  $: connections = $bpmnStore.filter(el => el.type === 'connection');
-
-  // Get source and target positions for connections
-  $: connectionPositions = connections.map(connection => {
-    // Find the source and target elements
-    const sourceElement = $bpmnStore.find(el => el.id === connection.sourceId);
-    const targetElement = $bpmnStore.find(el => el.id === connection.targetId);
-
-    // Calculate current connection points for these elements
-    let sourcePoints = [];
-    let targetPoints = [];
-
-    if (sourceElement && sourceElement.type !== 'connection') {
-      sourcePoints = calculateConnectionPoints(sourceElement);
-    }
-
-    if (targetElement && targetElement.type !== 'connection') {
-      targetPoints = calculateConnectionPoints(targetElement);
-    }
-
-    // Find the specific connection points by ID
-    const sourcePoint = sourcePoints.find(p => p.id === connection.sourcePointId);
-    const targetPoint = targetPoints.find(p => p.id === connection.targetPointId);
-
-    return {
-      id: connection.id,
-      source: sourcePoint ? { x: sourcePoint.x, y: sourcePoint.y } : { x: 0, y: 0 },
-      target: targetPoint ? { x: targetPoint.x, y: targetPoint.y } : { x: 0, y: 0 }
-    };
-  });
+  // Filter connections (moved to ConnectionRenderer)
 </script>
 
 <div class="bpmn-editor">
@@ -1592,32 +1563,7 @@
       onWheel={handleCanvasWheel}
     >
 
-      <!-- Define markers for connections -->
-      <defs>
-        <marker
-          id="sequenceFlowMarker"
-          viewBox="0 0 10 10"
-          refX="10"
-          refY="5"
-          markerWidth="6"
-          markerHeight="6"
-          orient="auto"
-        >
-          <path d="M 0 0 L 10 5 L 0 10 z" fill="#333" />
-        </marker>
-
-        <marker
-          id="messageFlowMarker"
-          viewBox="0 0 10 10"
-          refX="10"
-          refY="5"
-          markerWidth="6"
-          markerHeight="6"
-          orient="auto"
-        >
-          <circle cx="5" cy="5" r="4" fill="white" stroke="#3498db" stroke-width="1" />
-        </marker>
-      </defs>
+      <!-- Markers for connections moved to ConnectionRenderer -->
 
       <!-- Draw pools and lanes first (background) -->
       {#each $bpmnStore as element (element.id)}
@@ -1890,22 +1836,16 @@
         {/if}
       {/each}
 
-      <!-- Draw connections -->
-      {#each connections as connection (connection.id)}
-        {#if connection.type === 'connection'}
-          {@const posInfo = connectionPositions.find(p => p.id === connection.id)}
-          {#if posInfo}
-            <Connection
-              connection={connection}
-              sourcePosition={posInfo.source}
-              targetPosition={posInfo.target}
-              onSelect={handleConnectionSelect}
-              onEndpointAdjustment={handleConnectionEndpointAdjustment}
-              onEditLabel={(conn) => openLabelDialog(conn)}
-            />
-          {/if}
-        {/if}
-      {/each}
+      <!-- Connection rendering moved to ConnectionRenderer component -->
+      <ConnectionRenderer
+        onConnectionSelect={handleConnectionSelect}
+        onConnectionEndpointAdjustment={handleConnectionEndpointAdjustment}
+        onEditLabel={(conn) => openLabelDialog(conn)}
+        isCreatingConnection={isCreatingConnection}
+        connectionStartPoint={connectionStartPoint}
+        connectionEndPosition={connectionEndPosition}
+        connectionPreviewValid={connectionPreviewValid}
+      />
 
       <!-- Draw other BPMN elements (on top of pools and lanes) -->
       {#each $bpmnStore as element (element.id)}
@@ -2235,14 +2175,7 @@
         {/if}
       {/each}
 
-      <!-- Connection preview -->
-      {#if isCreatingConnection && connectionStartPoint && connectionEndPosition}
-        <ConnectionPreview
-          startPosition={{ x: connectionStartPoint.x, y: connectionStartPoint.y }}
-          endPosition={connectionEndPosition}
-          isValid={connectionPreviewValid}
-        />
-      {/if}
+      <!-- Connection preview moved to ConnectionRenderer component -->
     </Canvas>
   </div>
 
