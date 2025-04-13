@@ -681,70 +681,107 @@ export function mapXmlToModel(parsedXml: any): BpmnElementUnion[] {
       }
     }
 
-    // Map start events
-    if (process['bpmn:startEvent']) {
-      const startEvents = Array.isArray(process['bpmn:startEvent'])
-        ? process['bpmn:startEvent']
-        : [process['bpmn:startEvent']];
-      for (const event of startEvents) {
-        const shape = shapeMap[event['@_id']];
-        const mappedEvent = {
-          id: event['@_id'],
-          type: "event",
-          eventType: "start",
-          eventDefinition: "none",
-          label: event['@_name'] || '',
-          x: shape ? shape.x : 0,
-          y: shape ? shape.y : 0,
-          width: shape ? shape.width : 36,
-          height: shape ? shape.height : 36,
-        } as import("$lib/models/bpmnElements").BpmnEvent;
-        elements.push(mappedEvent);
+    // Map all event types
+    // Helper function to map events of a specific type
+    function mapEvents(eventType: string, eventXmlKey: string, defaultDefinition: string = 'none') {
+      if (process[eventXmlKey]) {
+        const events = Array.isArray(process[eventXmlKey])
+          ? process[eventXmlKey]
+          : [process[eventXmlKey]];
+
+        console.log(`Found ${events.length} ${eventType} events`);
+
+        for (const event of events) {
+          const shape = shapeMap[event['@_id']];
+
+          // Determine event definition
+          let eventDefinition = defaultDefinition;
+
+          // Check for event definitions
+          const definitionKeys = [
+            'bpmn:messageEventDefinition',
+            'bpmn:timerEventDefinition',
+            'bpmn:escalationEventDefinition',
+            'bpmn:conditionalEventDefinition',
+            'bpmn:linkEventDefinition',
+            'bpmn:errorEventDefinition',
+            'bpmn:cancelEventDefinition',
+            'bpmn:compensateEventDefinition',
+            'bpmn:signalEventDefinition',
+            'bpmn:terminateEventDefinition'
+          ];
+
+          for (const key of definitionKeys) {
+            if (event[key]) {
+              // Extract the definition type from the key (e.g., 'message' from 'bpmn:messageEventDefinition')
+              eventDefinition = key.replace('bpmn:', '').replace('EventDefinition', '');
+              break;
+            }
+          }
+
+          const mappedEvent = {
+            id: event['@_id'],
+            type: "event",
+            eventType: eventType,
+            eventDefinition: eventDefinition,
+            label: event['@_name'] || '',
+            x: shape ? shape.x : 0,
+            y: shape ? shape.y : 0,
+            width: shape ? shape.width : 36,
+            height: shape ? shape.height : 36,
+          } as import("$lib/models/bpmnElements").BpmnEvent;
+
+          console.log(`Created ${eventType} event with definition ${eventDefinition}:`, mappedEvent);
+          elements.push(mappedEvent);
+        }
       }
     }
 
-    // Map end events
-    if (process['bpmn:endEvent']) {
-      const endEvents = Array.isArray(process['bpmn:endEvent'])
-        ? process['bpmn:endEvent']
-        : [process['bpmn:endEvent']];
-      for (const event of endEvents) {
-        const shape = shapeMap[event['@_id']];
-        const mappedEvent = {
-          id: event['@_id'],
-          type: "event",
-          eventType: "end",
-          eventDefinition: "none",
-          label: event['@_name'] || '',
-          x: shape ? shape.x : 0,
-          y: shape ? shape.y : 0,
-          width: shape ? shape.width : 36,
-          height: shape ? shape.height : 36,
-        } as import("$lib/models/bpmnElements").BpmnEvent;
-        elements.push(mappedEvent);
+    // Map all event types
+    mapEvents('start', 'bpmn:startEvent');
+    mapEvents('end', 'bpmn:endEvent');
+    mapEvents('intermediate-throw', 'bpmn:intermediateThrowEvent');
+    mapEvents('intermediate-catch', 'bpmn:intermediateCatchEvent');
+    mapEvents('boundary', 'bpmn:boundaryEvent');
+
+    // End events are now handled by the mapEvents function
+
+    // Map all gateway types
+    // Helper function to map gateways of a specific type
+    function mapGateways(gatewayType: string, gatewayXmlKey: string) {
+      if (process[gatewayXmlKey]) {
+        const gateways = Array.isArray(process[gatewayXmlKey])
+          ? process[gatewayXmlKey]
+          : [process[gatewayXmlKey]];
+
+        console.log(`Found ${gateways.length} ${gatewayType} gateways`);
+
+        for (const gateway of gateways) {
+          const shape = shapeMap[gateway['@_id']];
+          const mappedGateway = {
+            id: gateway['@_id'],
+            type: "gateway",
+            gatewayType: gatewayType,
+            label: gateway['@_name'] || '',
+            x: shape ? shape.x : 0,
+            y: shape ? shape.y : 0,
+            width: shape ? shape.width : 50,
+            height: shape ? shape.height : 50,
+          } as import("$lib/models/bpmnElements").BpmnGateway;
+
+          console.log(`Created ${gatewayType} gateway:`, mappedGateway);
+          elements.push(mappedGateway);
+        }
       }
     }
 
-    // Map exclusive gateways
-    if (process['bpmn:exclusiveGateway']) {
-      const gateways = Array.isArray(process['bpmn:exclusiveGateway'])
-        ? process['bpmn:exclusiveGateway']
-        : [process['bpmn:exclusiveGateway']];
-      for (const gateway of gateways) {
-        const shape = shapeMap[gateway['@_id']];
-        const mappedGateway = {
-          id: gateway['@_id'],
-          type: "gateway",
-          gatewayType: "exclusive",
-          label: gateway['@_name'] || '',
-          x: shape ? shape.x : 0,
-          y: shape ? shape.y : 0,
-          width: shape ? shape.width : 50,
-          height: shape ? shape.height : 50,
-        } as import("$lib/models/bpmnElements").BpmnGateway;
-        elements.push(mappedGateway);
-      }
-    }
+    // Map all gateway types
+    mapGateways('exclusive', 'bpmn:exclusiveGateway');
+    mapGateways('inclusive', 'bpmn:inclusiveGateway');
+    mapGateways('parallel', 'bpmn:parallelGateway');
+    mapGateways('complex', 'bpmn:complexGateway');
+    mapGateways('event-based', 'bpmn:eventBasedGateway');
+    mapGateways('parallel-event-based', 'bpmn:parallelEventBasedGateway');
 
     // Map sequence flows
     if (process['bpmn:sequenceFlow']) {
@@ -1020,7 +1057,6 @@ function findBestConnectionPoint(points: ConnectionPoint[], targetPosition: Posi
 
   // For the first point, find the element it belongs to
   if (points.length > 0) {
-    const elementId = points[0].elementId;
     // Find the center of the element based on the points
     const xPoints = points.map(p => p.x);
     const yPoints = points.map(p => p.y);
