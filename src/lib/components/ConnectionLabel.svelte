@@ -176,18 +176,21 @@
   {#if !isEditing}
     <text
       x={displayX}
-      y={displayY}
+      y={displayY - (labelText.split('\n').length > 1 ? (labelText.split('\n').length - 1) * 8 : 0)}
       text-anchor="middle"
-      dominant-baseline="middle"
       class="connection-label"
       class:condition={isCondition}
     >
       {#if isCondition}
         <tspan class="condition-marker">[</tspan>
-        <tspan>{labelText}</tspan>
+        {#each labelText.split('\n') as line, i}
+          <tspan x={displayX} dy={i === 0 ? 0 : 16}>{line}</tspan>
+        {/each}
         <tspan class="condition-marker">]</tspan>
       {:else}
-        {labelText}
+        {#each labelText.split('\n') as line, i}
+          <tspan x={displayX} dy={i === 0 ? 0 : 16}>{line}</tspan>
+        {/each}
       {/if}
     </text>
     {#if connection.isSelected}

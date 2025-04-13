@@ -52,9 +52,9 @@
   // Mouse event handlers
   function handleMouseDown(event) {
     if (!element.isSelected) return;
-    
+
     event.stopPropagation();
-    
+
     isDragging = true;
     startX = event.clientX;
     startY = event.clientY;
@@ -68,30 +68,30 @@
 
   function handleMouseMove(event) {
     if (!isDragging) return;
-    
+
     const dx = event.clientX - startX;
     const dy = event.clientY - startY;
-    
+
     dragX = dx;
     dragY = dy;
   }
 
   function handleMouseUp(event) {
     if (!isDragging) return;
-    
+
     isDragging = false;
-    
+
     // Remove event listeners
     window.removeEventListener('mousemove', handleMouseMove);
     window.removeEventListener('mouseup', handleMouseUp);
-    
+
     // Calculate final position with snapping
     const newX = snapToGrid(position.x + dragX, gridSize);
     const newY = snapToGrid(position.y + dragY, gridSize);
-    
+
     // Update the label position in the store
     bpmnStore.updateNodeLabelPosition(element.id, { x: newX, y: newY });
-    
+
     // Reset drag offsets
     dragX = 0;
     dragY = 0;
@@ -168,12 +168,13 @@
   {#if !isEditing}
     <text
       x={displayX}
-      y={displayY}
+      y={displayY - (labelText.split('\n').length > 1 ? (labelText.split('\n').length - 1) * 8 : 0)}
       text-anchor="middle"
-      dominant-baseline="middle"
       class="node-label"
     >
-      {labelText}
+      {#each labelText.split('\n') as line, i}
+        <tspan x={displayX} dy={i === 0 ? 0 : 16}>{line}</tspan>
+      {/each}
     </text>
     {#if element.isSelected}
       <rect

@@ -55,9 +55,12 @@
   }
 
   function handleKeyDown(event) {
-    if (event.key === 'Enter') {
+    // Only save on Ctrl+Enter or Cmd+Enter for textarea
+    if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
+      event.preventDefault();
       handleSave();
     } else if (event.key === 'Escape') {
+      event.preventDefault();
       handleCancel();
     }
   }
@@ -87,12 +90,14 @@
       tabindex="-1"
     >
       <h3>{isCondition ? 'Edit Condition' : 'Edit Label'}</h3>
-      <input
+      <textarea
         bind:this={inputElement}
         bind:value={localLabel}
         on:keydown={handleKeyDown}
         placeholder={isCondition ? 'Enter condition expression' : 'Enter label text'}
-      />
+        rows="3"
+      ></textarea>
+      <small class="hint">Press Ctrl+Enter to save, Escape to cancel</small>
       <div class="button-group">
         <button class="cancel-button" on:click={handleCancel}>Cancel</button>
         <button class="save-button" on:click={handleSave}>Save</button>
@@ -130,13 +135,21 @@
     color: #333;
   }
 
-  input {
+  textarea {
     width: 100%;
     padding: 8px;
     border: 1px solid #ccc;
     border-radius: 3px;
-    margin-bottom: 15px;
+    margin-bottom: 5px;
     font-size: 14px;
+    resize: vertical;
+  }
+
+  .hint {
+    display: block;
+    color: #666;
+    font-size: 12px;
+    margin-bottom: 15px;
   }
 
   .button-group {

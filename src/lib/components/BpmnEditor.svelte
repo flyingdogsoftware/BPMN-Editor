@@ -2068,12 +2068,14 @@
               <!-- Internal label for the task -->
               <text
                 x={element.x + element.width/2}
-                y={element.y + element.height/2}
+                y={element.y + element.height/2 - (element.label && element.label.includes('\n') ? (element.label.split('\n').length - 1) * 8 : 0)}
                 text-anchor="middle"
-                dominant-baseline="middle"
                 pointer-events="none"
+                font-size="12px"
               >
-                {element.label}
+                {#each (element.label || '').split('\n') as line, i}
+                  <tspan x={element.x + element.width/2} dy={i === 0 ? 0 : 16}>{line}</tspan>
+                {/each}
               </text>
             {:else if element.type === 'event'}
               <!-- Base event circle -->
@@ -2253,11 +2255,14 @@
               <!-- Event label -->
               <text
                 x={element.x + element.width/2}
-                y={element.y + element.height/2 + 30}
+                y={element.y + element.height/2 + 30 - (element.label && element.label.includes('\n') ? (element.label.split('\n').length - 1) * 8 : 0)}
                 text-anchor="middle"
                 pointer-events="none"
+                font-size="12px"
               >
-                {element.label}
+                {#each (element.label || '').split('\n') as line, i}
+                  <tspan x={element.x + element.width/2} dy={i === 0 ? 0 : 16}>{line}</tspan>
+                {/each}
               </text>
             {:else if element.type === 'gateway'}
               <!-- Draw diamond shape for gateway -->
@@ -2363,11 +2368,14 @@
               <!-- Gateway label -->
               <text
                 x={element.x + element.width/2}
-                y={element.y + element.height + 20}
+                y={element.y + element.height + 20 - (element.label && element.label.includes('\n') ? (element.label.split('\n').length - 1) * 8 : 0)}
                 text-anchor="middle"
                 pointer-events="none"
+                font-size="12px"
               >
-                {element.label}
+                {#each (element.label || '').split('\n') as line, i}
+                  <tspan x={element.x + element.width/2} dy={i === 0 ? 0 : 16}>{line}</tspan>
+                {/each}
               </text>
             {:else if element.type === 'dataobject'}
               <!-- Data Object -->
@@ -2460,11 +2468,14 @@
               <!-- Data Store Label -->
               <text
                 x={element.x + element.width/2}
-                y={element.y + element.height + 20}
+                y={element.y + element.height + 20 - (element.label && element.label.includes('\n') ? (element.label.split('\n').length - 1) * 8 : 0)}
                 text-anchor="middle"
                 pointer-events="none"
+                font-size="12px"
               >
-                {element.label}
+                {#each (element.label || '').split('\n') as line, i}
+                  <tspan x={element.x + element.width/2} dy={i === 0 ? 0 : 16}>{line}</tspan>
+                {/each}
               </text>
 
             {:else if element.type === 'textannotation'}
@@ -2491,10 +2502,13 @@
               <!-- Text Annotation Content -->
               <text
                 x={element.x + 5}
-                y={element.y + 20}
+                y={element.y + 20 - (element.text && element.text.includes('\n') ? (element.text.split('\n').length - 1) * 8 : 0)}
                 pointer-events="none"
+                font-size="12px"
               >
-                {element.text}
+                {#each (element.text || '').split('\n') as line, i}
+                  <tspan x={element.x + 5} dy={i === 0 ? 0 : 16}>{line}</tspan>
+                {/each}
               </text>
 
             {:else if element.type === 'group'}
@@ -2516,6 +2530,7 @@
                 x={element.x + 5}
                 y={element.y - 5}
                 pointer-events="none"
+                font-size="12px"
               >
                 {element.label}
               </text>
@@ -2553,6 +2568,7 @@
                   dominant-baseline="middle"
                   transform={`rotate(-90, ${element.x + 15}, ${element.y + element.height/2})`}
                   pointer-events="none"
+                  font-size="12px"
                 >
                   {element.label}
                 </text>
@@ -2579,6 +2595,7 @@
                         dominant-baseline="middle"
                         transform={`rotate(-90, ${element.x + 25}, ${lane.y + lane.height/2})`}
                         pointer-events="none"
+                        font-size="12px"
                       >
                         {lane.label}
                       </text>
@@ -2597,12 +2614,14 @@
                 />
                 <text
                   x={element.x + element.width/2}
-                  y={element.y + 15}
+                  y={element.y + 15 - (element.label && element.label.includes('\n') ? (element.label.split('\n').length - 1) * 8 : 0)}
                   text-anchor="middle"
-                  dominant-baseline="middle"
                   pointer-events="none"
+                  font-size="12px"
                 >
-                  {element.label}
+                  {#each (element.label || '').split('\n') as line, i}
+                    <tspan x={element.x + element.width/2} dy={i === 0 ? 0 : 16}>{line}</tspan>
+                  {/each}
                 </text>
 
                 <!-- Render lanes within this pool (vertical) -->
@@ -2626,6 +2645,7 @@
                         text-anchor="middle"
                         dominant-baseline="middle"
                         pointer-events="none"
+                        font-size="12px"
                       >
                         {lane.label}
                       </text>

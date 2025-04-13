@@ -9,6 +9,18 @@ import type { BpmnElementUnion, BpmnPool, BpmnLane, ConnectionPoint, Position } 
 import { calculateConnectionPoints } from '$lib/utils/connectionUtils';
 
 /**
+ * Process label text to handle XML entities and line breaks
+ * @param text The label text from XML
+ * @returns Processed label text with proper line breaks
+ */
+function processLabelText(text: string): string {
+  if (!text) return '';
+
+  // Replace XML line break entity with actual line breaks
+  return text.replace(/&#10;/g, '\n');
+}
+
+/**
  * Map parsed BPMN XML to the internal data model.
  * @param parsedXml The parsed BPMN XML object
  * @returns Array of BPMN elements in the internal data model format
@@ -331,7 +343,7 @@ export function mapXmlToModel(parsedXml: any): BpmnElementUnion[] {
       const pool: BpmnPool = {
         id: poolId,
         type: 'pool' as const,
-        label: participant['@_name'] || 'Pool',
+        label: processLabelText(participant['@_name']) || 'Pool',
         x: poolX,
         y: poolY,
         width: poolWidth,
@@ -553,7 +565,7 @@ export function mapXmlToModel(parsedXml: any): BpmnElementUnion[] {
             const mappedLane: BpmnLane = {
               id: laneId,
               type: 'lane' as const,
-              label: lane['@_name'] || 'Lane',
+              label: processLabelText(lane['@_name']) || 'Lane',
               x: laneX,
               y: laneY,
               width: laneWidth,
@@ -671,7 +683,7 @@ export function mapXmlToModel(parsedXml: any): BpmnElementUnion[] {
           id: task['@_id'],
           type: "task",
           taskType: "task",
-          label: task['@_name'] || '',
+          label: processLabelText(task['@_name']) || '',
           x: shape ? shape.x : 0,
           y: shape ? shape.y : 0,
           width: shape ? shape.width : 120,
@@ -724,7 +736,7 @@ export function mapXmlToModel(parsedXml: any): BpmnElementUnion[] {
             type: "event",
             eventType: eventType,
             eventDefinition: eventDefinition,
-            label: event['@_name'] || '',
+            label: processLabelText(event['@_name']) || '',
             x: shape ? shape.x : 0,
             y: shape ? shape.y : 0,
             width: shape ? shape.width : 36,
@@ -762,7 +774,7 @@ export function mapXmlToModel(parsedXml: any): BpmnElementUnion[] {
             id: gateway['@_id'],
             type: "gateway",
             gatewayType: gatewayType,
-            label: gateway['@_name'] || '',
+            label: processLabelText(gateway['@_name']) || '',
             x: shape ? shape.x : 0,
             y: shape ? shape.y : 0,
             width: shape ? shape.width : 50,
@@ -822,7 +834,7 @@ export function mapXmlToModel(parsedXml: any): BpmnElementUnion[] {
           sourcePointId: '',
           targetPointId: '',
           waypoints: waypoints ? waypoints : [],
-          label: flow['@_name'] || '',
+          label: processLabelText(flow['@_name']) || '',
         } as import("$lib/models/bpmnElements").BpmnConnection;
 
         elements.push(mappedConnection);
