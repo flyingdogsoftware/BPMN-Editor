@@ -3,6 +3,38 @@
   import { snapPositionToGrid, snapToGrid } from '$lib/utils/gridUtils';
   import { isValidConnection, calculateConnectionPoints } from '$lib/utils/connectionUtils';
   import { onMount } from 'svelte';
+  import { importBpmnXml } from '$lib/utils/xml/bpmnXmlParser';
+
+  // Import BPMN XML handler
+  async function handleImportBpmnXml(event) {
+    const file = event.target.files && event.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const xmlString = e.target.result;
+        console.log('Importing BPMN XML...');
+        const elements = importBpmnXml(xmlString);
+        console.log('Imported elements:', elements);
+
+        // Log connections specifically
+        const connections = elements.filter(el => el.type === 'connection');
+        console.log('Imported connections:', connections);
+
+        bpmnStore.reset();
+        elements.forEach(el => bpmnStore.addElement(el));
+
+        // Log the store after import
+        console.log('Store after import:', $bpmnStore);
+      } catch (err) {
+        console.error('Failed to import BPMN XML:', err);
+        alert('Failed to import BPMN XML: ' + err.message);
+      }
+    };
+    reader.readAsText(file);
+    // Reset the input so the same file can be selected again
+    event.target.value = '';
+  }
   import ConnectionPoint from './ConnectionPoint.svelte';
   import ConnectionPreview from './ConnectionPreview.svelte';
   import Connection from './Connection.svelte';
@@ -1397,6 +1429,20 @@
 </script>
 
 <div class="bpmn-editor">
+  <div style="padding: 8px 16px;">
+    <label for="bpmn-import-input" style="display: inline-block; margin-right: 8px;">
+      <button type="button" on:click={() => document.getElementById('bpmn-import-input').click()}>
+        Import BPMN XML
+      </button>
+    </label>
+    <input
+      id="bpmn-import-input"
+      type="file"
+      accept=".bpmn,.xml"
+      style="display: none"
+      on:change={handleImportBpmnXml}
+    />
+  </div>
   <Toolbar
     on:add={({detail}) => {
       // Get the current mouse position or use default position
