@@ -70,6 +70,65 @@
     canvasHeight = Math.max(canvasHeight, minHeight);
   }
 
+  // Function to position the viewport for optimal element visibility
+  function centerViewportOnElements() {
+    // Always start with viewport at 0,0
+    viewportX = 0;
+    viewportY = 0;
+
+    // If there are no elements, just keep viewport at 0,0
+    if ($bpmnStore.length === 0) return;
+
+    // Find the bounding box of all elements
+    let minX = Infinity;
+    let minY = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+
+    $bpmnStore.forEach(element => {
+      if (element.type !== 'connection' && 'x' in element && 'y' in element) {
+        minX = Math.min(minX, element.x);
+        minY = Math.min(minY, element.y);
+        maxX = Math.max(maxX, element.x + (element.width || 0));
+        maxY = Math.max(maxY, element.y + (element.height || 0));
+      }
+    });
+
+    // If we found elements, check if they're already visible
+    if (minX !== Infinity && minY !== Infinity) {
+      // Get the visible area dimensions
+      const visibleWidth = isBrowser ? window.innerWidth : 1200;
+      const visibleHeight = isBrowser ? window.innerHeight : 800;
+
+      // If all elements are already visible within the viewport at position 0,0,
+      // then we don't need to adjust the viewport
+      if (maxX <= visibleWidth && maxY <= visibleHeight) {
+        // All elements are visible, keep viewport at 0,0
+        return;
+      }
+
+      // If we get here, some elements are outside the visible area
+      // We'll only adjust the viewport if absolutely necessary
+      // and we'll try to keep as many elements visible as possible
+
+      // Add a small margin to ensure elements aren't right at the edge
+      const margin = 20;
+
+      // If elements extend beyond the right or bottom edge but are still
+      // close to the origin, we might not need to adjust the viewport
+      if (minX < margin && minY < margin &&
+          maxX < visibleWidth * 1.5 && maxY < visibleHeight * 1.5) {
+        // Elements are still relatively close to the origin, keep viewport at 0,0
+        return;
+      }
+
+      // At this point, we need to adjust the viewport to show the elements
+      // We'll try to keep the top-left corner of the elements visible
+      viewportX = Math.max(0, minX - margin);
+      viewportY = Math.max(0, minY - margin);
+    }
+  }
+
   // Update canvas dimensions when window is resized
   onMount(() => {
     if (isBrowser) {
@@ -85,6 +144,9 @@
 
       window.addEventListener('resize', updateCanvasSize);
       updateCanvasSize(); // Initial size
+
+      // Center the viewport on the diagram elements
+      centerViewportOnElements();
 
       // Initialize the canvas container reference
       canvasContainerElement = document.getElementById('canvas-container');
@@ -1028,8 +1090,13 @@
   function handleCanvasMouseMove(event) {
     if (isDraggingCanvas) {
       // Calculate new viewport position
-      viewportX = event.clientX - dragCanvasStartX;
-      viewportY = event.clientY - dragCanvasStartY;
+      const newViewportX = event.clientX - dragCanvasStartX;
+      const newViewportY = event.clientY - dragCanvasStartY;
+
+      // Only allow panning to the left and up (negative values)
+      // This prevents panning to the right and down (positive values)
+      viewportX = Math.min(0, newViewportX);
+      viewportY = Math.min(0, newViewportY);
     }
   }
 
@@ -1052,20 +1119,20 @@
     // Calculate scroll direction and adjust viewport
     if (event.deltaY < 0) {
       // Scroll up - move viewport down
-      viewportY += 50;
+      viewportY = Math.min(0, viewportY + 50);
     } else {
       // Scroll down - move viewport up
-      viewportY -= 50;
+      viewportY = Math.min(0, viewportY - 50);
     }
 
     // Horizontal scrolling with shift key
     if (event.shiftKey) {
       if (event.deltaY < 0) {
         // Scroll right
-        viewportX -= 50;
+        viewportX = Math.min(0, viewportX - 50);
       } else {
         // Scroll left
-        viewportX += 50;
+        viewportX = Math.min(0, viewportX + 50);
       }
     }
   }
