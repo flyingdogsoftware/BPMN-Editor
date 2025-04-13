@@ -15,6 +15,7 @@
 - **Command Pattern:** Undo/Redo-Mechanismus für Modelländerungen.
 - **Factory Pattern:** Erzeugung von BPMN-Elementen als Komponenten/Shapes.
 - **Separation of Concerns:** Trennung von Rendering, Modell, Logik und Serialisierung.
+- **Service Layer für Interaktionen:** ElementInteractionManager als dedizierter Service für Dragging, Resizing und Connection-Logik. Ziel: bessere Testbarkeit, Wartbarkeit und Wiederverwendbarkeit der Interaktionslogik.
 
 ## Komponentenbeziehungen
 

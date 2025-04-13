@@ -10,6 +10,7 @@
 
 ## Was ist noch zu bauen?
 
+- Refactoring: ElementInteractionManager-Service implementieren und Interaktionslogik aus BpmnEditor.svelte extrahieren (in Arbeit).
 - Properties Panel für BPMN-Elemente.
 - Undo/Redo-Mechanismus im Store.
 - Validierung und Fehlerfeedback im UI.
@@ -19,6 +20,7 @@
 
 ## Aktueller Status
 
+- Refactoring zur Auslagerung der Interaktionslogik in einen dedizierten Service (ElementInteractionManager) läuft. Ziel: bessere Wartbarkeit, Testbarkeit und klare Trennung von UI und Logik.
 - Projekt befindet sich in der aktiven Entwicklungsphase.
 - Fokus liegt auf Ausbau der Kernfunktionalität und Verbesserung der User Experience.
 
