@@ -164,6 +164,52 @@ export function calculateConnectionPath(
 }
 
 /**
+ * Create a rounded corner for an SVG path
+ * @param x1 Start x coordinate
+ * @param y1 Start y coordinate
+ * @param x2 Corner x coordinate
+ * @param y2 Corner y coordinate
+ * @param x3 End x coordinate
+ * @param y3 End y coordinate
+ * @param radius Corner radius
+ * @returns SVG path data string for the rounded corner
+ */
+function createRoundedCorner(x1: number, y1: number, x2: number, y2: number, x3: number, y3: number, radius: number): string {
+  // Ensure radius is not too large for the segment
+  const dx1 = x2 - x1;
+  const dy1 = y2 - y1;
+  const dx2 = x3 - x2;
+  const dy2 = y3 - y2;
+
+  // Calculate distances
+  const dist1 = Math.sqrt(dx1 * dx1 + dy1 * dy1);
+  const dist2 = Math.sqrt(dx2 * dx2 + dy2 * dy2);
+
+  // Limit radius to half of the shortest segment
+  const maxRadius = Math.min(dist1, dist2, radius);
+  const actualRadius = Math.max(0, Math.min(maxRadius, radius));
+
+  // If radius is too small, just return a regular corner
+  if (actualRadius <= 1) {
+    return `L ${x2} ${y2}`;
+  }
+
+  // Calculate the angle of each segment
+  const angle1 = Math.atan2(dy1, dx1);
+  const angle2 = Math.atan2(dy2, dx2);
+
+  // Calculate the points where the rounded corner starts and ends
+  const startX = x2 - actualRadius * Math.cos(angle1);
+  const startY = y2 - actualRadius * Math.sin(angle1);
+  const endX = x2 + actualRadius * Math.cos(angle2);
+  const endY = y2 + actualRadius * Math.sin(angle2);
+
+  // Create the arc command
+  // We use a quadratic Bézier curve for simplicity and better performance
+  return `L ${startX} ${startY} Q ${x2} ${y2}, ${endX} ${endY}`;
+}
+
+/**
  * Calculate an orthogonal path between two points
  * @param start The start position
  * @param end The end position
@@ -179,10 +225,15 @@ function calculateOrthogonalPath(start: Position, end: Position): string {
   // Minimum distance for the orthogonal segments
   const minDistance = 20;
 
+  // Corner radius for rounded corners
+  const cornerRadius = 8;
+
   // Determine the best routing strategy based on the positions
   if (adx < minDistance && ady < minDistance) {
-    // If points are very close, use a simple L shape
-    return `M ${start.x} ${start.y} L ${start.x} ${end.y} L ${end.x} ${end.y}`;
+    // If points are very close, use a simple L shape with a rounded corner
+    return `M ${start.x} ${start.y}` +
+           createRoundedCorner(start.x, start.y, start.x, end.y, end.x, end.y, cornerRadius) +
+           `L ${end.x} ${end.y}`;
   }
 
   // Determine if we should go horizontal first or vertical first
@@ -193,31 +244,47 @@ function calculateOrthogonalPath(start: Position, end: Position): string {
   if (startAnchor === 'right' && dx > 0) {
     // Going right from start
     const midX = start.x + Math.max(adx / 2, minDistance);
-    return `M ${start.x} ${start.y} L ${midX} ${start.y} L ${midX} ${end.y} L ${end.x} ${end.y}`;
+    return `M ${start.x} ${start.y}` +
+           createRoundedCorner(start.x, start.y, midX, start.y, midX, end.y, cornerRadius) +
+           createRoundedCorner(midX, start.y, midX, end.y, end.x, end.y, cornerRadius) +
+           `L ${end.x} ${end.y}`;
   } else if (startAnchor === 'left' && dx < 0) {
     // Going left from start
     const midX = start.x - Math.max(adx / 2, minDistance);
-    return `M ${start.x} ${start.y} L ${midX} ${start.y} L ${midX} ${end.y} L ${end.x} ${end.y}`;
+    return `M ${start.x} ${start.y}` +
+           createRoundedCorner(start.x, start.y, midX, start.y, midX, end.y, cornerRadius) +
+           createRoundedCorner(midX, start.y, midX, end.y, end.x, end.y, cornerRadius) +
+           `L ${end.x} ${end.y}`;
   } else if (startAnchor === 'bottom' && dy > 0) {
     // Going down from start
     const midY = start.y + Math.max(ady / 2, minDistance);
-    return `M ${start.x} ${start.y} L ${start.x} ${midY} L ${end.x} ${midY} L ${end.x} ${end.y}`;
+    return `M ${start.x} ${start.y}` +
+           createRoundedCorner(start.x, start.y, start.x, midY, end.x, midY, cornerRadius) +
+           createRoundedCorner(start.x, midY, end.x, midY, end.x, end.y, cornerRadius) +
+           `L ${end.x} ${end.y}`;
   } else if (startAnchor === 'top' && dy < 0) {
     // Going up from start
     const midY = start.y - Math.max(ady / 2, minDistance);
-    return `M ${start.x} ${start.y} L ${start.x} ${midY} L ${end.x} ${midY} L ${end.x} ${end.y}`;
+    return `M ${start.x} ${start.y}` +
+           createRoundedCorner(start.x, start.y, start.x, midY, end.x, midY, cornerRadius) +
+           createRoundedCorner(start.x, midY, end.x, midY, end.x, end.y, cornerRadius) +
+           `L ${end.x} ${end.y}`;
   } else {
     // For other cases, use a more complex path with multiple segments
     if (adx > ady) {
       // Horizontal distance is greater, so go horizontal first
       const thirdX = start.x + dx / 3;
-      // const twoThirdsX = start.x + 2 * dx / 3; // Not used currently
-      return `M ${start.x} ${start.y} L ${thirdX} ${start.y} L ${thirdX} ${end.y} L ${end.x} ${end.y}`;
+      return `M ${start.x} ${start.y}` +
+             createRoundedCorner(start.x, start.y, thirdX, start.y, thirdX, end.y, cornerRadius) +
+             createRoundedCorner(thirdX, start.y, thirdX, end.y, end.x, end.y, cornerRadius) +
+             `L ${end.x} ${end.y}`;
     } else {
       // Vertical distance is greater, so go vertical first
       const thirdY = start.y + dy / 3;
-      // const twoThirdsY = start.y + 2 * dy / 3; // Not used currently
-      return `M ${start.x} ${start.y} L ${start.x} ${thirdY} L ${end.x} ${thirdY} L ${end.x} ${end.y}`;
+      return `M ${start.x} ${start.y}` +
+             createRoundedCorner(start.x, start.y, start.x, thirdY, end.x, thirdY, cornerRadius) +
+             createRoundedCorner(start.x, thirdY, end.x, thirdY, end.x, end.y, cornerRadius) +
+             `L ${end.x} ${end.y}`;
     }
   }
 }
@@ -262,14 +329,17 @@ export function isValidConnection(_sourceType: string, _targetType: string): boo
  * @returns SVG path data string (without the initial M command)
  */
 function calculateOrthogonalSegment(start: Position, end: Position): string {
+  // Corner radius for rounded corners
+  const cornerRadius = 8;
+
   // If the points are aligned horizontally or vertically, use a direct line
-  // Direction variables not used in this simple case
   if (start.x === end.x || start.y === end.y) {
     return ` L ${end.x} ${end.y}`;
   }
 
-  // Otherwise, create an L-shaped path
-  return ` L ${end.x} ${start.y} L ${end.x} ${end.y}`;
+  // Otherwise, create an L-shaped path with a rounded corner
+  return createRoundedCorner(start.x, start.y, end.x, start.y, end.x, end.y, cornerRadius) +
+         ` L ${end.x} ${end.y}`;
 }
 
 /**

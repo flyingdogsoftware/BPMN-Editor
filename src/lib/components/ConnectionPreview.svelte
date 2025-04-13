@@ -21,5 +21,7 @@
 <style>
   .connection-preview {
     pointer-events: none;
+    stroke-linecap: round;
+    stroke-linejoin: round;
   }
 </style>
