@@ -5,6 +5,12 @@
   import { onMount } from 'svelte';
   import { importBpmnXml } from '$lib/utils/xml/bpmnXmlParser';
 
+  // Import new utility modules
+  import { createElement } from '$lib/utils/elementFactory';
+  import { handleDragStart, calculateDragPosition, handleElementDrop } from '$lib/utils/dragHandlers';
+  import { handleResizeStart, calculateResizeValues } from '$lib/utils/resizeHandlers';
+  import { findClosestConnectionPoint, handleConnectionStart, handleConnectionComplete } from '$lib/utils/connectionHandlers';
+
   // Function to import a test BPMN file with pools and lanes
   async function importTestPoolsFile() {
     try {
@@ -104,6 +110,10 @@
   import LabelEditDialog from './LabelEditDialog.svelte';
   import Toolbar from './toolbar/Toolbar.svelte';
   import ResizeHandle from './ResizeHandle.svelte';
+
+  // Import new components
+  import Canvas from './Canvas.svelte';
+  import ElementFactory from './ElementFactory.svelte';
 
   // Listen for edit-label events from Connection components
   onMount(() => {
@@ -658,7 +668,7 @@
   }
 
   // Handle resize start
-  function handleResizeStart(element, position) {
+  function startResize(element, position) {
     isResizing = true;
     resizingElementId = element.id;
     resizeHandlePosition = position;
@@ -1565,28 +1575,18 @@
     role="region"
     aria-label="BPMN Editor Drop Zone"
   >
-    <button
-      class="canvas-scroll-container"
-      on:mousedown={handleCanvasMouseDown}
-      on:wheel={handleCanvasWheel}
-      class:dragging={isDraggingCanvas}
-      aria-label="BPMN Editor Canvas"
-      type="button"
+    {#if isDragOver}
+      <div class="drop-indicator" style="left: {dropX}px; top: {dropY}px;"></div>
+    {/if}
+    <Canvas
+      width={canvasWidth}
+      height={canvasHeight}
+      viewportX={viewportX}
+      viewportY={viewportY}
+      isDraggingCanvas={isDraggingCanvas}
+      onMouseDown={handleCanvasMouseDown}
+      onWheel={handleCanvasWheel}
     >
-      {#if isDragOver}
-        <div class="drop-indicator" style="left: {dropX}px; top: {dropY}px;"></div>
-      {/if}
-      <svg
-        width={canvasWidth}
-        height={canvasHeight}
-        class="canvas"
-        style="transform: translate({viewportX}px, {viewportY}px);"
-      >
-      <!-- Draw grid -->
-      <pattern id="grid" width="20" height="20" patternUnits="userSpaceOnUse">
-        <path d="M 20 0 L 0 0 0 20" fill="none" stroke="gray" stroke-width="0.5" />
-      </pattern>
-      <rect width="100%" height="100%" fill="url(#grid)" />
 
       <!-- Define markers for connections -->
       <defs>
@@ -1648,7 +1648,7 @@
                 x={element.x + element.width}
                 y={element.y + element.height/2}
                 position="right"
-                onDragStart={() => handleResizeStart(element, 'right')}
+                onDragStart={() => startResize(element, 'right')}
                 onDrag={(dx, dy) => handleResizeDrag(dx, dy, 'right', element)}
                 onDragEnd={(dx, dy) => handleResizeEnd(dx, dy, 'right', element)}
               />
@@ -1657,7 +1657,7 @@
                 x={element.x + element.width/2}
                 y={element.y + element.height}
                 position="bottom"
-                onDragStart={() => handleResizeStart(element, 'bottom')}
+                onDragStart={() => startResize(element, 'bottom')}
                 onDrag={(dx, dy) => handleResizeDrag(dx, dy, 'bottom', element)}
                 onDragEnd={(dx, dy) => handleResizeEnd(dx, dy, 'bottom', element)}
               />
@@ -1666,7 +1666,7 @@
                 x={element.x + element.width}
                 y={element.y + element.height}
                 position="bottom-right"
-                onDragStart={() => handleResizeStart(element, 'bottom-right')}
+                onDragStart={() => startResize(element, 'bottom-right')}
                 onDrag={(dx, dy) => handleResizeDrag(dx, dy, 'bottom-right', element)}
                 onDragEnd={(dx, dy) => handleResizeEnd(dx, dy, 'bottom-right', element)}
               />
@@ -1785,7 +1785,7 @@
                           x={element.x + element.width/2}
                           y={lane.y + lane.height}
                           position="bottom"
-                          onDragStart={() => handleResizeStart(lane, 'bottom')}
+                          onDragStart={() => startResize(lane, 'bottom')}
                           onDrag={(dx, dy) => handleResizeDrag(dx, dy, 'bottom', lane)}
                           onDragEnd={(dx, dy) => handleResizeEnd(dx, dy, 'bottom', lane)}
                         />
@@ -1870,7 +1870,7 @@
                           x={lane.x + lane.width}
                           y={element.y + element.height/2}
                           position="right"
-                          onDragStart={() => handleResizeStart(lane, 'right')}
+                          onDragStart={() => startResize(lane, 'right')}
                           onDrag={(dx, dy) => handleResizeDrag(dx, dy, 'right', lane)}
                           onDragEnd={(dx, dy) => handleResizeEnd(dx, dy, 'right', lane)}
                         />
@@ -2693,8 +2693,7 @@
           isValid={connectionPreviewValid}
         />
       {/if}
-    </svg>
-    </div>
+    </Canvas>
   </div>
 
   <!-- Label Edit Dialog -->
@@ -2705,6 +2704,7 @@
     on:save={(e) => handleLabelSave(e.detail)}
     on:close={closeLabelDialog}
   />
+</div>
 
 <style>
   .bpmn-editor {
