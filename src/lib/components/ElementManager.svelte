@@ -1,64 +1,113 @@
-<script>
+<script lang="ts">
   import { elementManager } from '$lib/services/ElementManager';
   import { createEventDispatcher } from 'svelte';
+  import type {
+    Position,
+    Size,
+    BpmnElementUnion,
+    BpmnTask,
+    BpmnEvent,
+    BpmnGateway,
+    BpmnSubProcess,
+    BpmnDataObject,
+    BpmnDataStore,
+    BpmnTextAnnotation,
+    BpmnPool,
+    BpmnLane
+  } from '$lib/types/bpmn';
 
   // Create event dispatcher
   const dispatch = createEventDispatcher();
 
   // Props
-  export let originalPositions = {};
-  let originalSizes = {};
+  export let originalPositions: Record<string, Position> = {};
+  let originalSizes: Record<string, Size> = {};
 
   // Element creation methods
-  function addTask(taskType = 'user', x = 200, y = 200) {
+  function addTask(
+    taskType: string = 'user',
+    x: number = 200,
+    y: number = 200
+  ): BpmnElementUnion {
     const newTask = elementManager.addTask(taskType, x, y);
     dispatch('elementCreated', { element: newTask });
     return newTask;
   }
 
-  function addEvent(eventType = 'start', eventDefinition = 'none', x = 400, y = 200) {
+  function addEvent(
+    eventType: string = 'start',
+    eventDefinition: string = 'none',
+    x: number = 400,
+    y: number = 200
+  ): BpmnElementUnion {
     const newEvent = elementManager.addEvent(eventType, eventDefinition, x, y);
     dispatch('elementCreated', { element: newEvent });
     return newEvent;
   }
 
-  function addGateway(gatewayType = 'exclusive', x = 300, y = 300) {
+  function addGateway(
+    gatewayType: string = 'exclusive',
+    x: number = 300,
+    y: number = 300
+  ): BpmnElementUnion {
     const newGateway = elementManager.addGateway(gatewayType, x, y);
     dispatch('elementCreated', { element: newGateway });
     return newGateway;
   }
 
-  function addSubProcess(subProcessType = 'embedded', x = 200, y = 300) {
+  function addSubProcess(
+    subProcessType: string = 'embedded',
+    x: number = 200,
+    y: number = 300
+  ): BpmnElementUnion {
     const newSubProcess = elementManager.addSubProcess(subProcessType, x, y);
     dispatch('elementCreated', { element: newSubProcess });
     return newSubProcess;
   }
 
-  function addDataObject(isInput = false, isOutput = false, x = 500, y = 200) {
+  function addDataObject(
+    isInput: boolean = false,
+    isOutput: boolean = false,
+    x: number = 500,
+    y: number = 200
+  ): BpmnElementUnion {
     const newDataObject = elementManager.addDataObject(isInput, isOutput, x, y);
     dispatch('elementCreated', { element: newDataObject });
     return newDataObject;
   }
 
-  function addDataStore(x = 500, y = 300) {
+  function addDataStore(
+    x: number = 500,
+    y: number = 300
+  ): BpmnElementUnion {
     const newDataStore = elementManager.addDataStore(x, y);
     dispatch('elementCreated', { element: newDataStore });
     return newDataStore;
   }
 
-  function addTextAnnotation(x = 600, y = 200) {
+  function addTextAnnotation(
+    x: number = 600,
+    y: number = 200
+  ): BpmnElementUnion {
     const newTextAnnotation = elementManager.addTextAnnotation(x, y);
     dispatch('elementCreated', { element: newTextAnnotation });
     return newTextAnnotation;
   }
 
-  function addPool(x = 100, y = 100, isHorizontal = true) {
+  function addPool(
+    x: number = 100,
+    y: number = 100,
+    isHorizontal: boolean = true
+  ): BpmnElementUnion {
     const newPool = elementManager.addPool(x, y, isHorizontal);
     dispatch('elementCreated', { element: newPool });
     return newPool;
   }
 
-  function addLane(poolId, label = 'New Lane') {
+  function addLane(
+    poolId: string,
+    label: string = 'New Lane'
+  ): BpmnElementUnion | null {
     const newLane = elementManager.addLane(poolId, label);
     if (newLane) {
       dispatch('elementCreated', { element: newLane });
@@ -67,22 +116,26 @@
   }
 
   // Element manipulation methods
-  function handleElementDrag(elementId, dx, dy) {
+  function handleElementDrag(
+    elementId: string,
+    dx: number,
+    dy: number
+  ): void {
     elementManager.handleElementDrag(elementId, dx, dy, originalPositions);
     dispatch('elementDragged', { elementId, dx, dy });
   }
 
-  function handleElementDragEnd(elementId) {
+  function handleElementDragEnd(elementId: string): void {
     elementManager.handleElementDragEnd(elementId);
     dispatch('elementDragEnd', { elementId });
   }
 
   function handleElementResize(
-    elementId,
-    dx,
-    dy,
-    position
-  ) {
+    elementId: string,
+    dx: number,
+    dy: number,
+    position: string
+  ): void {
     const originalSize = originalSizes[elementId];
     const originalPos = originalPositions[elementId];
 
@@ -100,11 +153,11 @@
   }
 
   function handleElementResizeEnd(
-    elementId,
-    dx,
-    dy,
-    position
-  ) {
+    elementId: string,
+    dx: number,
+    dy: number,
+    position: string
+  ): void {
     const originalSize = originalSizes[elementId];
     const originalPos = originalPositions[elementId];
 
