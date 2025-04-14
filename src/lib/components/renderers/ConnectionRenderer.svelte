@@ -1,6 +1,6 @@
 <script>
-  import { bpmnStore } from '$lib/stores/bpmnStore';
-  import { calculateConnectionPoints } from '$lib/utils/connectionUtils';
+  import { bpmnStore } from '../../stores/bpmnStore';
+  import { calculateConnectionPoints } from '../../utils/connectionUtils';
   import Connection from '../Connection.svelte';
   import ConnectionPreview from '../ConnectionPreview.svelte';
 

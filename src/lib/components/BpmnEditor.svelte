@@ -1,15 +1,15 @@
-<script lang="ts">
-  import { bpmnStore } from '$lib/stores/bpmnStore';
-  import { snapPositionToGrid, snapToGrid } from '$lib/utils/gridUtils';
-  import { isValidConnection, calculateConnectionPoints } from '$lib/utils/connectionUtils';
+<script >
+  import { bpmnStore } from '../stores/bpmnStore';
+  import { snapPositionToGrid, snapToGrid } from '../utils/gridUtils';
+  import { isValidConnection, calculateConnectionPoints } from '../utils/connectionUtils';
   import { onMount } from 'svelte';
-  import { importBpmnXml } from '$lib/utils/xml/bpmnXmlParser';
+  import { importBpmnXml } from '../utils/xml/bpmnXmlParser';
 
   // Import new utility modules
-  import { createElement } from '$lib/utils/elementFactory';
-  import { handleDragStart, calculateDragPosition, handleElementDrop } from '$lib/utils/dragHandlers';
-  import { handleResizeStart, calculateResizeValues } from '$lib/utils/resizeHandlers';
-  import { findClosestConnectionPoint, handleConnectionStart, handleConnectionComplete } from '$lib/utils/connectionHandlers';
+  import { createElement } from '../utils/elementFactory';
+  import { handleDragStart, calculateDragPosition, handleElementDrop } from '../utils/dragHandlers';
+  import { handleResizeStart, calculateResizeValues } from '../utils/resizeHandlers';
+  import { findClosestConnectionPoint, handleConnectionStart, handleConnectionComplete } from '../utils/connectionHandlers';
 
   // Import ElementManagerComponent
   import ElementManagerComponent from './ElementManagerComp.svelte';

@@ -1,4 +1,4 @@
-<script lang="ts">
+<script>
   import TaskRenderer from './TaskRenderer.svelte';
   import EventRenderer from './EventRenderer.svelte';
   import GatewayRenderer from './GatewayRenderer.svelte';

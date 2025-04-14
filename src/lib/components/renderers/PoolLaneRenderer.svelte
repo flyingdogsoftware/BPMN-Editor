@@ -1,5 +1,5 @@
-<script lang="ts">
-  import { bpmnStore } from '$lib/stores/bpmnStore';
+<script >
+  import { bpmnStore } from '../../stores/bpmnStore';
   import ResizeHandle from '../ResizeHandle.svelte';
   
   // Props

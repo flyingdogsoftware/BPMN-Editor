@@ -18,7 +18,7 @@ import type {
   SubProcessType,
   ConnectionType,
   ElementType
-} from '$lib/types/bpmn';
+} from '../types/bpmn';
 import { snapPositionToGrid } from './gridUtils';
 
 /**

@@ -1,6 +1,6 @@
 <script>
   import { onMount } from 'svelte';
-  import { importBpmnXml } from '$lib/utils/xml/bpmnXmlParser';
+  import { importBpmnXml } from '../../lib/utils/xml/bpmnXmlParser';
   
   let importedElements = [];
   let pools = [];

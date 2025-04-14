@@ -1,13 +1,13 @@
 <script>
-  import { bpmnStore } from '$lib/stores/bpmnStore';
+  import { bpmnStore } from '../stores/bpmnStore';
   import {
     calculateConnectionPath,
     calculateLabelPosition,
     generateVirtualBendpoints,
     updateWaypoint,
     calculateConnectionPoints
-  } from '$lib/utils/connectionUtils';
-  import { snapToGrid } from '$lib/utils/gridUtils';
+  } from '../utils/connectionUtils';
+  import { snapToGrid } from '../utils/gridUtils';
   import BendPoint from './BendPoint.svelte';
   import ConnectionEndpointHandle from './ConnectionEndpointHandle.svelte';
   import ConnectionLabel from './ConnectionLabel.svelte';

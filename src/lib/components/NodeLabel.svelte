@@ -1,7 +1,7 @@
-<script lang="ts">
-  import { bpmnStore } from '$lib/stores/bpmnStore';
-  import { snapToGrid } from '$lib/utils/gridUtils';
-  import type { BpmnElementUnion, Position, BpmnNode } from '$lib/types/bpmn';
+<script>
+  import { bpmnStore } from '../stores/bpmnStore';
+  import { snapToGrid } from '../utils/gridUtils';
+  import type { BpmnElementUnion, Position, BpmnNode } from '../types/bpmn';
   import { onMount, tick } from 'svelte';
 
   // Props

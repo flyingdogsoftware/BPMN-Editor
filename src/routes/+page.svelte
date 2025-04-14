@@ -1,5 +1,5 @@
-<script lang="ts">
-  import BpmnEditor from '$lib/components/BpmnEditor.svelte';
+<script>
+  import BpmnEditor from '../lib/components/BpmnEditor.svelte';
 </script>
 
 <div class="editor-container">

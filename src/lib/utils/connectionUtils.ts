@@ -1,4 +1,4 @@
-import type { AnchorPosition, BpmnElementUnion, ConnectionPoint, Position } from '$lib/models/bpmnElements';
+import type { AnchorPosition, BpmnElementUnion, ConnectionPoint, Position } from '../models/bpmnElements';
 import { snapToGrid as gridSnap } from './gridUtils';
 
 /**

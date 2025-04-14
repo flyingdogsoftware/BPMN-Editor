@@ -1,5 +1,5 @@
 <script>
-  import { elementManager } from '$lib/services/ElementManager';
+  import { elementManager } from '../services/ElementManager';
   import { createEventDispatcher } from 'svelte';
 
   // Create event dispatcher

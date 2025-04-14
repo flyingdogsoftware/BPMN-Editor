@@ -1,4 +1,4 @@
-<script lang="ts">
+<script >
   import '../styles/global.css';
 </script>
 

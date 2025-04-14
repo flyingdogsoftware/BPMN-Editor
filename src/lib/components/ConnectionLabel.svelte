@@ -1,6 +1,6 @@
 <script>
-  import { bpmnStore } from '$lib/stores/bpmnStore';
-  import { snapToGrid } from '$lib/utils/gridUtils';
+  import { bpmnStore } from '../stores/bpmnStore';
+  import { snapToGrid } from '../utils/gridUtils';
   import { onMount, tick } from 'svelte';
 
   // Props

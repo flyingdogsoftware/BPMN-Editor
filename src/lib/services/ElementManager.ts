@@ -1,7 +1,7 @@
-import { bpmnStore } from '$lib/stores/bpmnStore';
-import type { BpmnElementUnion, Position } from '$lib/models/bpmnElements';
-import { isNode } from '$lib/models/bpmnElements';
-import { snapPositionToGrid, snapToGrid } from '$lib/utils/gridUtils';
+import { bpmnStore } from '../stores/bpmnStore';
+import type { BpmnElementUnion, Position } from '../models/bpmnElements';
+import { isNode } from '../models/bpmnElements';
+import { snapPositionToGrid, snapToGrid } from '../utils/gridUtils';
 import {
   createTask,
   createEvent,
@@ -12,7 +12,7 @@ import {
   createTextAnnotation,
   createPool,
   createLane
-} from '$lib/utils/elementFactory';
+} from '../utils/elementFactory';
 
 /**
  * ElementManager Service

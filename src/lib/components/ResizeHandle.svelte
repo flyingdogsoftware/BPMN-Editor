@@ -1,5 +1,5 @@
 <script>
-  import { snapToGrid } from '$lib/utils/gridUtils';
+  import { snapToGrid } from '../utils/gridUtils';
 
   // Props
   export let x;

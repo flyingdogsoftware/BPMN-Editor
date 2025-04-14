@@ -1,4 +1,4 @@
-<script lang="ts">
+<script>
   // Props
   export let element;
   export let isDragging = false;
