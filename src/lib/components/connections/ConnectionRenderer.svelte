@@ -44,6 +44,10 @@
     // Calculate the path
     const path = calculateOrthogonalPath(start, end, connection.waypoints || []);
 
+    // Log path for debugging
+    // console.log('Connection path:', path);
+    // console.log('Connection waypoints:', connection.waypoints);
+
     return {
       id: connection.id,
       path,
@@ -173,6 +177,75 @@
     // Add event listeners for mouse move and mouse up
     window.addEventListener('mousemove', handleMouseMove);
     window.addEventListener('mouseup', handleMouseUp);
+  }
+
+  // Handle segment handle drag start from ConnectionSegment
+  function handleSegmentHandleDragStart(connectionId, segmentIndex, event) {
+    const connection = connections.find(c => c.id === connectionId);
+    if (!connection) return;
+
+    // Calculate the position where the new waypoint should be added
+    const source = elements.find(el => el.id === connection.sourceId);
+    const target = elements.find(el => el.id === connection.targetId);
+
+    if (!source || !target) return;
+
+    // Get the start and end positions
+    const start = {
+      x: source.x + source.width / 2,
+      y: source.y + source.height / 2
+    };
+
+    const end = {
+      x: target.x + target.width / 2,
+      y: target.y + target.height / 2
+    };
+
+    // Get all points in order
+    const points = [start, ...(connection.waypoints || []), end];
+
+    // We need to determine where to insert the new waypoint
+    // segmentIndex refers to the segment between points[segmentIndex] and points[segmentIndex + 1]
+    if (segmentIndex >= 0 && segmentIndex < points.length - 1) {
+      const p1 = points[segmentIndex];
+      const p2 = points[segmentIndex + 1];
+
+      // Create a new waypoint at the midpoint
+      const newWaypoint = {
+        x: (p1.x + p2.x) / 2,
+        y: (p1.y + p2.y) / 2
+      };
+
+      // Determine the insertion index in the waypoints array
+      let insertIndex;
+      if (segmentIndex === 0) {
+        // If it's the first segment (start to first waypoint or end)
+        insertIndex = 0;
+      } else {
+        // Otherwise, it's after the (segmentIndex - 1)th waypoint
+        insertIndex = segmentIndex;
+      }
+
+      // Create updated waypoints array
+      const updatedWaypoints = [...(connection.waypoints || [])];
+      updatedWaypoints.splice(insertIndex, 0, newWaypoint);
+
+      // Update the connection
+      bpmnStore.updateElement(connection.id, { waypoints: updatedWaypoints });
+
+      // Start dragging the new waypoint
+      isDragging = true;
+      dragType = 'waypoint';
+      dragConnectionId = connection.id;
+      dragWaypointIndex = insertIndex;
+      dragStartX = event.clientX;
+      dragStartY = event.clientY;
+      originalWaypoints = [...(connection.waypoints || [])];
+
+      // Add event listeners for mouse move and mouse up
+      window.addEventListener('mousemove', handleMouseMove);
+      window.addEventListener('mouseup', handleMouseUp);
+    }
   }
 
   // Handle mouse move during drag
@@ -332,6 +405,10 @@
       {path}
       style={getConnectionStyle(connection)}
       isSelected={id === selectedConnectionId}
+      {start}
+      {end}
+      waypoints={connection.waypoints || []}
+      onHandleDragStart={(segmentIndex, event) => handleSegmentHandleDragStart(id, segmentIndex, event)}
     />
 
     <!-- Connection Label -->
@@ -400,28 +477,6 @@
           />
         {/each}
       {/if}
-
-      <!-- Add segment handles for creating new waypoints -->
-      {#if path}
-        <!-- Calculate midpoints of each segment for adding new waypoints -->
-        {#if !connection.waypoints || connection.waypoints.length === 0}
-          <!-- For direct connections with no waypoints, add a handle in the middle -->
-          <circle
-            cx={(start.x + end.x) / 2}
-            cy={(start.y + end.y) / 2}
-            r="5"
-            fill="white"
-            stroke="#3498db"
-            stroke-width="2"
-            stroke-dasharray="2,2"
-            class="segment-handle"
-            on:mousedown={(e) => handleSegmentDragStart(e, connection, -1)}
-            role="button"
-            tabindex="0"
-            aria-label="Add waypoint"
-          />
-        {/if}
-      {/if}
     {/if}
   </g>
 {/each}
@@ -440,10 +495,6 @@
   /* Add a custom focus style for accessibility */
   .connection:focus {
     outline: none;
-  }
-
-  .connection:focus path {
-    filter: drop-shadow(0 0 5px rgba(52, 152, 219, 0.8));
   }
 
   .connection-handle {

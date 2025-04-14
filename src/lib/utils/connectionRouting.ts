@@ -72,7 +72,7 @@ function calculateDirectOrthogonalPath(start: Position, end: Position): string {
   const cornerRadius = 10;
 
   // If the points are aligned horizontally or vertically, use a direct line
-  if (start.x === end.x || start.y === end.y) {
+  if (Math.abs(start.x - end.x) < 0.001 || Math.abs(start.y - end.y) < 0.001) {
     path += ` L ${end.x} ${end.y}`;
     return path;
   }
@@ -81,19 +81,31 @@ function calculateDirectOrthogonalPath(start: Position, end: Position): string {
   // This simple heuristic can be improved based on element types and positions
   const goHorizontalFirst = Math.abs(dx) > Math.abs(dy);
 
+  // Debug logging can be uncommented for troubleshooting
+  // console.log('Direct path calculation:', { start, end, goHorizontalFirst });
+
   if (goHorizontalFirst) {
     // Go horizontal first, then vertical
     // Create a path with only 3 segments (including the start point)
     path += ` L ${end.x} ${start.y}`;
     path += createRoundedCorner(end.x, start.y, end.x, end.y, end.x, end.y, cornerRadius);
     path += ` L ${end.x} ${end.y}`;
+
+    // Debug logging can be uncommented for troubleshooting
+    // console.log('Corner point (horizontal first):', { x: end.x, y: start.y });
   } else {
     // Go vertical first, then horizontal
     // Create a path with only 3 segments (including the start point)
     path += ` L ${start.x} ${end.y}`;
     path += createRoundedCorner(start.x, end.y, end.x, end.y, end.x, end.y, cornerRadius);
     path += ` L ${end.x} ${end.y}`;
+
+    // Debug logging can be uncommented for troubleshooting
+    // console.log('Corner point (vertical first):', { x: start.x, y: end.y });
   }
+
+  // Debug logging can be uncommented for troubleshooting
+  // console.log('Final path:', path);
 
   return path;
 }
@@ -328,4 +340,128 @@ export function adjustWaypoint(
   }
 
   return updatedWaypoints;
+}
+
+/**
+ * Calculate the midpoints of each segment in a path
+ * @param start The start position
+ * @param end The end position
+ * @param waypoints The waypoints for the path
+ * @returns Array of midpoints with their orientation
+ */
+export function calculateSegmentMidpoints(
+  start: Position,
+  end: Position,
+  waypoints: Position[] = []
+): Array<{position: Position, orientation: 'horizontal' | 'vertical'}> {
+  // If there are no waypoints, we need to calculate the orthogonal path
+  if (!waypoints || waypoints.length === 0) {
+    return calculateDirectPathMidpoints(start, end);
+  }
+
+  const allPoints: Position[] = [start, ...waypoints, end];
+  const midpoints: Array<{position: Position, orientation: 'horizontal' | 'vertical'}> = [];
+
+  // Calculate midpoints between consecutive points
+  for (let i = 0; i < allPoints.length - 1; i++) {
+    const p1 = allPoints[i];
+    const p2 = allPoints[i + 1];
+
+    // Determine if the segment is horizontal or vertical
+    const isHorizontal = Math.abs(p1.y - p2.y) < 0.001; // Use small epsilon for floating point comparison
+    const orientation = isHorizontal ? 'horizontal' : 'vertical';
+
+    // Calculate the midpoint
+    const midpoint = {
+      position: {
+        x: (p1.x + p2.x) / 2,
+        y: (p1.y + p2.y) / 2
+      },
+      orientation
+    };
+
+    midpoints.push(midpoint);
+  }
+
+  return midpoints;
+}
+
+/**
+ * Calculate midpoints for a direct orthogonal path with no waypoints
+ * @param start The start position
+ * @param end The end position
+ * @returns Array of midpoints with their orientation
+ */
+function calculateDirectPathMidpoints(
+  start: Position,
+  end: Position
+): Array<{position: Position, orientation: 'horizontal' | 'vertical'}> {
+  const dx = end.x - start.x;
+  const dy = end.y - start.y;
+  const midpoints: Array<{position: Position, orientation: 'horizontal' | 'vertical'}> = [];
+
+  // If the points are aligned horizontally or vertically, there's just one segment
+  if (Math.abs(start.x - end.x) < 0.001 || Math.abs(start.y - end.y) < 0.001) {
+    const isHorizontal = Math.abs(start.y - end.y) < 0.001;
+    midpoints.push({
+      position: {
+        x: (start.x + end.x) / 2,
+        y: (start.y + end.y) / 2
+      },
+      orientation: isHorizontal ? 'horizontal' : 'vertical'
+    });
+    return midpoints;
+  }
+
+  // Determine whether to go horizontal or vertical first
+  const goHorizontalFirst = Math.abs(dx) > Math.abs(dy);
+
+  if (goHorizontalFirst) {
+    // First segment: horizontal from start to corner
+    midpoints.push({
+      position: {
+        x: start.x + dx / 2, // Midpoint of horizontal segment
+        y: start.y
+      },
+      orientation: 'horizontal'
+    });
+
+    // Second segment: vertical from corner to end
+    midpoints.push({
+      position: {
+        x: end.x,
+        y: start.y + dy / 2 // Midpoint of vertical segment
+      },
+      orientation: 'vertical'
+    });
+
+    // Debug logging can be uncommented for troubleshooting
+    // console.log('Corner point (horizontal first):', { x: end.x, y: start.y });
+  } else {
+    // First segment: vertical from start to corner
+    midpoints.push({
+      position: {
+        x: start.x,
+        y: start.y + dy / 2 // Midpoint of vertical segment
+      },
+      orientation: 'vertical'
+    });
+
+    // Second segment: horizontal from corner to end
+    midpoints.push({
+      position: {
+        x: start.x + dx / 2, // Midpoint of horizontal segment
+        y: end.y
+      },
+      orientation: 'horizontal'
+    });
+
+    // Debug logging can be uncommented for troubleshooting
+    // console.log('Corner point (vertical first):', { x: start.x, y: end.y });
+  }
+
+  // Debug logging can be uncommented for troubleshooting
+  // console.log('Direct path midpoints:', midpoints);
+
+  return midpoints;
 }

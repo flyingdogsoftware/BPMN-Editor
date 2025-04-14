@@ -2,90 +2,56 @@
   // Props
   export let x = 0;
   export let y = 0;
-  export let type = 'waypoint'; // 'source', 'target', or 'waypoint'
+  export let orientation = 'horizontal'; // 'horizontal' or 'vertical'
   export let onDragStart = () => {};
-  export let onDrag = (dx, dy) => {};
-  export let onDragEnd = () => {};
-  
-  // State
-  let isDragging = false;
-  let startX = 0;
-  let startY = 0;
-  
-  // Handle mouse down
+  export let isVisible = true;
+
+  // Handle mouse down event
   function handleMouseDown(event) {
     event.stopPropagation();
-    
-    isDragging = true;
-    startX = event.clientX;
-    startY = event.clientY;
-    
-    // Call the drag start callback
-    onDragStart();
-    
-    // Add event listeners for mouse move and mouse up
-    window.addEventListener('mousemove', handleMouseMove);
-    window.addEventListener('mouseup', handleMouseUp);
+    event.preventDefault();
+    onDragStart(event);
   }
-  
-  // Handle mouse move
-  function handleMouseMove(event) {
-    if (!isDragging) return;
-    
-    const dx = event.clientX - startX;
-    const dy = event.clientY - startY;
-    
-    // Call the drag callback
-    onDrag(dx, dy);
-    
-    // Update the start position
-    startX = event.clientX;
-    startY = event.clientY;
-  }
-  
-  // Handle mouse up
-  function handleMouseUp() {
-    if (!isDragging) return;
-    
-    isDragging = false;
-    
-    // Call the drag end callback
-    onDragEnd();
-    
-    // Remove event listeners
-    window.removeEventListener('mousemove', handleMouseMove);
-    window.removeEventListener('mouseup', handleMouseUp);
-  }
-  
-  // Determine the handle style based on the type
-  $: handleStyle = type === 'source' ? 'source-handle' :
-                   type === 'target' ? 'target-handle' : 'waypoint-handle';
 </script>
 
-<circle
-  class="connection-handle {handleStyle}"
-  cx={x}
-  cy={y}
-  r={type === 'waypoint' ? 5 : 6}
-  on:mousedown={handleMouseDown}
-/>
+{#if isVisible}
+  <g
+    class="connection-handle {orientation}"
+    on:mousedown={handleMouseDown}
+    role="button"
+    tabindex="0"
+    aria-label="Connection handle"
+  >
+    <rect
+      x={orientation === 'horizontal' ? x - 12 : x - 6}
+      y={orientation === 'horizontal' ? y - 6 : y - 12}
+      width={orientation === 'horizontal' ? 24 : 12}
+      height={orientation === 'horizontal' ? 12 : 24}
+      rx="4"
+      ry="4"
+      fill="#3498db"
+      stroke="#2980b9"
+      stroke-width="2"
+    />
+    <!-- Debug circle can be uncommented for troubleshooting
+    <circle cx={x} cy={y} r="2" fill="red" />
+    -->
+  </g>
+{/if}
 
 <style>
   .connection-handle {
     cursor: move;
-    fill: white;
-    stroke-width: 2;
+    pointer-events: all;
+    transition: opacity 0.2s;
   }
-  
-  .source-handle {
-    stroke: #27ae60;
+
+  .connection-handle rect {
+    opacity: 0.8;
   }
-  
-  .target-handle {
-    stroke: #e74c3c;
-  }
-  
-  .waypoint-handle {
-    stroke: #3498db;
+
+  .connection-handle rect:hover {
+    opacity: 1;
+    filter: drop-shadow(0 0 3px rgba(52, 152, 219, 0.7));
   }
 </style>
