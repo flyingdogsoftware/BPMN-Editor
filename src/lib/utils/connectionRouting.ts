@@ -1,0 +1,314 @@
+import type { Position } from '../models/bpmnElements';
+import { snapToGrid } from './gridUtils';
+
+/**
+ * Calculate an orthogonal path between two points
+ * @param start The start position
+ * @param end The end position
+ * @param waypoints Optional waypoints for the path
+ * @returns SVG path data string
+ */
+export function calculateOrthogonalPath(
+  start: Position,
+  end: Position,
+  waypoints: Position[] = []
+): string {
+  // If waypoints are provided, use them
+  if (waypoints && waypoints.length > 0) {
+    return calculatePathWithWaypoints(start, end, waypoints);
+  }
+
+  // Otherwise, calculate a direct orthogonal path
+  return calculateDirectOrthogonalPath(start, end);
+}
+
+/**
+ * Calculate a path with waypoints
+ * @param start The start position
+ * @param end The end position
+ * @param waypoints The waypoints for the path
+ * @returns SVG path data string
+ */
+function calculatePathWithWaypoints(
+  start: Position,
+  end: Position,
+  waypoints: Position[]
+): string {
+  let path = `M ${start.x} ${start.y}`;
+  
+  // Add each waypoint
+  waypoints.forEach((point, index) => {
+    // For the first waypoint, create a segment from start to waypoint
+    if (index === 0) {
+      path += createOrthogonalSegment(start, point);
+    } else {
+      // For subsequent waypoints, create a segment from previous waypoint
+      path += createOrthogonalSegment(waypoints[index - 1], point);
+    }
+  });
+  
+  // Add final segment from last waypoint to end
+  if (waypoints.length > 0) {
+    path += createOrthogonalSegment(waypoints[waypoints.length - 1], end);
+  }
+  
+  return path;
+}
+
+/**
+ * Calculate a direct orthogonal path between two points
+ * @param start The start position
+ * @param end The end position
+ * @returns SVG path data string
+ */
+function calculateDirectOrthogonalPath(start: Position, end: Position): string {
+  const dx = end.x - start.x;
+  const dy = end.y - start.y;
+  
+  // Start the path
+  let path = `M ${start.x} ${start.y}`;
+  
+  // Corner radius for rounded corners
+  const cornerRadius = 10;
+  
+  // If the points are aligned horizontally or vertically, use a direct line
+  if (start.x === end.x || start.y === end.y) {
+    path += ` L ${end.x} ${end.y}`;
+    return path;
+  }
+  
+  // Create an L-shaped path with a rounded corner
+  // Determine which direction to go first (horizontal or vertical)
+  // This can be improved with more sophisticated logic based on the element types
+  const midX = start.x + dx / 2;
+  const midY = start.y + dy / 2;
+  
+  // Create path with rounded corners
+  path += ` L ${midX} ${start.y}`;
+  path += createRoundedCorner(midX, start.y, midX, midY, end.x, midY, cornerRadius);
+  path += ` L ${end.x} ${midY}`;
+  path += createRoundedCorner(end.x, midY, end.x, end.y, end.x, end.y, cornerRadius);
+  path += ` L ${end.x} ${end.y}`;
+  
+  return path;
+}
+
+/**
+ * Create an orthogonal segment between two points
+ * @param start The start position
+ * @param end The end position
+ * @returns SVG path data string (without the initial M command)
+ */
+function createOrthogonalSegment(start: Position, end: Position): string {
+  // Corner radius for rounded corners
+  const cornerRadius = 10;
+  
+  // If the points are aligned horizontally or vertically, use a direct line
+  if (start.x === end.x || start.y === end.y) {
+    return ` L ${end.x} ${end.y}`;
+  }
+  
+  // Create an L-shaped path with a rounded corner
+  return ` L ${end.x} ${start.y}` +
+         createRoundedCorner(end.x, start.y, end.x, end.y, end.x, end.y, cornerRadius) +
+         ` L ${end.x} ${end.y}`;
+}
+
+/**
+ * Create a rounded corner for an SVG path
+ * @param x1 X coordinate of the start point
+ * @param y1 Y coordinate of the start point
+ * @param x2 X coordinate of the corner point
+ * @param y2 Y coordinate of the corner point
+ * @param x3 X coordinate of the end point
+ * @param y3 Y coordinate of the end point
+ * @param radius The corner radius
+ * @returns SVG path data string for the rounded corner
+ */
+function createRoundedCorner(
+  x1: number,
+  y1: number,
+  x2: number,
+  y2: number,
+  x3: number,
+  y3: number,
+  radius: number
+): string {
+  // Calculate the direction vectors
+  const dx1 = x2 - x1;
+  const dy1 = y2 - y1;
+  const dx2 = x3 - x2;
+  const dy2 = y3 - y2;
+  
+  // Calculate the distances
+  const dist1 = Math.sqrt(dx1 * dx1 + dy1 * dy1);
+  const dist2 = Math.sqrt(dx2 * dx2 + dy2 * dy2);
+  
+  // If either segment is too short, don't create a rounded corner
+  if (dist1 < radius || dist2 < radius) {
+    return ` L ${x2} ${y2}`;
+  }
+  
+  // Calculate the normalized direction vectors
+  const nx1 = dx1 / dist1;
+  const ny1 = dy1 / dist1;
+  const nx2 = dx2 / dist2;
+  const ny2 = dy2 / dist2;
+  
+  // Calculate the start and end points of the arc
+  const arcStartX = x2 - nx1 * radius;
+  const arcStartY = y2 - ny1 * radius;
+  const arcEndX = x2 + nx2 * radius;
+  const arcEndY = y2 + ny2 * radius;
+  
+  // Create the arc command
+  // We use a simple quadratic Bezier curve for the corner
+  return ` L ${arcStartX} ${arcStartY} Q ${x2} ${y2}, ${arcEndX} ${arcEndY}`;
+}
+
+/**
+ * Calculate connection points for a BPMN element
+ * @param element The BPMN element
+ * @param numPoints Number of connection points per side
+ * @returns Array of connection points
+ */
+export function calculateConnectionPoints(
+  element: any,
+  numPoints: number = 3
+): Position[] {
+  if (!element || !('x' in element) || !('y' in element) || 
+      !('width' in element) || !('height' in element)) {
+    return [];
+  }
+  
+  const points: Position[] = [];
+  const { x, y, width, height } = element;
+  
+  // Calculate points for each side
+  // Top side
+  for (let i = 1; i <= numPoints; i++) {
+    points.push({
+      x: x + (width * i) / (numPoints + 1),
+      y
+    });
+  }
+  
+  // Right side
+  for (let i = 1; i <= numPoints; i++) {
+    points.push({
+      x: x + width,
+      y: y + (height * i) / (numPoints + 1)
+    });
+  }
+  
+  // Bottom side
+  for (let i = 1; i <= numPoints; i++) {
+    points.push({
+      x: x + (width * i) / (numPoints + 1),
+      y: y + height
+    });
+  }
+  
+  // Left side
+  for (let i = 1; i <= numPoints; i++) {
+    points.push({
+      x,
+      y: y + (height * i) / (numPoints + 1)
+    });
+  }
+  
+  // For gateways (diamond shape), add points at the corners
+  if (element.type === 'gateway') {
+    points.push(
+      { x: x + width / 2, y },           // Top
+      { x: x + width, y: y + height / 2 }, // Right
+      { x: x + width / 2, y: y + height }, // Bottom
+      { x, y: y + height / 2 }            // Left
+    );
+  }
+  
+  return points;
+}
+
+/**
+ * Find the best connection point for a given position
+ * @param element The BPMN element
+ * @param position The position to connect to
+ * @param numPoints Number of connection points per side
+ * @returns The best connection point
+ */
+export function findBestConnectionPoint(
+  element: any,
+  position: Position,
+  numPoints: number = 3
+): Position {
+  const points = calculateConnectionPoints(element, numPoints);
+  
+  // Find the closest point
+  let closestPoint = points[0];
+  let minDistance = Number.MAX_VALUE;
+  
+  points.forEach(point => {
+    const dx = point.x - position.x;
+    const dy = point.y - position.y;
+    const distance = dx * dx + dy * dy;
+    
+    if (distance < minDistance) {
+      minDistance = distance;
+      closestPoint = point;
+    }
+  });
+  
+  return closestPoint;
+}
+
+/**
+ * Adjust a waypoint to maintain orthogonal routing
+ * @param waypoints The current waypoints
+ * @param index The index of the waypoint to adjust
+ * @param newPosition The new position of the waypoint
+ * @returns The adjusted waypoints
+ */
+export function adjustWaypoint(
+  waypoints: Position[],
+  index: number,
+  newPosition: Position
+): Position[] {
+  if (!waypoints || index < 0 || index >= waypoints.length) {
+    return waypoints;
+  }
+  
+  const updatedWaypoints = [...waypoints];
+  
+  // Snap the new position to grid
+  const snappedPosition = {
+    x: snapToGrid(newPosition.x, 20),
+    y: snapToGrid(newPosition.y, 20)
+  };
+  
+  // Update the waypoint
+  updatedWaypoints[index] = snappedPosition;
+  
+  // If this is not the first or last waypoint, we need to adjust adjacent waypoints
+  // to maintain orthogonal routing
+  if (index > 0 && index < waypoints.length - 1) {
+    const prevWaypoint = updatedWaypoints[index - 1];
+    const nextWaypoint = updatedWaypoints[index + 1];
+    
+    // Determine if we're moving horizontally or vertically
+    const isHorizontalMove = Math.abs(snappedPosition.x - waypoints[index].x) > 
+                             Math.abs(snappedPosition.y - waypoints[index].y);
+    
+    if (isHorizontalMove) {
+      // If moving horizontally, adjust the y-coordinates of adjacent waypoints
+      updatedWaypoints[index - 1] = { ...prevWaypoint, y: snappedPosition.y };
+      updatedWaypoints[index + 1] = { ...nextWaypoint, y: snappedPosition.y };
+    } else {
+      // If moving vertically, adjust the x-coordinates of adjacent waypoints
+      updatedWaypoints[index - 1] = { ...prevWaypoint, x: snappedPosition.x };
+      updatedWaypoints[index + 1] = { ...nextWaypoint, x: snappedPosition.x };
+    }
+  }
+  
+  return updatedWaypoints;
+}

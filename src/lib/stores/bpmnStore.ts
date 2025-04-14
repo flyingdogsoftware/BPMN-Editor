@@ -1,6 +1,6 @@
 import { writable } from 'svelte/store';
 import type { BpmnConnection, BpmnElementUnion, ConnectionPoint, Position } from '../models/bpmnElements';
-import { calculateConnectionPoints } from '../utils/connectionUtils';
+import { calculateConnectionPoints } from '../utils/connectionRouting';
 
 // Initial elements - empty array for a blank canvas
 const initialElements: BpmnElementUnion[] = [];

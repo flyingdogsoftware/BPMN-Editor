@@ -1,7 +1,7 @@
 <script >
   import { bpmnStore } from '../stores/bpmnStore';
   import { snapPositionToGrid, snapToGrid } from '../utils/gridUtils';
-  import { isValidConnection, calculateConnectionPoints } from '../utils/connectionUtils';
+  // Removed old connection utils import
   import { onMount } from 'svelte';
   import { importBpmnXml } from '../utils/xml/bpmnXmlParser';
 
@@ -13,7 +13,7 @@
   import { createElement } from '../utils/elementFactory';
   import { handleDragStart, calculateDragPosition, handleElementDrop } from '../utils/dragHandlers';
   import { handleResizeStart, calculateResizeValues } from '../utils/resizeHandlers';
-  import { findClosestConnectionPoint, handleConnectionStart, handleConnectionComplete } from '../utils/connectionHandlers';
+  // Removed old connection handlers import
 
   // Import ElementManagerComponent
   import ElementManagerComponent from './ElementManagerComp.svelte';
@@ -111,22 +111,23 @@
     // Reset the input so the same file can be selected again
     event.target.value = '';
   }
-  import ConnectionPointWrapper from './ConnectionPointWrapper.svelte';
-  import ConnectionPreview from './ConnectionPreview.svelte';
-  import Connection from './Connection.svelte';
+  // Removed old connection components imports
   import LabelEditDialog from './LabelEditDialog.svelte';
   import Toolbar from './toolbar/Toolbar.svelte';
   import ResizeHandle from './ResizeHandle.svelte';
 
-  // Import new components
+  // Import components
   import Canvas from './Canvas.svelte';
   import ElementFactory from './ElementFactory.svelte';
   import ElementRenderer from './renderers/ElementRenderer.svelte';
   import TaskRenderer from './renderers/TaskRenderer.svelte';
   import EventRenderer from './renderers/EventRenderer.svelte';
   import GatewayRenderer from './renderers/GatewayRenderer.svelte';
-  import ConnectionRenderer from './renderers/ConnectionRenderer.svelte';
   import PoolLaneRenderer from './renderers/PoolLaneRenderer.svelte';
+
+  // Import new connection management
+  import ConnectionManager from './connections/ConnectionManager.svelte';
+  import ElementContextMenu from './ElementContextMenu.svelte';
 
   // Listen for edit-label events from Connection components
   onMount(() => {
@@ -217,14 +218,7 @@
 
   // Connection point type is imported from bpmnElements.ts
 
-  // Connection state
-  let isCreatingConnection = false;
-  let isAdjustingConnectionEndpoint = false;
-  let connectionStartPoint = null;
-  let connectionEndPosition = null;
-  let connectionPreviewValid = true;
-  let showConnectionPoints = false;
-  let highlightedConnectionPoints = [];
+  // Removed old connection state
 
   // Label editing state
   let isLabelDialogOpen = false;
@@ -262,22 +256,16 @@
            elementY + elementHeight <= poolY + poolHeight;
   }
 
-  // Get all connection points for all elements
-  function getAllConnectionPoints() {
-    const points = [];
+  // Removed getAllConnectionPoints function
 
-    $bpmnStore.forEach((element) => {
-      if (isNode(element)) {
-        const elementPoints = calculateConnectionPoints(element);
-        points.push(...elementPoints);
-      }
-    });
-
-    return points;
-  }
-
-  // Element Manager Component reference
+  // Component references
   let elementManagerComponent;
+  let connectionManagerComponent;
+
+  // Context menu state
+  let showElementContextMenu = false;
+  let contextMenuPosition = { x: 0, y: 0 };
+  let contextMenuElement = null;
 
   // Add a new pool
   function addPool(x = 100, y = 400) {
@@ -377,9 +365,6 @@
 
   // Start dragging an element - delegated to ElementInteractionManager
   function handleMouseDown(event, element) {
-    // If we're creating a connection, don't start dragging
-    if (isCreatingConnection) return;
-
     // First delegate to the ElementInteractionManager to set up basic dragging
     const result = elementInteractionManager.handleMouseDown(event, element);
     if (!result) return false;
@@ -416,6 +401,55 @@
     }
 
     return true;
+  }
+
+  // Handle context menu for elements
+  function handleElementContextMenu(event, element) {
+    event.preventDefault();
+    event.stopPropagation();
+
+    // Show the context menu
+    contextMenuPosition = { x: event.clientX, y: event.clientY };
+    contextMenuElement = element;
+    showElementContextMenu = true;
+
+    // Add a click handler to hide the context menu when clicking outside
+    setTimeout(() => {
+      if (isBrowser) {
+        window.addEventListener('click', hideElementContextMenu);
+      }
+    }, 0);
+  }
+
+  // Hide the element context menu
+  function hideElementContextMenu() {
+    showElementContextMenu = false;
+    contextMenuElement = null;
+
+    if (isBrowser) {
+      window.removeEventListener('click', hideElementContextMenu);
+    }
+  }
+
+  // Handle context menu actions
+  function handleElementContextMenuAction(action) {
+    if (!contextMenuElement) return;
+
+    switch (action) {
+      case 'create-connection':
+        if (connectionManagerComponent) {
+          connectionManagerComponent.startConnectionCreation(contextMenuElement);
+        }
+        break;
+      case 'edit-label':
+        openLabelDialog(contextMenuElement);
+        break;
+      case 'delete':
+        bpmnStore.removeElement(contextMenuElement.id);
+        break;
+    }
+
+    hideElementContextMenu();
   }
 
   // Handle keyboard events for accessibility - delegated to ElementInteractionManager
@@ -748,45 +782,7 @@
 
   // Handle mouse movement during drag or resize
   function handleMouseMove(event) {
-    if (isCreatingConnection && connectionStartPoint) {
-      // Update the end position of the connection preview
-      connectionEndPosition = { x: event.offsetX, y: event.offsetY };
-
-      // Check if the mouse is over a valid connection point
-      const points = getAllConnectionPoints();
-      const targetPoint = points.find(p => {
-        const dx = p.x - event.offsetX;
-        const dy = p.y - event.offsetY;
-        return Math.sqrt(dx * dx + dy * dy) < 10; // Within 10px radius
-      });
-
-      if (targetPoint) {
-        // Snap to the connection point
-        connectionEndPosition = { x: targetPoint.x, y: targetPoint.y };
-
-        // Check if this would be a valid connection
-        const sourceElement = $bpmnStore.find(el => el.id === connectionStartPoint?.elementId);
-        const targetElement = $bpmnStore.find(el => el.id === targetPoint.elementId);
-
-        if (sourceElement && targetElement) {
-          // Check if a connection already exists between these elements
-          const existingConnection = $bpmnStore.find(el =>
-            el.type === 'connection' &&
-            ((el.sourceId === sourceElement.id && el.targetId === targetElement.id) ||
-             (el.sourceId === targetElement.id && el.targetId === sourceElement.id))
-          );
-
-          connectionPreviewValid =
-            sourceElement.id !== targetElement.id && // Can't connect to self
-            isValidConnection(sourceElement.type, targetElement.type) &&
-            !existingConnection; // Can't create duplicate connections
-        } else {
-          connectionPreviewValid = false;
-        }
-      } else {
-        connectionPreviewValid = false;
-      }
-    }
+    // Connection creation is now handled by the new ConnectionManager
     // Element dragging is now handled by ElementInteractionManager
   }
 
@@ -926,52 +922,7 @@
 
   // End dragging or resizing
   function handleMouseUp() {
-    if (isCreatingConnection && connectionStartPoint && connectionEndPosition) {
-      // Check if we're over a valid connection point
-      const points = getAllConnectionPoints();
-      const targetPoint = connectionEndPosition ? points.find(p => {
-        const dx = p.x - connectionEndPosition.x;
-        const dy = p.y - connectionEndPosition.y;
-        return Math.sqrt(dx * dx + dy * dy) < 10; // Within 10px radius
-      }) : null;
-
-      if (targetPoint && connectionPreviewValid && connectionStartPoint) {
-        // Create a new connection
-        const sourceElement = $bpmnStore.find(el => el.id === connectionStartPoint.elementId);
-        const targetElement = $bpmnStore.find(el => el.id === targetPoint.elementId);
-
-        if (sourceElement && targetElement) {
-          // Check if a connection already exists between these elements
-          const existingConnection = $bpmnStore.find(el =>
-            el.type === 'connection' &&
-            ((el.sourceId === sourceElement.id && el.targetId === targetElement.id) ||
-             (el.sourceId === targetElement.id && el.targetId === sourceElement.id))
-          );
-
-          // Only create a new connection if one doesn't already exist
-          if (!existingConnection) {
-            const newConnection = {
-              id: `connection-${Date.now()}`,
-              type: 'connection',
-              label: '',
-              sourceId: sourceElement.id,
-              targetId: targetElement.id,
-              sourcePointId: connectionStartPoint.id,
-              targetPointId: targetPoint.id,
-              connectionType: 'sequence', // Default to sequence flow
-              waypoints: [] // Empty waypoints to let the orthogonal path calculation handle it
-            };
-
-            bpmnStore.addConnection(newConnection);
-          }
-        }
-      }
-
-      // Reset connection creation state
-      isCreatingConnection = false;
-      connectionStartPoint = null;
-      connectionEndPosition = null;
-    }
+    // Connection creation is now handled by the new ConnectionManager
     // Element dragging is now handled by ElementInteractionManager
 
     // Reset resizing states
@@ -986,30 +937,12 @@
     }
   }
 
-  // Start creating a connection
-  function handleConnectionPointMouseDown(event, point) {
-    event.stopPropagation();
-    event.preventDefault();
+  // Removed old connection functions
 
-    isCreatingConnection = true;
-    connectionStartPoint = point;
-    connectionEndPosition = { x: point.x, y: point.y };
-
-    // Add event listeners for mouse move and mouse up
-    if (isBrowser) {
-      window.addEventListener('mousemove', handleMouseMove);
-      window.addEventListener('mouseup', handleMouseUp);
-    }
-  }
-
-  // Toggle connection selection
-  function handleConnectionSelect(id) {
-    bpmnStore.toggleConnectionSelection(id);
-  }
-
-  // Add condition to selected connection
+  // Add condition to selected connection - will be reimplemented
   function addConditionToSelectedConnection() {
-    const selectedConnection = connections.find(c => c.isSelected);
+    // Find selected connection directly from the store
+    const selectedConnection = $bpmnStore.find(el => el.type === 'connection' && el.isSelected);
 
     if (selectedConnection && selectedConnection.connectionType === 'sequence') {
       openLabelDialog(selectedConnection, true);
@@ -1080,22 +1013,12 @@
     }
   }
 
-  // Start adjusting a connection endpoint
-  function handleConnectionEndpointAdjustment(isAdjusting) {
-    isAdjustingConnectionEndpoint = isAdjusting;
+  // Removed connection endpoint adjustment functions
 
-    // If we're starting to adjust, show all connection points
-    if (isAdjusting) {
-      showConnectionPoints = true;
-    } else {
-      // Reset to previous state when done
-      showConnectionPoints = false;
-    }
-  }
-
-  // Toggle connection points visibility
+  // Toggle connection points visibility - will be reimplemented
   function toggleConnectionPoints() {
-    showConnectionPoints = !showConnectionPoints;
+    // Placeholder for new implementation
+    console.log('toggleConnectionPoints called - to be implemented');
   }
 
   // This function is used for connection creation and preview
@@ -1186,7 +1109,11 @@
       onWheel={handleCanvasWheel}
     >
 
-      <!-- Markers for connections moved to ConnectionRenderer -->
+      <!-- Connection Manager -->
+      <ConnectionManager
+        bind:this={connectionManagerComponent}
+        onEditLabel={(conn) => openLabelDialog(conn)}
+      />
 
       <!-- Draw pools and lanes first (background) -->
       {#each $bpmnStore as element (element.id)}
@@ -1198,6 +1125,7 @@
             data-element-type={element.type}
             on:mousedown={e => handleMouseDown(e, element)}
             on:dblclick={() => handleNodeDoubleClick(element)}
+            on:contextmenu={e => handleElementContextMenu(e, element)}
             on:keydown={e => handleKeyDown(e, element)}
             role="button"
             tabindex="0"
@@ -1217,15 +1145,10 @@
         {/if}
       {/each}
 
-      <!-- Connection rendering moved to ConnectionRenderer component -->
-      <ConnectionRenderer
-        onConnectionSelect={handleConnectionSelect}
-        onConnectionEndpointAdjustment={handleConnectionEndpointAdjustment}
+      <!-- Connection Manager -->
+      <ConnectionManager
+        bind:this={connectionManagerComponent}
         onEditLabel={(conn) => openLabelDialog(conn)}
-        isCreatingConnection={isCreatingConnection}
-        connectionStartPoint={connectionStartPoint}
-        connectionEndPosition={connectionEndPosition}
-        connectionPreviewValid={connectionPreviewValid}
       />
 
       <!-- Draw other BPMN elements (on top of pools and lanes) -->
@@ -1237,6 +1160,7 @@
             data-element-type={element.type}
             on:mousedown={e => handleMouseDown(e, element)}
             on:dblclick={() => handleNodeDoubleClick(element)}
+            on:contextmenu={e => handleElementContextMenu(e, element)}
             on:keydown={e => handleKeyDown(e, element)}
             role="button"
             tabindex="0"
@@ -1409,17 +1333,7 @@
 
             {/if}
 
-            <!-- Connection points -->
-            {#if showConnectionPoints || isCreatingConnection}
-              {#each calculateConnectionPoints(element) as point (point.id)}
-                <ConnectionPointWrapper
-                  point={point}
-                  isVisible={showConnectionPoints}
-                  isHighlighted={isAdjustingConnectionEndpoint}
-                  onMouseDown={handleConnectionPointMouseDown}
-                />
-              {/each}
-            {/if}
+            <!-- Connection points will be implemented in the new ConnectionManager component -->
           </g>
         {/if}
       {/each}
@@ -1436,6 +1350,15 @@
     on:save={(e) => handleLabelSave(e.detail)}
     on:close={closeLabelDialog}
   />
+
+  <!-- Element Context Menu -->
+  {#if showElementContextMenu && contextMenuElement}
+    <ElementContextMenu
+      position={contextMenuPosition}
+      element={contextMenuElement}
+      onAction={handleElementContextMenuAction}
+    />
+  {/if}
 </div>
 
 <style>
