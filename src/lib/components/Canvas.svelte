@@ -16,12 +16,14 @@
   const gridStrokeWidth = 1;
 </script>
 
+<!-- Using role="presentation" to indicate this is a non-interactive element for visual presentation -->
 <div
   class="canvas-scroll-container"
   on:mousedown={onMouseDown}
   on:wheel={onWheel}
   class:dragging={isDraggingCanvas}
   aria-label="BPMN Editor Canvas"
+  role="presentation"
 >
   <svg
     {width}
@@ -48,7 +50,7 @@
 <style>
   .canvas-scroll-container {
     width: 100%;
-    height: 100%;
+    height: 100vh; /* Verwende die volle Höhe des Viewports */
     cursor: grab;
     background-color: #f9f9f9;
     overflow: hidden;
@@ -63,5 +65,7 @@
     position: absolute;
     top: 0;
     left: 0;
+    min-width: 100%;
+    min-height: 100vh; /* Mindestens die volle Höhe des Viewports */
   }
 </style>

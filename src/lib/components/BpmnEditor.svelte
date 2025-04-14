@@ -5,6 +5,9 @@
   import { onMount } from 'svelte';
   import { importBpmnXml } from '../utils/xml/bpmnXmlParser';
 
+  // Import CanvasInteractionManager
+  import { canvasInteractionManager } from '../services/CanvasInteractionManager';
+
   // Import new utility modules
   import { createElement } from '../utils/elementFactory';
   import { handleDragStart, calculateDragPosition, handleElementDrop } from '../utils/dragHandlers';
@@ -147,126 +150,42 @@
     }
   }
 
-  // Canvas dimensions - will be set dynamically based on window size
-  let canvasWidth = 800; // Default size before client-side rendering
-  let canvasHeight = 600; // Default size before client-side rendering
-
-  // Viewport state for panning/scrolling
-  let viewportX = 0;
-  let viewportY = 0;
-  let isDraggingCanvas = false;
-  let dragCanvasStartX = 0;
-  let dragCanvasStartY = 0;
-  let canvasContainerElement;
-
   // Check if we're in a browser environment
   const isBrowser = typeof window !== 'undefined';
 
-  // Calculate the minimum canvas size based on element positions
-  $: {
-    // Default minimum size
-    let minWidth = isBrowser ? window.innerWidth : 1200; // Fallback size for SSR
-    let minHeight = isBrowser ? window.innerHeight : 800; // Fallback size for SSR
+  // Use CanvasInteractionManager for canvas dimensions and viewport
+  $: viewport = canvasInteractionManager.getViewport();
+  $: canvasWidth = viewport.width;
+  $: canvasHeight = viewport.height;
+  $: viewportX = viewport.x;
+  $: viewportY = viewport.y;
+  $: isDraggingCanvas = canvasInteractionManager.getIsDraggingCanvas();
 
-    // Find the furthest element to determine required canvas size
-    $bpmnStore.forEach(element => {
-      if (element.type !== 'connection') {
-        const rightEdge = element.x + element.width + 200; // Add some padding
-        const bottomEdge = element.y + element.height + 200; // Add some padding
+  // Log viewport dimensions for debugging
+  $: console.log('Current viewport dimensions:', { canvasWidth, canvasHeight, viewportX, viewportY });
 
-        minWidth = Math.max(minWidth, rightEdge);
-        minHeight = Math.max(minHeight, bottomEdge);
-      }
-    });
-
-    // Update canvas dimensions if needed
-    canvasWidth = Math.max(canvasWidth, minWidth);
-    canvasHeight = Math.max(canvasHeight, minHeight);
-  }
+  // Update canvas size based on elements
+  $: canvasInteractionManager.updateCanvasSizeBasedOnElements($bpmnStore);
 
   // Function to position the viewport for optimal element visibility
   function centerViewportOnElements() {
-    // Always start with viewport at 0,0
-    viewportX = 0;
-    viewportY = 0;
-
-    // If there are no elements, just keep viewport at 0,0
-    if ($bpmnStore.length === 0) return;
-
-    // Find the bounding box of all elements
-    let minX = Infinity;
-    let minY = Infinity;
-    let maxX = -Infinity;
-    let maxY = -Infinity;
-
-    $bpmnStore.forEach(element => {
-      if (element.type !== 'connection' && 'x' in element && 'y' in element) {
-        minX = Math.min(minX, element.x);
-        minY = Math.min(minY, element.y);
-        maxX = Math.max(maxX, element.x + (element.width || 0));
-        maxY = Math.max(maxY, element.y + (element.height || 0));
-      }
-    });
-
-    // If we found elements, check if they're already visible
-    if (minX !== Infinity && minY !== Infinity) {
-      // Get the visible area dimensions
-      const visibleWidth = isBrowser ? window.innerWidth : 1200;
-      const visibleHeight = isBrowser ? window.innerHeight : 800;
-
-      // If all elements are already visible within the viewport at position 0,0,
-      // then we don't need to adjust the viewport
-      if (maxX <= visibleWidth && maxY <= visibleHeight) {
-        // All elements are visible, keep viewport at 0,0
-        return;
-      }
-
-      // If we get here, some elements are outside the visible area
-      // We'll only adjust the viewport if absolutely necessary
-      // and we'll try to keep as many elements visible as possible
-
-      // Add a small margin to ensure elements aren't right at the edge
-      const margin = 20;
-
-      // If elements extend beyond the right or bottom edge but are still
-      // close to the origin, we might not need to adjust the viewport
-      if (minX < margin && minY < margin &&
-          maxX < visibleWidth * 1.5 && maxY < visibleHeight * 1.5) {
-        // Elements are still relatively close to the origin, keep viewport at 0,0
-        return;
-      }
-
-      // At this point, we need to adjust the viewport to show the elements
-      // We'll try to keep the top-left corner of the elements visible
-      viewportX = Math.max(0, minX - margin);
-      viewportY = Math.max(0, minY - margin);
-    }
+    canvasInteractionManager.centerViewportOnElements($bpmnStore);
   }
 
-  // Update canvas dimensions when window is resized
+  // Initialize canvas and event listeners
   onMount(() => {
     if (isBrowser) {
-      const updateCanvasSize = () => {
-        // Update the visible area size
-        const visibleWidth = window.innerWidth;
-        const visibleHeight = window.innerHeight;
+      document.addEventListener('edit-label', handleEditLabelEvent);
 
-        // Ensure canvas is at least as large as the window
-        canvasWidth = Math.max(visibleWidth, canvasWidth);
-        canvasHeight = Math.max(visibleHeight, canvasHeight);
-      };
-
-      window.addEventListener('resize', updateCanvasSize);
-      updateCanvasSize(); // Initial size
+      // Initialize the CanvasInteractionManager
+      canvasInteractionManager.initializeCanvas();
 
       // Center the viewport on the diagram elements
       centerViewportOnElements();
 
-      // Initialize the canvas container reference
-      canvasContainerElement = document.getElementById('canvas-container');
-
       return () => {
-        window.removeEventListener('resize', updateCanvasSize);
+        document.removeEventListener('edit-label', handleEditLabelEvent);
+        canvasInteractionManager.cleanup();
       };
     }
   });
@@ -1028,11 +947,7 @@
       if (event.button !== 0) return;
 
       event.preventDefault();
-
-      // Start canvas dragging
-      isDraggingCanvas = true;
-      dragCanvasStartX = event.clientX - viewportX;
-      dragCanvasStartY = event.clientY - viewportY;
+      canvasInteractionManager.startCanvasDrag(event);
 
       // Add event listeners for mouse move and mouse up
       if (isBrowser) {
@@ -1044,21 +959,12 @@
 
   // Handle canvas mouse move for panning
   function handleCanvasMouseMove(event) {
-    if (isDraggingCanvas) {
-      // Calculate new viewport position
-      const newViewportX = event.clientX - dragCanvasStartX;
-      const newViewportY = event.clientY - dragCanvasStartY;
-
-      // Only allow panning to the left and up (negative values)
-      // This prevents panning to the right and down (positive values)
-      viewportX = Math.min(0, newViewportX);
-      viewportY = Math.min(0, newViewportY);
-    }
+    canvasInteractionManager.dragCanvas(event);
   }
 
   // Handle canvas mouse up for panning
   function handleCanvasMouseUp() {
-    isDraggingCanvas = false;
+    canvasInteractionManager.endCanvasDrag();
 
     // Remove event listeners
     if (isBrowser) {
@@ -1069,28 +975,7 @@
 
   // Handle canvas wheel for zooming (future enhancement)
   function handleCanvasWheel(event) {
-    // Prevent default scrolling behavior
-    event.preventDefault();
-
-    // Calculate scroll direction and adjust viewport
-    if (event.deltaY < 0) {
-      // Scroll up - move viewport down
-      viewportY = Math.min(0, viewportY + 50);
-    } else {
-      // Scroll down - move viewport up
-      viewportY = Math.min(0, viewportY - 50);
-    }
-
-    // Horizontal scrolling with shift key
-    if (event.shiftKey) {
-      if (event.deltaY < 0) {
-        // Scroll right
-        viewportX = Math.min(0, viewportX - 50);
-      } else {
-        // Scroll left
-        viewportX = Math.min(0, viewportX + 50);
-      }
-    }
+    canvasInteractionManager.handleCanvasWheel(event);
   }
 
   // End dragging or resizing
@@ -1629,14 +1514,15 @@
     background-color: #f9f9f9;
     position: relative;
     transition: all 0.2s;
-    height: 100vh;
+    height: 100vh; /* Volle Höhe des Viewports */
     width: 100%;
+    flex: 1; /* Nimm den verfügbaren Platz ein */
+    display: flex; /* Verwende Flexbox für die Kinder */
+    flex-direction: column; /* Stapele Kinder vertikal */
     cursor: grab; /* Show grab cursor to indicate the canvas can be panned */
   }
 
-  .canvas-scroll-container.dragging {
-    cursor: grabbing; /* Show grabbing cursor when actively panning */
-  }
+  /* Canvas dragging styles moved to Canvas.svelte */
 
   .canvas-container.drag-over {
     background-color: #e6f7ff;
@@ -1654,10 +1540,6 @@
     z-index: 2;
   }
 
-  .canvas {
-    min-width: 100%;
-    min-height: 100vh;
-  }
 
   /* Element styling */
   .bpmn-element {
