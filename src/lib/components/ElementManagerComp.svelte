@@ -6,8 +6,10 @@
   const dispatch = createEventDispatcher();
 
   // Props
-  export let originalPositions = {};
   let originalSizes = {};
+
+  // Import the ElementInteractionManager to get the original positions
+  import { elementInteractionManager } from '../services/ElementInteractionManager';
 
   // Element creation methods
   function addTask(taskType = 'user', x = 200, y = 200) {
@@ -68,6 +70,8 @@
 
   // Element manipulation methods
   function handleElementDrag(elementId, dx, dy) {
+    // Get original positions from the ElementInteractionManager
+    const originalPositions = elementInteractionManager.getOriginalPositions();
     elementManager.handleElementDrag(elementId, dx, dy, originalPositions);
     dispatch('elementDragged', { elementId, dx, dy });
   }
@@ -84,6 +88,8 @@
     position
   ) {
     const originalSize = originalSizes[elementId];
+    // Get original positions from the ElementInteractionManager
+    const originalPositions = elementInteractionManager.getOriginalPositions();
     const originalPos = originalPositions[elementId];
 
     if (originalSize && originalPos) {
@@ -106,6 +112,8 @@
     position
   ) {
     const originalSize = originalSizes[elementId];
+    // Get original positions from the ElementInteractionManager
+    const originalPositions = elementInteractionManager.getOriginalPositions();
     const originalPos = originalPositions[elementId];
 
     if (originalSize && originalPos) {

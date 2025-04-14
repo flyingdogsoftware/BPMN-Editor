@@ -5,8 +5,9 @@
   import { onMount } from 'svelte';
   import { importBpmnXml } from '../utils/xml/bpmnXmlParser';
 
-  // Import CanvasInteractionManager
+  // Import Interaction Managers
   import { canvasInteractionManager } from '../services/CanvasInteractionManager';
+  import { elementInteractionManager } from '../services/ElementInteractionManager';
 
   // Import new utility modules
   import { createElement } from '../utils/elementFactory';
@@ -172,6 +173,11 @@
     canvasInteractionManager.centerViewportOnElements($bpmnStore);
   }
 
+  // Update ElementInteractionManager when elementManagerComponent changes
+  $: if (elementManagerComponent) {
+    elementInteractionManager.setElementManagerComponent(elementManagerComponent);
+  }
+
   // Initialize canvas and event listeners
   onMount(() => {
     if (isBrowser) {
@@ -186,6 +192,7 @@
       return () => {
         document.removeEventListener('edit-label', handleEditLabelEvent);
         canvasInteractionManager.cleanup();
+        elementInteractionManager.cleanup();
       };
     }
   });
@@ -193,13 +200,8 @@
   // Grid size for snapping
   const gridSize = 20;
 
-  // Dragging state
-  let isDragging = false;
-  let draggedElementId = null;
-  let dragStartX = 0;
-  let dragStartY = 0;
-  // These variables are used for storing original positions during drag
-  let originalPositions = {}; // Store original positions of elements being moved together
+  // Dragging state - managed by ElementInteractionManager
+  $: ({ isDragging, draggedElementId } = elementInteractionManager.getDraggingState());
 
   // Resizing state
   let isResizing = false;
@@ -373,40 +375,28 @@
 
   // Right-click handlers removed
 
-  // Start dragging an element
+  // Start dragging an element - delegated to ElementInteractionManager
   function handleMouseDown(event, element) {
-    // Only handle left mouse button
-    if (event.button !== 0) return;
-
-    event.preventDefault();
-
     // If we're creating a connection, don't start dragging
     if (isCreatingConnection) return;
 
-    isDragging = true;
-    draggedElementId = element.id;
+    // First delegate to the ElementInteractionManager to set up basic dragging
+    const result = elementInteractionManager.handleMouseDown(event, element);
+    if (!result) return false;
 
-    // Store the initial mouse position
-    dragStartX = event.clientX;
-    dragStartY = event.clientY;
-
-    // Store the initial element position
+    // Then handle pool/lane specific logic
     if (isNode(element)) {
-      // Reset the original positions object
-      originalPositions = {};
-
-      // Store the original position of the dragged element
-      if ('x' in element && 'y' in element) {
-        originalPositions[element.id] = { x: element.x, y: element.y };
-      }
-
       // If this is a pool, store positions of all lanes and contained elements
       if (element.type === 'pool' && element.lanes && element.lanes.length > 0) {
+        // Get current original positions
+        const positions = elementInteractionManager.getOriginalPositions();
+        const updatedPositions = { ...positions };
+
         // Store positions of all lanes in this pool
         element.lanes.forEach(laneId => {
           const lane = $bpmnStore.find(el => el.id === laneId && el.type === 'lane');
           if (lane && 'x' in lane && 'y' in lane) {
-            originalPositions[lane.id] = { x: lane.x, y: lane.y };
+            updatedPositions[lane.id] = { x: lane.x, y: lane.y };
           }
         });
 
@@ -415,58 +405,22 @@
           if (isNode(el) && el.type !== 'pool' && el.type !== 'lane' && 'x' in el && 'y' in el) {
             // Check if element is inside the pool
             if (isElementInsidePool(el, element)) {
-              originalPositions[el.id] = { x: el.x, y: el.y };
+              updatedPositions[el.id] = { x: el.x, y: el.y };
             }
           }
         });
+
+        // Update the original positions in the manager
+        elementInteractionManager.setOriginalPositions(updatedPositions);
       }
     }
 
-    // Add event listeners for mouse move and mouse up
-    if (isBrowser) {
-      window.addEventListener('mousemove', handleMouseMove);
-      window.addEventListener('mouseup', handleMouseUp);
-    }
+    return true;
   }
 
-  // Handle keyboard events for accessibility
+  // Handle keyboard events for accessibility - delegated to ElementInteractionManager
   function handleKeyDown(event, element) {
-    // Only handle node elements (not connections)
-    if (!isNode(element)) return;
-
-    // Handle different key presses
-    const moveDistance = event.shiftKey ? 10 : 20; // Smaller steps with Shift key
-
-    if (event.key === 'Enter' || event.key === ' ') {
-      // Enter or Space key - toggle selection
-      event.preventDefault();
-
-      // Toggle selection
-      if (draggedElementId === element.id) {
-        draggedElementId = null;
-      } else {
-        draggedElementId = element.id;
-        // Store original position for dragging
-        originalPositions = {};
-        originalPositions[element.id] = { x: element.x, y: element.y };
-      }
-    } else if (event.key === 'ArrowUp') {
-      // Move up
-      event.preventDefault();
-      bpmnStore.updateElement(element.id, { y: element.y - moveDistance });
-    } else if (event.key === 'ArrowDown') {
-      // Move down
-      event.preventDefault();
-      bpmnStore.updateElement(element.id, { y: element.y + moveDistance });
-    } else if (event.key === 'ArrowLeft') {
-      // Move left
-      event.preventDefault();
-      bpmnStore.updateElement(element.id, { x: element.x - moveDistance });
-    } else if (event.key === 'ArrowRight') {
-      // Move right
-      event.preventDefault();
-      bpmnStore.updateElement(element.id, { x: element.x + moveDistance });
-    }
+    return elementInteractionManager.handleKeyDown(event, element);
   }
 
   // Handle resize start
@@ -832,16 +786,8 @@
       } else {
         connectionPreviewValid = false;
       }
-    } else if (isDragging && draggedElementId) {
-      // Calculate the distance moved
-      const dx = event.clientX - dragStartX;
-      const dy = event.clientY - dragStartY;
-
-      // Use the ElementManagerComponent to handle element dragging
-      if (elementManagerComponent) {
-        elementManagerComponent.handleElementDrag(draggedElementId, dx, dy);
-      }
     }
+    // Element dragging is now handled by ElementInteractionManager
   }
 
   // Handle drag over event for drop zone
@@ -1025,16 +971,10 @@
       isCreatingConnection = false;
       connectionStartPoint = null;
       connectionEndPosition = null;
-    } else if (isDragging && draggedElementId) {
-      // Use the ElementManagerComponent to handle element drag end
-      if (elementManagerComponent) {
-        elementManagerComponent.handleElementDragEnd(draggedElementId);
-      }
     }
+    // Element dragging is now handled by ElementInteractionManager
 
-    // Reset dragging and resizing states
-    isDragging = false;
-    draggedElementId = null;
+    // Reset resizing states
     isResizing = false;
     resizingElementId = null;
     resizeHandlePosition = null;
@@ -1183,7 +1123,7 @@
     </button>
   </div>
   <!-- Element Manager Component -->
-  <ElementManagerComponent bind:this={elementManagerComponent} bind:originalPositions />
+  <ElementManagerComponent bind:this={elementManagerComponent} />
 
   <Toolbar
     on:add={({detail}) => {
