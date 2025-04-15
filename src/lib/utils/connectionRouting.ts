@@ -500,6 +500,117 @@ export function adjustWaypoint(
 }
 
 /**
+ * Adjust waypoints when a connected element is moved
+ * @param waypoints The current waypoints
+ * @param isSource Whether the source element was moved (true) or the target element (false)
+ * @param dx The x-distance the element was moved
+ * @param dy The y-distance the element was moved
+ * @returns The adjusted waypoints
+ */
+export function adjustWaypointsForElementMove(
+  waypoints: Position[],
+  isSource: boolean,
+  dx: number,
+  dy: number
+): Position[] {
+  if (!waypoints || waypoints.length === 0) {
+    return waypoints;
+  }
+
+  // Make a deep copy of the waypoints to avoid reference issues
+  const updatedWaypoints = JSON.parse(JSON.stringify(waypoints));
+
+  // Small epsilon for floating point comparisons
+  const EPSILON = 0.001;
+
+  // Log the adjustment operation
+  console.log(`Adjusting waypoints for ${isSource ? 'source' : 'target'} movement:`, { dx, dy });
+
+  if (isSource) {
+    // If the source element moved, adjust the first waypoint
+    updatedWaypoints[0] = {
+      x: updatedWaypoints[0].x + dx,
+      y: updatedWaypoints[0].y + dy
+    };
+
+    // If there's a second waypoint, adjust it to maintain orthogonality
+    if (updatedWaypoints.length > 1) {
+      const firstWaypoint = updatedWaypoints[0];
+      const secondWaypoint = updatedWaypoints[1];
+
+      // Determine if the first segment was horizontal or vertical
+      const wasHorizontal = Math.abs(waypoints[0].y - waypoints[1].y) < EPSILON;
+      const wasVertical = Math.abs(waypoints[0].x - waypoints[1].x) < EPSILON;
+
+      // If the first segment was horizontal, maintain that relationship
+      if (wasHorizontal) {
+        updatedWaypoints[1] = {
+          ...secondWaypoint,
+          y: firstWaypoint.y
+        };
+      }
+      // If the first segment was vertical, maintain that relationship
+      else if (wasVertical) {
+        updatedWaypoints[1] = {
+          ...secondWaypoint,
+          x: firstWaypoint.x
+        };
+      }
+      // If it was diagonal, we need to decide which dimension to preserve
+      else {
+        // For now, we'll prioritize maintaining the overall shape
+        // by not adjusting the second point
+      }
+    }
+  } else {
+    // If the target element moved, adjust the last waypoint
+    const lastIndex = updatedWaypoints.length - 1;
+    updatedWaypoints[lastIndex] = {
+      x: updatedWaypoints[lastIndex].x + dx,
+      y: updatedWaypoints[lastIndex].y + dy
+    };
+
+    // If there's a second-to-last waypoint, adjust it to maintain orthogonality
+    if (updatedWaypoints.length > 1) {
+      const lastWaypoint = updatedWaypoints[lastIndex];
+      const secondLastWaypoint = updatedWaypoints[lastIndex - 1];
+
+      // Determine if the last segment was horizontal or vertical
+      const wasHorizontal = Math.abs(waypoints[lastIndex].y - waypoints[lastIndex-1].y) < EPSILON;
+      const wasVertical = Math.abs(waypoints[lastIndex].x - waypoints[lastIndex-1].x) < EPSILON;
+
+      // If the last segment was horizontal, maintain that relationship
+      if (wasHorizontal) {
+        updatedWaypoints[lastIndex - 1] = {
+          ...secondLastWaypoint,
+          y: lastWaypoint.y
+        };
+      }
+      // If the last segment was vertical, maintain that relationship
+      else if (wasVertical) {
+        updatedWaypoints[lastIndex - 1] = {
+          ...secondLastWaypoint,
+          x: lastWaypoint.x
+        };
+      }
+      // If it was diagonal, we need to decide which dimension to preserve
+      else {
+        // For now, we'll prioritize maintaining the overall shape
+        // by not adjusting the second-to-last point
+      }
+    }
+  }
+
+  // Log the result
+  console.log('Waypoints adjustment result:', {
+    original: waypoints,
+    adjusted: updatedWaypoints
+  });
+
+  return updatedWaypoints;
+}
+
+/**
  * Calculate the midpoints of each segment in a path
  * @param start The start position
  * @param end The end position

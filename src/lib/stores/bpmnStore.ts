@@ -1,6 +1,6 @@
 import { writable } from 'svelte/store';
 import type { BpmnConnection, BpmnElementUnion, ConnectionPoint, Position } from '../models/bpmnElements';
-import { calculateConnectionPoints } from '../utils/connectionRouting';
+import { calculateConnectionPoints, adjustWaypointsForElementMove } from '../utils/connectionRouting';
 
 // Initial elements - empty array for a blank canvas
 const initialElements: BpmnElementUnion[] = [];
@@ -37,13 +37,100 @@ const createBpmnStore = () => {
           // We've already checked that this element has x, y, width, and height properties
           calculateConnectionPoints(updatedElement as any);
 
+          // Get the position change if this is a position update
+          let dx = 0;
+          let dy = 0;
+
+          // Find the old element to compare positions
+          const oldElement = elements.find(el => el.id === id);
+
+          // Check if the position has changed by comparing old and new positions
+          if (oldElement && 'x' in oldElement && 'y' in oldElement && 'x' in updatedElement && 'y' in updatedElement) {
+            // Calculate the actual movement
+            dx = updatedElement.x - oldElement.x;
+            dy = updatedElement.y - oldElement.y;
+
+            // Log position changes
+            if (dx !== 0 || dy !== 0) {
+              console.log(`Element ${id} moved: dx=${dx}, dy=${dy}`);
+              console.log(`  Old position: x=${oldElement.x}, y=${oldElement.y}`);
+              console.log(`  New position: x=${updatedElement.x}, y=${updatedElement.y}`);
+            }
+          }
+
           // Update any connections that use this element
           updatedElements.forEach(el => {
             if (el.type === 'connection') {
               if (el.sourceId === id || el.targetId === id) {
-                // Clear waypoints to force recalculation of the path
-                // This ensures the orthogonal path is recalculated correctly
-                el.waypoints = [];
+                console.log(`Connection ${el.id} affected by element ${id} movement`);
+                console.log(`  Has waypoints: ${el.waypoints && el.waypoints.length > 0 ? 'Yes' : 'No'}`);
+                console.log(`  Waypoints count: ${el.waypoints ? el.waypoints.length : 0}`);
+                console.log(`  Movement: dx=${dx}, dy=${dy}`);
+
+                // Check if there was any movement
+                if (dx !== 0 || dy !== 0) {
+                  const isSource = el.sourceId === id;
+
+                  // If waypoints exist, adjust them
+                  if (el.waypoints && el.waypoints.length > 0) {
+                    console.log(`  Adjusting waypoints for ${isSource ? 'source' : 'target'} movement`);
+
+                    // Store original waypoints for logging
+                    const originalWaypoints = [...el.waypoints];
+
+                    // Adjust the waypoints
+                    el.waypoints = adjustWaypointsForElementMove(el.waypoints, isSource, dx, dy);
+
+                    console.log(`  Original waypoints:`, originalWaypoints);
+                    console.log(`  Adjusted waypoints:`, el.waypoints);
+                  } else {
+                    // If there are no waypoints, we need to create some based on the current element positions
+                    console.log(`  No waypoints, creating initial path`);
+
+                    // Find source and target elements
+                    const source = updatedElements.find(e => e.id === el.sourceId);
+                    const target = updatedElements.find(e => e.id === el.targetId);
+
+                    if (source && target && 'x' in source && 'y' in source && 'width' in source && 'height' in source &&
+                        'x' in target && 'y' in target && 'width' in target && 'height' in target) {
+                      // Create a simple path with one waypoint to maintain orthogonality
+                      const sourceCenter = {
+                        x: source.x + source.width / 2,
+                        y: source.y + source.height / 2
+                      };
+
+                      const targetCenter = {
+                        x: target.x + target.width / 2,
+                        y: target.y + target.height / 2
+                      };
+
+                      // Determine whether to go horizontal or vertical first
+                      const dx = targetCenter.x - sourceCenter.x;
+                      const dy = targetCenter.y - sourceCenter.y;
+                      const goHorizontalFirst = Math.abs(dx) > Math.abs(dy);
+
+                      if (goHorizontalFirst) {
+                        // Create a waypoint that goes horizontal first
+                        el.waypoints = [
+                          { x: targetCenter.x, y: sourceCenter.y }
+                        ];
+                      } else {
+                        // Create a waypoint that goes vertical first
+                        el.waypoints = [
+                          { x: sourceCenter.x, y: targetCenter.y }
+                        ];
+                      }
+
+                      console.log(`  Created initial waypoints:`, el.waypoints);
+                    } else {
+                      // If we can't find the elements, reset the path
+                      console.log(`  Could not find source or target elements, resetting path`);
+                      el.waypoints = [];
+                    }
+                  }
+                } else {
+                  console.log(`  No movement detected, keeping existing path`);
+                }
               }
             }
           });
