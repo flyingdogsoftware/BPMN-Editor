@@ -315,27 +315,98 @@ export function adjustWaypoint(
     y: snapToGrid(newPosition.y, 20)
   };
 
-  // Update the waypoint
-  updatedWaypoints[index] = snappedPosition;
+  // Get the original waypoint
+  const originalWaypoint = waypoints[index];
 
-  // If this is not the first or last waypoint, we need to adjust adjacent waypoints
-  // to maintain orthogonal routing
-  if (index > 0 && index < waypoints.length - 1) {
-    const prevWaypoint = updatedWaypoints[index - 1];
-    const nextWaypoint = updatedWaypoints[index + 1];
+  // Determine the movement constraints based on adjacent waypoints
+  let moveX = true;
+  let moveY = true;
 
-    // Determine if we're moving horizontally or vertically
-    const isHorizontalMove = Math.abs(snappedPosition.x - waypoints[index].x) >
-                             Math.abs(snappedPosition.y - waypoints[index].y);
+  // Check previous waypoint if exists
+  if (index > 0) {
+    const prevWaypoint = waypoints[index - 1];
+    // If previous segment is horizontal (same Y), restrict Y movement
+    if (Math.abs(prevWaypoint.y - originalWaypoint.y) < 0.001) {
+      moveY = false;
+    }
+    // If previous segment is vertical (same X), restrict X movement
+    if (Math.abs(prevWaypoint.x - originalWaypoint.x) < 0.001) {
+      moveX = false;
+    }
+  }
 
-    if (isHorizontalMove) {
-      // If moving horizontally, adjust the y-coordinates of adjacent waypoints
-      updatedWaypoints[index - 1] = { ...prevWaypoint, y: snappedPosition.y };
-      updatedWaypoints[index + 1] = { ...nextWaypoint, y: snappedPosition.y };
+  // Check next waypoint if exists
+  if (index < waypoints.length - 1) {
+    const nextWaypoint = waypoints[index + 1];
+    // If next segment is horizontal (same Y), restrict Y movement
+    if (Math.abs(nextWaypoint.y - originalWaypoint.y) < 0.001) {
+      moveY = false;
+    }
+    // If next segment is vertical (same X), restrict X movement
+    if (Math.abs(nextWaypoint.x - originalWaypoint.x) < 0.001) {
+      moveX = false;
+    }
+  }
+
+  // If both X and Y are restricted, prioritize one based on the larger movement
+  if (!moveX && !moveY) {
+    const dx = Math.abs(snappedPosition.x - originalWaypoint.x);
+    const dy = Math.abs(snappedPosition.y - originalWaypoint.y);
+    if (dx > dy) {
+      moveX = true;
     } else {
-      // If moving vertically, adjust the x-coordinates of adjacent waypoints
-      updatedWaypoints[index - 1] = { ...prevWaypoint, x: snappedPosition.x };
-      updatedWaypoints[index + 1] = { ...nextWaypoint, x: snappedPosition.x };
+      moveY = true;
+    }
+  }
+
+  // Apply the movement constraints
+  const adjustedPosition = {
+    x: moveX ? snappedPosition.x : originalWaypoint.x,
+    y: moveY ? snappedPosition.y : originalWaypoint.y
+  };
+
+  // Update the waypoint
+  updatedWaypoints[index] = adjustedPosition;
+
+  // If we have adjacent waypoints, we need to maintain orthogonality
+  if (index > 0 && index < waypoints.length - 1) {
+    const prevWaypoint = waypoints[index - 1];
+    const nextWaypoint = waypoints[index + 1];
+
+    // If we moved the X coordinate and have a horizontal segment with the previous point
+    if (moveX && Math.abs(prevWaypoint.y - originalWaypoint.y) < 0.001) {
+      // Keep the segment horizontal by updating the Y coordinate of the previous point
+      updatedWaypoints[index - 1] = {
+        ...prevWaypoint,
+        y: adjustedPosition.y
+      };
+    }
+
+    // If we moved the Y coordinate and have a vertical segment with the previous point
+    if (moveY && Math.abs(prevWaypoint.x - originalWaypoint.x) < 0.001) {
+      // Keep the segment vertical by updating the X coordinate of the previous point
+      updatedWaypoints[index - 1] = {
+        ...prevWaypoint,
+        x: adjustedPosition.x
+      };
+    }
+
+    // If we moved the X coordinate and have a horizontal segment with the next point
+    if (moveX && Math.abs(nextWaypoint.y - originalWaypoint.y) < 0.001) {
+      // Keep the segment horizontal by updating the Y coordinate of the next point
+      updatedWaypoints[index + 1] = {
+        ...nextWaypoint,
+        y: adjustedPosition.y
+      };
+    }
+
+    // If we moved the Y coordinate and have a vertical segment with the next point
+    if (moveY && Math.abs(nextWaypoint.x - originalWaypoint.x) < 0.001) {
+      // Keep the segment vertical by updating the X coordinate of the next point
+      updatedWaypoints[index + 1] = {
+        ...nextWaypoint,
+        x: adjustedPosition.x
+      };
     }
   }
 

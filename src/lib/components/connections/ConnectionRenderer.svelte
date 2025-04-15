@@ -1,5 +1,5 @@
 <script>
-  import { calculateOrthogonalPath } from '../../utils/connectionRouting';
+  import { calculateOrthogonalPath, adjustWaypoint } from '../../utils/connectionRouting';
   import ConnectionSegment from './ConnectionSegment.svelte';
 
   // Props
@@ -12,6 +12,7 @@
   // Import necessary functions
   import { bpmnStore } from '../../stores/bpmnStore';
   import { snapToGrid } from '../../utils/gridUtils';
+  import { onMount, onDestroy } from 'svelte';
 
   // State for dragging
   let isDragging = false;
@@ -181,14 +182,22 @@
 
   // Handle segment handle drag start from ConnectionSegment
   function handleSegmentHandleDragStart(connectionId, segmentIndex, event) {
+    console.log('Handle drag start:', { connectionId, segmentIndex });
+
     const connection = connections.find(c => c.id === connectionId);
-    if (!connection) return;
+    if (!connection) {
+      console.error('Connection not found:', connectionId);
+      return;
+    }
 
     // Calculate the position where the new waypoint should be added
     const source = elements.find(el => el.id === connection.sourceId);
     const target = elements.find(el => el.id === connection.targetId);
 
-    if (!source || !target) return;
+    if (!source || !target) {
+      console.error('Source or target not found:', { sourceId: connection.sourceId, targetId: connection.targetId });
+      return;
+    }
 
     // Get the start and end positions
     const start = {
@@ -203,6 +212,7 @@
 
     // Get all points in order
     const points = [start, ...(connection.waypoints || []), end];
+    console.log('Points:', points);
 
     // We need to determine where to insert the new waypoint
     // segmentIndex refers to the segment between points[segmentIndex] and points[segmentIndex + 1]
@@ -210,37 +220,45 @@
       const p1 = points[segmentIndex];
       const p2 = points[segmentIndex + 1];
 
-      // Create a new waypoint at the midpoint
-      const newWaypoint = {
-        x: (p1.x + p2.x) / 2,
-        y: (p1.y + p2.y) / 2
+      // Determine if the segment is horizontal or vertical
+      // Use a very lenient threshold for determining horizontal/vertical
+      // or determine the dominant direction if it's diagonal
+      const dx = Math.abs(p1.x - p2.x);
+      const dy = Math.abs(p1.y - p2.y);
+
+      // If the segment is more horizontal than vertical
+      const isHorizontal = dy < dx;
+      // If the segment is more vertical than horizontal
+      const isVertical = dx <= dy;
+
+      console.log('Segment info:', { p1, p2, dx, dy, isHorizontal, isVertical, segmentIndex });
+
+      // Store the original segment information for dragging
+      const segmentInfo = {
+        p1: { ...p1 },
+        p2: { ...p2 },
+        isHorizontal,
+        isVertical,
+        segmentIndex
       };
 
-      // Determine the insertion index in the waypoints array
-      let insertIndex;
-      if (segmentIndex === 0) {
-        // If it's the first segment (start to first waypoint or end)
-        insertIndex = 0;
-      } else {
-        // Otherwise, it's after the (segmentIndex - 1)th waypoint
-        insertIndex = segmentIndex;
-      }
-
-      // Create updated waypoints array
-      const updatedWaypoints = [...(connection.waypoints || [])];
-      updatedWaypoints.splice(insertIndex, 0, newWaypoint);
-
-      // Update the connection
-      bpmnStore.updateElement(connection.id, { waypoints: updatedWaypoints });
-
-      // Start dragging the new waypoint
+      // Start dragging without modifying the connection yet
       isDragging = true;
-      dragType = 'waypoint';
+      dragType = 'segment';
       dragConnectionId = connection.id;
-      dragWaypointIndex = insertIndex;
       dragStartX = event.clientX;
       dragStartY = event.clientY;
+
+      // Store the original waypoints for reference
       originalWaypoints = [...(connection.waypoints || [])];
+
+      // Initialize accumulated movement
+      window.accumulatedDx = 0;
+      window.accumulatedDy = 0;
+
+      // Store the segment info in a property for use during dragging
+      window.currentSegmentInfo = segmentInfo;
+      console.log('Drag started:', { isDragging, dragType, dragConnectionId });
 
       // Add event listeners for mouse move and mouse up
       window.addEventListener('mousemove', handleMouseMove);
@@ -250,10 +268,18 @@
 
   // Handle mouse move during drag
   function handleMouseMove(event) {
-    if (!isDragging || !dragConnectionId) return;
+    if (!isDragging || !dragConnectionId) {
+      console.log('Not dragging or no dragConnectionId');
+      return;
+    }
+
+    console.log('Mouse move during drag:', { dragType, dragConnectionId });
 
     const connection = connections.find(c => c.id === dragConnectionId);
-    if (!connection) return;
+    if (!connection) {
+      console.error('Connection not found during drag:', dragConnectionId);
+      return;
+    }
 
     const dx = event.clientX - dragStartX;
     const dy = event.clientY - dragStartY;
@@ -263,17 +289,174 @@
     dragStartY = event.clientY;
 
     // Handle different drag types
-    if (dragType === 'waypoint' || dragType === 'segment') {
-      // Update the waypoint position
+    if (dragType === 'waypoint') {
+      // Get the current waypoints
       const waypoints = [...(connection.waypoints || [])];
+
       if (dragWaypointIndex >= 0 && dragWaypointIndex < waypoints.length) {
-        waypoints[dragWaypointIndex] = {
+        // Calculate the new position with grid snapping
+        const newPosition = {
           x: snapToGrid(waypoints[dragWaypointIndex].x + dx, 20),
           y: snapToGrid(waypoints[dragWaypointIndex].y + dy, 20)
         };
 
-        // Update the connection
-        bpmnStore.updateElement(connection.id, { waypoints });
+        // Use the adjustWaypoint function to maintain orthogonal routing
+        const adjustedWaypoints = adjustWaypoint(waypoints, dragWaypointIndex, newPosition);
+
+        // Update the connection with the adjusted waypoints
+        bpmnStore.updateElement(connection.id, { waypoints: adjustedWaypoints });
+      }
+    } else if (dragType === 'segment') {
+      // Handle segment dragging
+      const segmentInfo = window.currentSegmentInfo;
+      if (!segmentInfo) {
+        console.error('No segment info found during drag');
+        return;
+      }
+
+      console.log('Segment drag:', { dx, dy, segmentInfo });
+
+      // Get the current waypoints
+      let waypoints = [...(connection.waypoints || [])];
+
+      // Calculate the total accumulated movement
+      const totalDx = dx + (window.accumulatedDx || 0);
+      const totalDy = dy + (window.accumulatedDy || 0);
+
+      console.log('Accumulated movement:', { totalDx, totalDy });
+
+      // Store the accumulated movement for the next frame
+      window.accumulatedDx = totalDx;
+      window.accumulatedDy = totalDy;
+
+      // Determine which direction to move based on segment orientation
+      if (segmentInfo.isHorizontal) {
+        // For horizontal segments, only move vertically
+        const moveY = snapToGrid(totalDy, 20);
+        console.log('Horizontal segment, vertical move:', moveY);
+
+        // Only create waypoints if the movement is significant
+        if (Math.abs(moveY) >= 20) {
+          // Create two new waypoints to maintain the horizontal segment length
+          if (!window.waypointCreated) {
+            console.log('Creating new waypoints for horizontal segment');
+
+            // Create two waypoints to form a detour
+            // For horizontal segments, we need to maintain the x-coordinates
+            // but adjust the y-coordinates
+            const wp1 = {
+              x: segmentInfo.p1.x,
+              y: segmentInfo.p1.y + moveY
+            };
+
+            const wp2 = {
+              x: segmentInfo.p2.x,
+              y: segmentInfo.p1.y + moveY
+            };
+
+            console.log('New waypoints:', wp1, wp2);
+
+            // Insert the waypoints at the appropriate position
+            if (segmentInfo.segmentIndex === 0) {
+              // First segment (between start and first waypoint or end)
+              waypoints = [wp1, wp2, ...waypoints];
+            } else {
+              // Insert after the previous waypoint
+              waypoints.splice(segmentInfo.segmentIndex, 0, wp1, wp2);
+            }
+
+            // Update the connection
+            console.log('Updating connection with new waypoints:', waypoints);
+            bpmnStore.updateElement(connection.id, { waypoints });
+
+            // Mark that we've created the waypoints
+            window.waypointCreated = true;
+            window.waypointIndices = {
+              first: segmentInfo.segmentIndex === 0 ? 0 : segmentInfo.segmentIndex,
+              second: segmentInfo.segmentIndex === 0 ? 1 : segmentInfo.segmentIndex + 1
+            };
+          }
+          // If waypoints are already created, update their positions
+          else if (window.waypointCreated && window.waypointIndices) {
+            console.log('Updating existing waypoint positions');
+
+            // Update both waypoints to maintain the horizontal segment
+            if (window.waypointIndices.first < waypoints.length &&
+                window.waypointIndices.second < waypoints.length) {
+
+              waypoints[window.waypointIndices.first].y = segmentInfo.p1.y + moveY;
+              waypoints[window.waypointIndices.second].y = segmentInfo.p1.y + moveY;
+
+              // Update the connection
+              console.log('Updating connection with moved waypoints:', waypoints);
+              bpmnStore.updateElement(connection.id, { waypoints });
+            }
+          }
+        }
+      }
+      else if (segmentInfo.isVertical) {
+        // For vertical segments, only move horizontally
+        const moveX = snapToGrid(totalDx, 20);
+        console.log('Vertical segment, horizontal move:', moveX);
+
+        // Only create waypoints if the movement is significant
+        if (Math.abs(moveX) >= 20) {
+          // Create two new waypoints to maintain the vertical segment length
+          if (!window.waypointCreated) {
+            console.log('Creating new waypoints for vertical segment');
+
+            // Create two waypoints to form a detour
+            // For vertical segments, we need to maintain the y-coordinates
+            // but adjust the x-coordinates
+            const wp1 = {
+              x: segmentInfo.p1.x + moveX,
+              y: segmentInfo.p1.y
+            };
+
+            const wp2 = {
+              x: segmentInfo.p1.x + moveX,
+              y: segmentInfo.p2.y
+            };
+
+            console.log('New waypoints:', wp1, wp2);
+
+            // Insert the waypoints at the appropriate position
+            if (segmentInfo.segmentIndex === 0) {
+              // First segment (between start and first waypoint or end)
+              waypoints = [wp1, wp2, ...waypoints];
+            } else {
+              // Insert after the previous waypoint
+              waypoints.splice(segmentInfo.segmentIndex, 0, wp1, wp2);
+            }
+
+            // Update the connection
+            console.log('Updating connection with new waypoints:', waypoints);
+            bpmnStore.updateElement(connection.id, { waypoints });
+
+            // Mark that we've created the waypoints
+            window.waypointCreated = true;
+            window.waypointIndices = {
+              first: segmentInfo.segmentIndex === 0 ? 0 : segmentInfo.segmentIndex,
+              second: segmentInfo.segmentIndex === 0 ? 1 : segmentInfo.segmentIndex + 1
+            };
+          }
+          // If waypoints are already created, update their positions
+          else if (window.waypointCreated && window.waypointIndices) {
+            console.log('Updating existing waypoint positions');
+
+            // Update both waypoints to maintain the vertical segment
+            if (window.waypointIndices.first < waypoints.length &&
+                window.waypointIndices.second < waypoints.length) {
+
+              waypoints[window.waypointIndices.first].x = segmentInfo.p1.x + moveX;
+              waypoints[window.waypointIndices.second].x = segmentInfo.p1.x + moveX;
+
+              // Update the connection
+              console.log('Updating connection with moved waypoints:', waypoints);
+              bpmnStore.updateElement(connection.id, { waypoints });
+            }
+          }
+        }
       }
     } else if (dragType === 'source' || dragType === 'target') {
       // For now, we'll just update the waypoints
@@ -329,6 +512,7 @@
 
   // Handle mouse up after drag
   function handleMouseUp() {
+    console.log('Mouse up after drag');
     if (!isDragging) return;
 
     // Reset drag state
@@ -338,13 +522,21 @@
     dragWaypointIndex = -1;
     originalWaypoints = [];
 
+    // Clean up segment dragging state
+    window.currentSegmentInfo = null;
+    window.waypointCreated = false;
+    window.waypointIndices = undefined;
+    window.accumulatedDx = 0;
+    window.accumulatedDy = 0;
+
     // Remove event listeners
     window.removeEventListener('mousemove', handleMouseMove);
     window.removeEventListener('mouseup', handleMouseUp);
+
+    console.log('Drag state reset');
   }
 
   // Add event listeners for mouse move and mouse up
-  import { onMount, onDestroy } from 'svelte';
 
   // Check if we're in the browser
   const isBrowser = typeof window !== 'undefined';

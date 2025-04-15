@@ -49,6 +49,7 @@
 
   // Handle drag start for a segment handle
   function handleSegmentHandleDragStart(index, event) {
+    console.log('ConnectionSegment: Handle drag start', { index });
     onHandleDragStart(index, event);
   }
 </script>

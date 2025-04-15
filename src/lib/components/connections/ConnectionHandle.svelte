@@ -8,6 +8,7 @@
 
   // Handle mouse down event
   function handleMouseDown(event) {
+    console.log('ConnectionHandle: Mouse down', { x, y, orientation });
     event.stopPropagation();
     event.preventDefault();
     onDragStart(event);
