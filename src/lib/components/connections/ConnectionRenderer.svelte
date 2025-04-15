@@ -523,10 +523,12 @@
         const optimizedWaypoints = optimizeWaypoints(connection.waypoints);
 
         // Only update if the optimization actually changed something
-        if (optimizedWaypoints.length !== connection.waypoints.length) {
+        if (JSON.stringify(optimizedWaypoints) !== JSON.stringify(connection.waypoints)) {
           console.log('Optimizing waypoints:', {
             before: connection.waypoints.length,
-            after: optimizedWaypoints.length
+            after: optimizedWaypoints.length,
+            originalWaypoints: connection.waypoints,
+            optimizedWaypoints: optimizedWaypoints
           });
 
           // Update the connection with optimized waypoints

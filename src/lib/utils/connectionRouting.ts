@@ -301,35 +301,80 @@ export function optimizeWaypoints(waypoints: Position[]): Position[] {
     return waypoints;
   }
 
-  const result: Position[] = [];
-  result.push(waypoints[0]);
+  // First pass: Identify collinear points (points on the same line)
+  let optimized = [...waypoints];
+  let madeChanges = true;
 
-  // Iterate through waypoints and remove unnecessary ones
-  for (let i = 1; i < waypoints.length - 1; i++) {
-    const prev = result[result.length - 1];
-    const current = waypoints[i];
-    const next = waypoints[i + 1];
+  // Keep optimizing until no more changes can be made
+  while (madeChanges) {
+    madeChanges = false;
+    const result: Position[] = [];
 
-    // Check if the current point is on the same line as the previous and next points
-    const isHorizontalLine = Math.abs(prev.y - current.y) < 0.001 && Math.abs(current.y - next.y) < 0.001;
-    const isVerticalLine = Math.abs(prev.x - current.x) < 0.001 && Math.abs(current.x - next.x) < 0.001;
+    // Always keep the first point
+    result.push(optimized[0]);
 
-    // If the current point is not on the same line, keep it
-    if (!isHorizontalLine && !isVerticalLine) {
-      result.push(current);
+    // Check each point to see if it's necessary
+    for (let i = 1; i < optimized.length - 1; i++) {
+      const prev = result[result.length - 1];
+      const current = optimized[i];
+      const next = optimized[i + 1];
+
+      // Check if the current point is on the same line as the previous and next points
+      const isHorizontalLine = Math.abs(prev.y - current.y) < 0.001 && Math.abs(current.y - next.y) < 0.001;
+      const isVerticalLine = Math.abs(prev.x - current.x) < 0.001 && Math.abs(current.x - next.x) < 0.001;
+
+      // If the current point is on the same line (horizontal or vertical), skip it
+      if (isHorizontalLine || isVerticalLine) {
+        madeChanges = true;
+        // Skip this point (don't add to result)
+      }
+      // If the current point is a corner (change of direction), keep it
+      else {
+        result.push(current);
+      }
     }
-    // If we're at a corner (change of direction), keep the point
-    else if ((Math.abs(prev.x - current.x) > 0.001 && Math.abs(current.y - next.y) > 0.001) ||
-             (Math.abs(prev.y - current.y) > 0.001 && Math.abs(current.x - next.x) > 0.001)) {
-      result.push(current);
+
+    // Always keep the last point
+    result.push(optimized[optimized.length - 1]);
+
+    // If we made changes, update the optimized array for the next iteration
+    if (madeChanges) {
+      optimized = [...result];
     }
-    // Otherwise, the point is unnecessary and can be skipped
+
+    // Safety check: if we're not reducing the number of points, stop
+    if (result.length >= optimized.length) {
+      madeChanges = false;
+    }
+  }
+
+  // Second pass: Check for redundant corners (zigzags that can be simplified)
+  const finalResult: Position[] = [];
+  finalResult.push(optimized[0]);
+
+  for (let i = 1; i < optimized.length - 1; i++) {
+    const prev = finalResult[finalResult.length - 1];
+    const current = optimized[i];
+    const next = optimized[i + 1];
+
+    // Check if we can go directly from prev to next (skipping current)
+    // This would be the case if prev, current, and next form a zigzag pattern
+    const canSkipCurrent =
+      // If we can go directly from prev to next horizontally or vertically
+      (Math.abs(prev.x - next.x) < 0.001 || Math.abs(prev.y - next.y) < 0.001) &&
+      // And the current point is not on the direct line between prev and next
+      !((Math.abs(prev.x - current.x) < 0.001 && Math.abs(current.x - next.x) < 0.001) ||
+        (Math.abs(prev.y - current.y) < 0.001 && Math.abs(current.y - next.y) < 0.001));
+
+    if (!canSkipCurrent) {
+      finalResult.push(current);
+    }
   }
 
   // Always add the last point
-  result.push(waypoints[waypoints.length - 1]);
+  finalResult.push(optimized[optimized.length - 1]);
 
-  return result;
+  return finalResult;
 }
 
 /**
