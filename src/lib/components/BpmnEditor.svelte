@@ -939,15 +939,7 @@
 
   // Removed old connection functions
 
-  // Add condition to selected connection - will be reimplemented
-  function addConditionToSelectedConnection() {
-    // Find selected connection directly from the store
-    const selectedConnection = $bpmnStore.find(el => el.type === 'connection' && el.isSelected);
-
-    if (selectedConnection && selectedConnection.connectionType === 'sequence') {
-      openLabelDialog(selectedConnection, true);
-    }
-  }
+  // Add Condition functionality removed
 
   // Label dialog functions
   function openLabelDialog(element, isCondition = false) {
@@ -1015,11 +1007,7 @@
 
   // Removed connection endpoint adjustment functions
 
-  // Toggle connection points visibility - will be reimplemented
-  function toggleConnectionPoints() {
-    // Placeholder for new implementation
-    console.log('toggleConnectionPoints called - to be implemented');
-  }
+  // Connection Points functionality removed
 
   // This function is used for connection creation and preview
   // The actual connection points for rendering are calculated on-the-fly
@@ -1081,8 +1069,6 @@
         // elementManagerComponent.addLane(poolId, label);
       }
     }}
-    on:toggleConnectionPoints={toggleConnectionPoints}
-    on:addCondition={addConditionToSelectedConnection}
     on:reset={() => bpmnStore.reset()}
   />
 

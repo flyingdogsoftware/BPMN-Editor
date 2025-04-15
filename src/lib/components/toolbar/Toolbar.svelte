@@ -25,13 +25,7 @@
     showElementDialog = false;
   }
 
-  function toggleConnectionPoints() {
-    dispatch('toggleConnectionPoints');
-  }
-
-  function addConditionToSelectedConnection() {
-    dispatch('addCondition');
-  }
+  // Connection Points and Add Condition functionality removed
 
   function resetDiagram() {
     dispatch('reset');
@@ -125,12 +119,7 @@
   <div class="toolbar-section">
     <h3>Tools</h3>
     <div class="button-group">
-      <button on:click={toggleConnectionPoints}>
-        Connection Points
-      </button>
-      <button on:click={addConditionToSelectedConnection}>
-        Add Condition
-      </button>
+      <!-- Connection Points and Add Condition buttons removed -->
       <button on:click={resetDiagram}>
         Reset
       </button>
