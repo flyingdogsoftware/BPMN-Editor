@@ -43,16 +43,37 @@
       y: target.y + target.height / 2
     };
 
-    // Calculate the path with the original end point (center of target)
-    const originalPath = calculateOrthogonalPath(start, end, connection.waypoints || []);
+    // Special handling for event elements (circles) and gateways (diamonds) as targets
+    let adjustedWaypoints = [...(connection.waypoints || [])];
 
-    // Get all points in the path to determine the last segment
+    // For event elements and gateways, we need to ensure the connection approaches from the correct direction
+    if ((target.type === 'event' || target.type === 'gateway') && adjustedWaypoints.length === 0) {
+      // For direct connections, we need to ensure we approach from a cardinal direction
+      const dx = end.x - start.x;
+      const dy = end.y - start.y;
+
+      // Determine if we should approach horizontally or vertically
+      const approachHorizontally = Math.abs(dx) > Math.abs(dy);
+
+      if (approachHorizontally) {
+        // Add a waypoint that ensures we approach horizontally
+        adjustedWaypoints = [
+          { x: end.x, y: start.y }
+        ];
+      } else {
+        // Add a waypoint that ensures we approach vertically
+        adjustedWaypoints = [
+          { x: start.x, y: end.y }
+        ];
+      }
+    }
+
+    // Get all points in the path
+    const waypoints = adjustedWaypoints;
+    const allPoints = [start, ...waypoints, end];
+
+    // Determine the last segment start point
     let lastSegmentStart;
-    const waypoints = connection.waypoints || [];
-
-    // Create an array of all points in the path
-    const allPoints = [start, ...waypoints];
-
     if (waypoints.length > 0) {
       // If there are waypoints, the last segment starts from the last waypoint
       lastSegmentStart = waypoints[waypoints.length - 1];
@@ -76,38 +97,106 @@
     }
 
     // Calculate the intersection point with the target element's boundary
-    const intersectionPoint = calculateElementIntersection(lastSegmentStart, end, target);
+    let intersectionPoint;
 
-    // Adjust the path to end at the intersection point
-    // We need to modify the SVG path string to change the endpoint
-    let path = originalPath;
+    // For all element types, use the utility function which has specialized handling for events
+    intersectionPoint = calculateElementIntersection(lastSegmentStart, end, target);
 
-    // Always adjust the path to end at the intersection point
-    // We need to handle both straight line segments and curved segments
-    // Check if the path contains a Q command (quadratic bezier curve)
-    if (originalPath.includes('Q')) {
-      // For paths with curves, we need more sophisticated parsing
-      // Split the path into commands and coordinates
-      const commands = originalPath.split(/([MLQ])/g).filter(Boolean);
-      let newPath = '';
+    // For event elements and gateways, ensure the intersection point is correctly calculated
+    if (target.type === 'event' || target.type === 'gateway') {
+      // Calculate the center of the element
+      const center = {
+        x: target.x + target.width / 2,
+        y: target.y + target.height / 2
+      };
 
-      // Rebuild the path, replacing only the last coordinate
-      for (let i = 0; i < commands.length; i++) {
-        if (i === commands.length - 1) {
-          // This is the last coordinate pair
-          newPath += ` ${intersectionPoint.x} ${intersectionPoint.y}`;
+      // Calculate the direction vector from center to lastSegmentStart
+      const dx = lastSegmentStart.x - center.x;
+      const dy = lastSegmentStart.y - center.y;
+
+      // Calculate the distance
+      const distance = Math.sqrt(dx * dx + dy * dy);
+
+      // Normalize the direction vector
+      const nx = distance > 0.001 ? dx / distance : 1;
+      const ny = distance > 0.001 ? dy / distance : 0;
+
+      if (target.type === 'event') {
+        // For event elements (circles)
+        // Calculate the radius of the circle
+        const radius = target.width / 2;
+
+        // Apply a small offset to ensure the arrow head is visible
+        const offsetRadius = radius - 5;
+
+        intersectionPoint = {
+          x: center.x + nx * offsetRadius,
+          y: center.y + ny * offsetRadius
+        };
+      } else if (target.type === 'gateway') {
+        // For gateway elements (diamonds)
+        // The distance from center to corner is different for diamonds
+        // For a diamond, the distance to the edge depends on the angle
+
+        // Calculate the angle of approach (in radians)
+        const angle = Math.atan2(ny, nx);
+
+        // For a diamond, the distance to the edge is:
+        // width/2 * cos(angle) + height/2 * sin(angle) for the absolute values
+        const halfWidth = target.width / 2;
+        const halfHeight = target.height / 2;
+
+        // Calculate the distance to the edge
+        const distanceToEdge = halfWidth * Math.abs(Math.cos(angle)) +
+                              halfHeight * Math.abs(Math.sin(angle));
+
+        // Apply a small offset to ensure the arrow head is visible
+        const offsetDistance = distanceToEdge - 5;
+
+        intersectionPoint = {
+          x: center.x + nx * offsetDistance,
+          y: center.y + ny * offsetDistance
+        };
+      }
+    }
+
+    // Now calculate the path with the adjusted waypoints
+    // but ending at the intersection point instead of the center
+    let pathPoints = [start, ...waypoints];
+
+    // Add the intersection point as the final point
+    pathPoints.push(intersectionPoint);
+
+    // Generate the SVG path data
+    let path = `M ${start.x} ${start.y}`;
+
+    // Add each segment
+    for (let i = 1; i < pathPoints.length; i++) {
+      const prev = pathPoints[i - 1];
+      const curr = pathPoints[i];
+
+      // If this is the last point (intersection point), just draw a line to it
+      if (i === pathPoints.length - 1) {
+        path += ` L ${curr.x.toFixed(2)} ${curr.y.toFixed(2)}`;
+      } else {
+        // Otherwise, create an orthogonal segment
+        const dx = curr.x - prev.x;
+        const dy = curr.y - prev.y;
+
+        // If the points are aligned horizontally or vertically, use a direct line
+        if (Math.abs(dx) < 0.001 || Math.abs(dy) < 0.001) {
+          path += ` L ${curr.x} ${curr.y}`;
         } else {
-          newPath += commands[i];
+          // Otherwise, create a corner
+          const goHorizontalFirst = Math.abs(dx) > Math.abs(dy);
+
+          if (goHorizontalFirst) {
+            path += ` L ${curr.x} ${prev.y} L ${curr.x} ${curr.y}`;
+          } else {
+            path += ` L ${prev.x} ${curr.y} L ${curr.x} ${curr.y}`;
+          }
         }
       }
-
-      path = newPath;
-    } else {
-      // For simple paths with only L commands
-      const pathParts = originalPath.split('L');
-      // Replace the last coordinate with the intersection point
-      pathParts[pathParts.length - 1] = ` ${intersectionPoint.x} ${intersectionPoint.y}`;
-      path = pathParts.join('L');
     }
 
     return {
@@ -116,7 +205,8 @@
       connection,
       start,
       end: intersectionPoint, // Use the intersection point as the visual end
-      originalEnd: end // Keep the original end for reference
+      originalEnd: end, // Keep the original end for reference
+      waypoints: adjustedWaypoints // Use the adjusted waypoints
     };
   }).filter(Boolean);
 
@@ -654,7 +744,7 @@
     refY="5"
     markerWidth="6"
     markerHeight="6"
-    orient="auto-start-reverse"
+    orient="auto"
   >
     <path d="M 0 0 L 10 5 L 0 10 z" fill="#333" />
   </marker>
@@ -666,7 +756,7 @@
     refY="5"
     markerWidth="6"
     markerHeight="6"
-    orient="auto-start-reverse"
+    orient="auto"
   >
     <circle cx="5" cy="5" r="4" fill="white" stroke="#3498db" stroke-width="1" />
   </marker>
@@ -678,7 +768,7 @@
     refY="5"
     markerWidth="5"
     markerHeight="5"
-    orient="auto-start-reverse"
+    orient="auto"
   >
     <path d="M 0 0 L 10 5 L 0 10" fill="none" stroke="#999" stroke-width="1.5" />
   </marker>

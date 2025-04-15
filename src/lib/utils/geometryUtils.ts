@@ -12,9 +12,18 @@ export function calculateIntersection(
   lineEnd: Position,
   rect: { x: number; y: number; width: number; height: number }
 ): Position | null {
-  // Check if the line is horizontal or vertical
-  const isHorizontal = Math.abs(lineStart.y - lineEnd.y) < 0.001;
-  const isVertical = Math.abs(lineStart.x - lineEnd.x) < 0.001;
+  // Calculate the direction vector of the line
+  const dx = lineEnd.x - lineStart.x;
+  const dy = lineEnd.y - lineStart.y;
+
+  // Normalize the direction vector for more accurate calculations
+  const length = Math.sqrt(dx * dx + dy * dy);
+  const nx = length > 0 ? dx / length : 0;
+  const ny = length > 0 ? dy / length : 0;
+
+  // Check if the line is horizontal or vertical (with a small tolerance)
+  const isHorizontal = Math.abs(ny) < 0.001;
+  const isVertical = Math.abs(nx) < 0.001;
 
   // For special cases (horizontal or vertical lines), use simplified calculations
   if (isHorizontal) {
@@ -22,12 +31,17 @@ export function calculateIntersection(
     // Check if the line intersects the rectangle vertically
     if (y >= rect.y && y <= rect.y + rect.height) {
       // Determine which x-coordinate to use based on line direction
-      if (lineStart.x < lineEnd.x) {
+      if (nx > 0) {
         // Line goes from left to right
         return { x: rect.x, y };
-      } else {
+      } else if (nx < 0) {
         // Line goes from right to left
         return { x: rect.x + rect.width, y };
+      } else {
+        // Line is exactly vertical, use the closest edge
+        const distToLeft = Math.abs(lineStart.x - rect.x);
+        const distToRight = Math.abs(lineStart.x - (rect.x + rect.width));
+        return { x: distToLeft < distToRight ? rect.x : rect.x + rect.width, y };
       }
     }
   } else if (isVertical) {
@@ -35,12 +49,17 @@ export function calculateIntersection(
     // Check if the line intersects the rectangle horizontally
     if (x >= rect.x && x <= rect.x + rect.width) {
       // Determine which y-coordinate to use based on line direction
-      if (lineStart.y < lineEnd.y) {
+      if (ny > 0) {
         // Line goes from top to bottom
         return { x, y: rect.y };
-      } else {
+      } else if (ny < 0) {
         // Line goes from bottom to top
         return { x, y: rect.y + rect.height };
+      } else {
+        // Line is exactly horizontal, use the closest edge
+        const distToTop = Math.abs(lineStart.y - rect.y);
+        const distToBottom = Math.abs(lineStart.y - (rect.y + rect.height));
+        return { x, y: distToTop < distToBottom ? rect.y : rect.y + rect.height };
       }
     }
   }
@@ -189,9 +208,18 @@ export function calculateElementIntersection(
   // This is a fallback to ensure we always have a point on the boundary
   if (!intersection) {
     // Calculate direction vector from element center to lineStart
-    const dx = lineStart.x - lineEnd.x;
-    const dy = lineStart.y - lineEnd.y;
+    const dx = lineStart.x - elementCenter.x;
+    const dy = lineStart.y - elementCenter.y;
     const distance = Math.sqrt(dx * dx + dy * dy);
+
+    // If the distance is very small, use a default direction
+    if (distance < 0.001) {
+      // Default to a point on the right side of the element
+      return {
+        x: elementCenter.x + element.width / 2,
+        y: elementCenter.y
+      };
+    }
 
     // Normalize the direction vector
     const nx = dx / distance;
@@ -209,9 +237,13 @@ export function calculateElementIntersection(
     // Use the smaller of the two distances
     const t = Math.min(tx, ty);
 
+    // Apply a small offset to ensure the arrow head is properly positioned
+    const offset = 2;
+    const adjustedT = Math.max(0, t - offset / distance);
+
     return {
-      x: lineEnd.x + nx * t,
-      y: lineEnd.y + ny * t
+      x: elementCenter.x + nx * adjustedT,
+      y: elementCenter.y + ny * adjustedT
     };
   }
 
@@ -290,15 +322,26 @@ function calculateGatewayIntersection(
     // based on the angle of approach
     const angle = Math.atan2(ny, nx);
 
-    // Determine which quadrant we're in
+    // Calculate the half-width and half-height of the diamond
+    const halfWidth = element.width / 2;
+    const halfHeight = element.height / 2;
+
+    // Calculate the parameter t for the ray equation: p = center + t * direction
+    // For a diamond, t depends on the angle of approach
     let t;
-    if (Math.abs(nx) > Math.abs(ny)) {
-      // Approaching more horizontally
-      t = (element.width / 2) / Math.abs(nx);
+
+    // The diamond has 4 edges, and we need to find which one the ray intersects
+    // We can use the absolute values of nx and ny to determine this
+    if (Math.abs(nx) * halfHeight > Math.abs(ny) * halfWidth) {
+      // Intersects with left or right edge
+      t = halfWidth / Math.abs(nx);
     } else {
-      // Approaching more vertically
-      t = (element.height / 2) / Math.abs(ny);
+      // Intersects with top or bottom edge
+      t = halfHeight / Math.abs(ny);
     }
+
+    // Apply a small offset to ensure the arrow head is properly positioned
+    t = Math.max(0, t - 1);
 
     return {
       x: center.x + nx * t,
@@ -334,16 +377,20 @@ function calculateCircleIntersection(
   const radius = element.width / 2;
 
   // Calculate the direction vector from center to lineStart
+  // This is the direction the connection is coming FROM
   const dx = lineStart.x - center.x;
   const dy = lineStart.y - center.y;
 
   // Calculate the distance from center to lineStart
   const distance = Math.sqrt(dx * dx + dy * dy);
 
-  // If the distance is zero (lineStart is at the center), return a default point
+  // If the distance is zero or very small (lineStart is at or very close to the center),
+  // return a default point based on the relative positions of other elements
   if (distance < 0.001) {
+    // Try to determine a reasonable direction based on the element's position
+    // Default to right side if no better direction can be determined
     return {
-      x: center.x + radius, // Default to a point on the right side of the circle
+      x: center.x + radius - 3, // Default to a point on the right side of the circle with offset for arrow
       y: center.y
     };
   }
@@ -352,9 +399,14 @@ function calculateCircleIntersection(
   const nx = dx / distance;
   const ny = dy / distance;
 
+  // Apply a small offset to ensure the arrow head is properly positioned
+  // This helps with visual alignment of the arrow head
+  // Increase the offset to ensure the arrowhead is clearly visible
+  const offsetRadius = radius - 3; // Slightly shorter to ensure arrow head is visible
+
   // Calculate the intersection point
   return {
-    x: center.x + nx * radius,
-    y: center.y + ny * radius
+    x: center.x + nx * offsetRadius,
+    y: center.y + ny * offsetRadius
   };
 }
