@@ -92,7 +92,39 @@
     );
 
     if (!existingConnection) {
-      // Create a new connection
+      // Calculate initial waypoints for better rendering
+      // This helps ensure the connection is properly rendered from the start
+      const sourceCenter = {
+        x: source.x + source.width / 2,
+        y: source.y + source.height / 2
+      };
+
+      const targetCenter = {
+        x: target.x + target.width / 2,
+        y: target.y + target.height / 2
+      };
+
+      // Determine if we should go horizontal or vertical first
+      const dx = targetCenter.x - sourceCenter.x;
+      const dy = targetCenter.y - sourceCenter.y;
+      const goHorizontalFirst = Math.abs(dx) > Math.abs(dy);
+
+      // Create initial waypoints based on routing strategy
+      let initialWaypoints = [];
+
+      if (goHorizontalFirst) {
+        // Horizontal first, then vertical
+        initialWaypoints = [
+          { x: targetCenter.x, y: sourceCenter.y }
+        ];
+      } else {
+        // Vertical first, then horizontal
+        initialWaypoints = [
+          { x: sourceCenter.x, y: targetCenter.y }
+        ];
+      }
+
+      // Create a new connection with initial waypoints
       const newConnection = {
         id: `connection-${Date.now()}`,
         type: 'connection',
@@ -100,11 +132,17 @@
         sourceId: source.id,
         targetId: target.id,
         connectionType: 'sequence',
-        waypoints: []
+        waypoints: initialWaypoints
       };
 
       // Add the connection to the store
       bpmnStore.addConnection(newConnection);
+
+      // Force a refresh of the connection to ensure proper rendering
+      // This is a workaround to ensure the intersection points are calculated correctly
+      setTimeout(() => {
+        bpmnStore.updateElement(newConnection.id, { waypoints: initialWaypoints });
+      }, 0);
     }
   }
 
