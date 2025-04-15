@@ -254,6 +254,7 @@ export interface BpmnConnection extends BpmnElementBase {
   isConditional?: boolean;
   isSelected?: boolean;
   associationDirection?: AssociationDirection; // For associations
+  labelOffset?: Position; // Offset from the default label position
 }
 
 // Conversation Types

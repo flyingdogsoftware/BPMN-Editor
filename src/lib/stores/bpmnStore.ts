@@ -192,7 +192,12 @@ const createBpmnStore = () => {
       update(elements =>
         elements.map(el => el.id === id && el.type === 'connection' ? { ...el, label } : el)
       ),
-    // Update connection label position
+    // Update connection label offset
+    updateConnectionLabelOffset: (id: string, offset: Position) =>
+      update(elements =>
+        elements.map(el => el.id === id && el.type === 'connection' ? { ...el, labelOffset: offset } : el)
+      ),
+    // Update connection label position (legacy - kept for backward compatibility)
     updateConnectionLabelPosition: (id: string, position: Position) =>
       update(elements =>
         elements.map(el => el.id === id && el.type === 'connection' ? { ...el, labelPosition: position } : el)

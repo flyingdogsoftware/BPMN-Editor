@@ -132,6 +132,7 @@
   // Listen for edit-label events from Connection components
   onMount(() => {
     if (isBrowser) {
+      console.log('BpmnEditor: Adding edit-label event listener');
       document.addEventListener('edit-label', handleEditLabelEvent);
 
       return () => {
@@ -148,7 +149,9 @@
 
     if (connection) {
       console.log('BpmnEditor: Found connection, opening label dialog', connection);
-      openLabelDialog(connection, connection.connectionType === 'sequence');
+      // For sequence flows, we might want to edit the condition
+      const isCondition = connection.connectionType === 'sequence';
+      openLabelDialog(connection, isCondition);
     }
   }
 
@@ -182,8 +185,6 @@
   // Initialize canvas and event listeners
   onMount(() => {
     if (isBrowser) {
-      document.addEventListener('edit-label', handleEditLabelEvent);
-
       // Initialize the CanvasInteractionManager
       canvasInteractionManager.initializeCanvas();
 
@@ -191,7 +192,6 @@
       centerViewportOnElements();
 
       return () => {
-        document.removeEventListener('edit-label', handleEditLabelEvent);
         canvasInteractionManager.cleanup();
         elementInteractionManager.cleanup();
       };
@@ -975,6 +975,9 @@
       } else {
         // This is a regular label
         bpmnStore.updateConnectionLabel(currentEditingConnection.id, text);
+
+        // No need to set a default label position anymore - the ConnectionLabel component
+        // will calculate it automatically based on the connection path
       }
       closeLabelDialog();
     } else if (currentEditingNode) {

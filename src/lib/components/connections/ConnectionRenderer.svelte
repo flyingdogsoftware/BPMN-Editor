@@ -2,6 +2,7 @@
   import { calculateOrthogonalPath, adjustWaypoint, optimizeWaypoints } from '../../utils/connectionRouting';
   import { calculateElementIntersection } from '../../utils/geometryUtils';
   import ConnectionSegment from './ConnectionSegment.svelte';
+  import ConnectionLabel from './ConnectionLabel.svelte';
 
   // Props
   export let connections = [];
@@ -9,6 +10,7 @@
   export let selectedConnectionId = null;
   export let onSelect = (id) => {};
   export let onContextMenu = (event, connection) => {};
+  export let onEditLabel = (connection) => {};
 
   // Import necessary functions
   import { bpmnStore } from '../../stores/bpmnStore';
@@ -258,6 +260,30 @@
   function handleConnectionClick(event, connectionId) {
     event.stopPropagation();
     onSelect(connectionId);
+  }
+
+  // Handle connection double-click
+  function handleConnectionDoubleClick(event, connection) {
+    event.stopPropagation();
+    event.preventDefault();
+
+    console.log('ConnectionRenderer: Double-click on connection', connection.id);
+
+    // First try the direct method
+    if (onEditLabel) {
+      console.log('ConnectionRenderer: Calling onEditLabel directly');
+      onEditLabel(connection);
+    } else {
+      // Fallback to custom event
+      console.log('ConnectionRenderer: Using custom event fallback');
+      const editEvent = new CustomEvent('edit-label', {
+        detail: { connectionId: connection.id },
+        bubbles: true
+      });
+
+      console.log('ConnectionRenderer: Dispatching edit-label event');
+      document.dispatchEvent(editEvent);
+    }
   }
 
   // Handle connection right-click
@@ -783,6 +809,7 @@
     class="connection"
     class:selected={id === selectedConnectionId}
     on:click={(e) => handleConnectionClick(e, id)}
+    on:dblclick={(e) => handleConnectionDoubleClick(e, connection)}
     on:keydown={(e) => e.key === 'Enter' && handleConnectionClick(e, id)}
     on:contextmenu={(e) => handleConnectionRightClick(e, connection)}
     role="button"
@@ -797,23 +824,15 @@
       {end}
       waypoints={connection.waypoints || []}
       onHandleDragStart={(segmentIndex, event) => handleSegmentHandleDragStart(id, segmentIndex, event)}
+      onDoubleClick={(e) => handleConnectionDoubleClick(e, connection)}
     />
 
     <!-- Connection Label -->
-    {#if connection.label}
-      <g class="connection-label">
-        <!-- Calculate label position (can be improved) -->
-        <text
-          x={(start.x + end.x) / 2}
-          y={(start.y + end.y) / 2 - 10}
-          text-anchor="middle"
-          font-size="12px"
-          fill="#333"
-        >
-          {connection.label}
-        </text>
-      </g>
-    {/if}
+    <ConnectionLabel
+      {connection}
+      isSelected={id === selectedConnectionId}
+      {onEditLabel}
+    />
 
     <!-- Connection handles (only when selected) -->
     {#if id === selectedConnectionId}

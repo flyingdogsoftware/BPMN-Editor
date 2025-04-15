@@ -5,7 +5,14 @@
   import ConnectionContextMenu from './ConnectionContextMenu.svelte';
 
   // Props
-  export let onEditLabel = (connection) => {};
+  export let onEditLabel = (connection) => {
+    // Default implementation - dispatch a custom event
+    const editEvent = new CustomEvent('edit-label', {
+      detail: { connectionId: connection.id },
+      bubbles: true
+    });
+    document.dispatchEvent(editEvent);
+  };
 
   // State
   let selectedConnectionId = null;
@@ -217,6 +224,7 @@
   selectedConnectionId={selectedConnectionId}
   onSelect={handleConnectionSelect}
   onContextMenu={showConnectionContextMenu}
+  {onEditLabel}
 />
 
 <!-- Connection Preview -->

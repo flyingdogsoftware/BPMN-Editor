@@ -16,6 +16,7 @@
   export let end = { x: 0, y: 0 };
   export let waypoints = [];
   export let onHandleDragStart = (index, event) => {};
+  export let onDoubleClick = (event) => {};
 
   // State
   let isHovering = false;
@@ -61,6 +62,7 @@
   class="connection-segment"
   on:mouseenter={handleMouseEnter}
   on:mouseleave={handleMouseLeave}
+  on:dblclick={(e) => onDoubleClick(e)}
   role="group"
   aria-label="Connection segment"
 >
