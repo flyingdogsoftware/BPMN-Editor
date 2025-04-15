@@ -20,9 +20,8 @@
 
   // State for dragging
   let isDragging = false;
-  let dragType = null; // 'source', 'target', 'waypoint', 'segment'
+  let dragType = null; // 'source', 'target', 'segment'
   let dragConnectionId = null;
-  let dragWaypointIndex = -1;
   let dragStartX = 0;
   let dragStartY = 0;
   let originalWaypoints = [];
@@ -356,23 +355,7 @@
     console.log('Drag state initialized:', { isDragging, dragType, dragConnectionId, dragStartX, dragStartY });
   }
 
-  // Handle drag start for waypoints
-  function handleWaypointDragStart(event, connection, index) {
-    event.stopPropagation();
-    event.preventDefault();
-
-    isDragging = true;
-    dragType = 'waypoint';
-    dragConnectionId = connection.id;
-    dragWaypointIndex = index;
-    dragStartX = event.clientX;
-    dragStartY = event.clientY;
-    originalWaypoints = [...(connection.waypoints || [])];
-
-    // Add event listeners for mouse move and mouse up
-    window.addEventListener('mousemove', handleMouseMove);
-    window.addEventListener('mouseup', handleMouseUp);
-  }
+  // Waypoint drag functionality removed
 
   // Handle drag start for segments (creating new waypoints)
   function handleSegmentDragStart(event, connection, index) {
@@ -382,7 +365,6 @@
     isDragging = true;
     dragType = 'segment';
     dragConnectionId = connection.id;
-    dragWaypointIndex = index;
     dragStartX = event.clientX;
     dragStartY = event.clientY;
     originalWaypoints = [...(connection.waypoints || [])];
@@ -406,8 +388,7 @@
     // Update the connection
     bpmnStore.updateElement(connection.id, { waypoints: updatedWaypoints });
 
-    // Update the drag index to point to the new waypoint
-    dragWaypointIndex = index === -1 ? 0 : index + 1;
+    // No need to track waypoint index anymore
 
     // Add event listeners for mouse move and mouse up
     window.addEventListener('mousemove', handleMouseMove);
@@ -541,24 +522,7 @@
     console.log('Current hover position:', hoverPosition);
 
     // Handle different drag types
-    if (dragType === 'waypoint') {
-      // Get the current waypoints
-      const waypoints = [...(connection.waypoints || [])];
-
-      if (dragWaypointIndex >= 0 && dragWaypointIndex < waypoints.length) {
-        // Calculate the new position with grid snapping
-        const newPosition = {
-          x: snapToGrid(waypoints[dragWaypointIndex].x + dx, 20),
-          y: snapToGrid(waypoints[dragWaypointIndex].y + dy, 20)
-        };
-
-        // Use the adjustWaypoint function to maintain orthogonal routing
-        const adjustedWaypoints = adjustWaypoint(waypoints, dragWaypointIndex, newPosition);
-
-        // Update the connection with the adjusted waypoints
-        bpmnStore.updateElement(connection.id, { waypoints: adjustedWaypoints });
-      }
-    } else if (dragType === 'segment') {
+    if (dragType === 'segment') {
       // Handle segment dragging
       const segmentInfo = window.currentSegmentInfo;
       if (!segmentInfo) {
@@ -887,7 +851,6 @@
     isDragging = false;
     dragType = null;
     dragConnectionId = null;
-    dragWaypointIndex = -1;
     originalWaypoints = [];
     potentialTargetElement = null;
     isHoveringOverValidTarget = false;
@@ -1060,24 +1023,7 @@
         />
       </g>
 
-      <!-- Waypoint handles -->
-      {#if connection.waypoints && connection.waypoints.length > 0}
-        {#each connection.waypoints as waypoint, i}
-          <circle
-            cx={waypoint.x}
-            cy={waypoint.y}
-            r="5"
-            fill="white"
-            stroke="#3498db"
-            stroke-width="2"
-            class="waypoint-handle"
-            on:mousedown={(e) => handleWaypointDragStart(e, connection, i)}
-            role="button"
-            tabindex="0"
-            aria-label="Drag waypoint {i+1}"
-          />
-        {/each}
-      {/if}
+      <!-- Waypoint handles removed -->
     {/if}
   </g>
 {/each}
@@ -1098,7 +1044,5 @@
     outline: none;
   }
 
-  .waypoint-handle {
-    cursor: move;
-  }
+  /* Waypoint handle styles removed */
 </style>
