@@ -1,5 +1,6 @@
 <script>
   import { calculateOrthogonalPath, adjustWaypoint, optimizeWaypoints } from '../../utils/connectionRouting';
+  import { calculateElementIntersection } from '../../utils/geometryUtils';
   import ConnectionSegment from './ConnectionSegment.svelte';
 
   // Props
@@ -42,19 +43,80 @@
       y: target.y + target.height / 2
     };
 
-    // Calculate the path
-    const path = calculateOrthogonalPath(start, end, connection.waypoints || []);
+    // Calculate the path with the original end point (center of target)
+    const originalPath = calculateOrthogonalPath(start, end, connection.waypoints || []);
 
-    // Log path for debugging
-    // console.log('Connection path:', path);
-    // console.log('Connection waypoints:', connection.waypoints);
+    // Get all points in the path to determine the last segment
+    let lastSegmentStart;
+    const waypoints = connection.waypoints || [];
+
+    // Create an array of all points in the path
+    const allPoints = [start, ...waypoints];
+
+    if (waypoints.length > 0) {
+      // If there are waypoints, the last segment starts from the last waypoint
+      lastSegmentStart = waypoints[waypoints.length - 1];
+    } else {
+      // For direct paths, determine the corner point based on the path calculation logic
+      const dx = end.x - start.x;
+      const dy = end.y - start.y;
+
+      // If the points are aligned horizontally or vertically, use a direct line
+      if (Math.abs(start.x - end.x) < 0.001 || Math.abs(start.y - end.y) < 0.001) {
+        lastSegmentStart = start;
+      } else {
+        const goHorizontalFirst = Math.abs(dx) > Math.abs(dy);
+
+        if (goHorizontalFirst) {
+          lastSegmentStart = { x: end.x, y: start.y };
+        } else {
+          lastSegmentStart = { x: start.x, y: end.y };
+        }
+      }
+    }
+
+    // Calculate the intersection point with the target element's boundary
+    const intersectionPoint = calculateElementIntersection(lastSegmentStart, end, target);
+
+    // Adjust the path to end at the intersection point
+    // We need to modify the SVG path string to change the endpoint
+    let path = originalPath;
+
+    // Always adjust the path to end at the intersection point
+    // We need to handle both straight line segments and curved segments
+    // Check if the path contains a Q command (quadratic bezier curve)
+    if (originalPath.includes('Q')) {
+      // For paths with curves, we need more sophisticated parsing
+      // Split the path into commands and coordinates
+      const commands = originalPath.split(/([MLQ])/g).filter(Boolean);
+      let newPath = '';
+
+      // Rebuild the path, replacing only the last coordinate
+      for (let i = 0; i < commands.length; i++) {
+        if (i === commands.length - 1) {
+          // This is the last coordinate pair
+          newPath += ` ${intersectionPoint.x} ${intersectionPoint.y}`;
+        } else {
+          newPath += commands[i];
+        }
+      }
+
+      path = newPath;
+    } else {
+      // For simple paths with only L commands
+      const pathParts = originalPath.split('L');
+      // Replace the last coordinate with the intersection point
+      pathParts[pathParts.length - 1] = ` ${intersectionPoint.x} ${intersectionPoint.y}`;
+      path = pathParts.join('L');
+    }
 
     return {
       id: connection.id,
       path,
       connection,
       start,
-      end
+      end: intersectionPoint, // Use the intersection point as the visual end
+      originalEnd: end // Keep the original end for reference
     };
   }).filter(Boolean);
 
@@ -80,7 +142,14 @@
           stroke: '#999',
           strokeWidth: 1.5,
           strokeDasharray: '3,3',
-          markerEnd: ''
+          markerEnd: 'url(#associationMarker)'
+        };
+      case 'dataassociation':
+        return {
+          stroke: '#999',
+          strokeWidth: 1.5,
+          strokeDasharray: '2,2',
+          markerEnd: 'url(#associationMarker)'
         };
       default:
         return {
@@ -585,7 +654,7 @@
     refY="5"
     markerWidth="6"
     markerHeight="6"
-    orient="auto"
+    orient="auto-start-reverse"
   >
     <path d="M 0 0 L 10 5 L 0 10 z" fill="#333" />
   </marker>
@@ -593,13 +662,25 @@
   <marker
     id="messageFlowMarker"
     viewBox="0 0 10 10"
-    refX="10"
+    refX="5"
     refY="5"
     markerWidth="6"
     markerHeight="6"
-    orient="auto"
+    orient="auto-start-reverse"
   >
     <circle cx="5" cy="5" r="4" fill="white" stroke="#3498db" stroke-width="1" />
+  </marker>
+
+  <marker
+    id="associationMarker"
+    viewBox="0 0 10 10"
+    refX="10"
+    refY="5"
+    markerWidth="5"
+    markerHeight="5"
+    orient="auto-start-reverse"
+  >
+    <path d="M 0 0 L 10 5 L 0 10" fill="none" stroke="#999" stroke-width="1.5" />
   </marker>
 </defs>
 
