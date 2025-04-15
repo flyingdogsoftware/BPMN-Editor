@@ -1,8 +1,9 @@
 <script>
-  import { calculateOrthogonalPath, adjustWaypoint, optimizeWaypoints } from '../../utils/connectionRouting';
+  import { calculateOrthogonalPath, adjustWaypoint, optimizeWaypoints, findBestConnectionPoint } from '../../utils/connectionRouting';
   import { calculateElementIntersection } from '../../utils/geometryUtils';
   import ConnectionSegment from './ConnectionSegment.svelte';
   import ConnectionLabel from './ConnectionLabel.svelte';
+  import ConnectionEndpointHandle from './ConnectionEndpointHandle.svelte';
 
   // Props
   export let connections = [];
@@ -26,6 +27,11 @@
   let dragStartY = 0;
   let originalWaypoints = [];
 
+  // State for endpoint reconnection
+  let potentialTargetElement = null;
+  let isHoveringOverValidTarget = false;
+  let hoverPosition = { x: 0, y: 0 };
+
   // Force recalculation of paths when connections change
   $: connectionPathsKey = JSON.stringify(connections.map(c => ({ id: c.id, waypoints: c.waypoints })));
 
@@ -37,16 +43,20 @@
 
     if (!source || !target) return null;
 
-    // Calculate start and end positions
-    const start = {
+    // Calculate source center position
+    const sourceCenter = {
       x: source.x + source.width / 2,
       y: source.y + source.height / 2
     };
 
-    const end = {
+    // Calculate target center position
+    const targetCenter = {
       x: target.x + target.width / 2,
       y: target.y + target.height / 2
     };
+
+    // Check if we're currently dragging this connection
+    const isDraggingThisConnection = isDragging && dragConnectionId === connection.id;
 
     // Special handling for event elements (circles) and gateways (diamonds) as targets
     let adjustedWaypoints = [...(connection.waypoints || [])];
@@ -54,8 +64,8 @@
     // For event elements and gateways, we need to ensure the connection approaches from the correct direction
     if ((target.type === 'event' || target.type === 'gateway') && adjustedWaypoints.length === 0) {
       // For direct connections, we need to ensure we approach from a cardinal direction
-      const dx = end.x - start.x;
-      const dy = end.y - start.y;
+      const dx = targetCenter.x - sourceCenter.x;
+      const dy = targetCenter.y - sourceCenter.y;
 
       // Determine if we should approach horizontally or vertically
       const approachHorizontally = Math.abs(dx) > Math.abs(dy);
@@ -63,19 +73,35 @@
       if (approachHorizontally) {
         // Add a waypoint that ensures we approach horizontally
         adjustedWaypoints = [
-          { x: end.x, y: start.y }
+          { x: targetCenter.x, y: sourceCenter.y }
         ];
       } else {
         // Add a waypoint that ensures we approach vertically
         adjustedWaypoints = [
-          { x: start.x, y: end.y }
+          { x: sourceCenter.x, y: targetCenter.y }
         ];
       }
     }
 
     // Get all points in the path
     const waypoints = adjustedWaypoints;
-    const allPoints = [start, ...waypoints, end];
+
+    // Calculate the actual start point (source connection point)
+    let start;
+
+    // If we're dragging the source endpoint of this connection, use the temporary source point
+    if (isDraggingThisConnection && dragType === 'source' && connection.tempSourcePoint) {
+      start = connection.tempSourcePoint;
+    } else if (waypoints.length > 0) {
+      // If there are waypoints, calculate the best connection point from source to first waypoint
+      start = findBestConnectionPoint(source, waypoints[0]);
+    } else {
+      // If there are no waypoints, calculate the best connection point from source to target
+      start = findBestConnectionPoint(source, targetCenter);
+    }
+
+    // All points in the path
+    const allPoints = [start, ...waypoints, targetCenter];
 
     // Determine the last segment start point
     let lastSegmentStart;
@@ -84,40 +110,38 @@
       lastSegmentStart = waypoints[waypoints.length - 1];
     } else {
       // For direct paths, determine the corner point based on the path calculation logic
-      const dx = end.x - start.x;
-      const dy = end.y - start.y;
+      const dx = targetCenter.x - start.x;
+      const dy = targetCenter.y - start.y;
 
       // If the points are aligned horizontally or vertically, use a direct line
-      if (Math.abs(start.x - end.x) < 0.001 || Math.abs(start.y - end.y) < 0.001) {
+      if (Math.abs(start.x - targetCenter.x) < 0.001 || Math.abs(start.y - targetCenter.y) < 0.001) {
         lastSegmentStart = start;
       } else {
         const goHorizontalFirst = Math.abs(dx) > Math.abs(dy);
 
         if (goHorizontalFirst) {
-          lastSegmentStart = { x: end.x, y: start.y };
+          lastSegmentStart = { x: targetCenter.x, y: start.y };
         } else {
-          lastSegmentStart = { x: start.x, y: end.y };
+          lastSegmentStart = { x: start.x, y: targetCenter.y };
         }
       }
     }
 
     // Calculate the intersection point with the target element's boundary
-    let intersectionPoint;
+    let end;
 
-    // For all element types, use the utility function which has specialized handling for events
-    intersectionPoint = calculateElementIntersection(lastSegmentStart, end, target);
+    // If we're dragging the target endpoint of this connection, use the temporary target point
+    if (isDraggingThisConnection && dragType === 'target' && connection.tempTargetPoint) {
+      end = connection.tempTargetPoint;
+    } else {
+      // For all element types, use the utility function which has specialized handling for events
+      end = calculateElementIntersection(lastSegmentStart, targetCenter, target);
 
-    // For event elements and gateways, ensure the intersection point is correctly calculated
-    if (target.type === 'event' || target.type === 'gateway') {
-      // Calculate the center of the element
-      const center = {
-        x: target.x + target.width / 2,
-        y: target.y + target.height / 2
-      };
-
+      // For event elements and gateways, ensure the intersection point is correctly calculated
+      if (target.type === 'event' || target.type === 'gateway') {
       // Calculate the direction vector from center to lastSegmentStart
-      const dx = lastSegmentStart.x - center.x;
-      const dy = lastSegmentStart.y - center.y;
+      const dx = lastSegmentStart.x - targetCenter.x;
+      const dy = lastSegmentStart.y - targetCenter.y;
 
       // Calculate the distance
       const distance = Math.sqrt(dx * dx + dy * dy);
@@ -134,9 +158,9 @@
         // Apply a small offset to ensure the arrow head is visible
         const offsetRadius = radius - 5;
 
-        intersectionPoint = {
-          x: center.x + nx * offsetRadius,
-          y: center.y + ny * offsetRadius
+        end = {
+          x: targetCenter.x + nx * offsetRadius,
+          y: targetCenter.y + ny * offsetRadius
         };
       } else if (target.type === 'gateway') {
         // For gateway elements (diamonds)
@@ -158,22 +182,31 @@
         // Apply a small offset to ensure the arrow head is visible
         const offsetDistance = distanceToEdge - 5;
 
-        intersectionPoint = {
-          x: center.x + nx * offsetDistance,
-          y: center.y + ny * offsetDistance
+        end = {
+          x: targetCenter.x + nx * offsetDistance,
+          y: targetCenter.y + ny * offsetDistance
         };
       }
+    }
     }
 
     // Now calculate the path with the adjusted waypoints
     // but ending at the intersection point instead of the center
-    let pathPoints = [start, ...waypoints];
+    let pathPoints;
+    let path;
 
-    // Add the intersection point as the final point
-    pathPoints.push(intersectionPoint);
+    // If we're dragging an endpoint, use a straight line
+    if (isDraggingThisConnection && (dragType === 'source' || dragType === 'target')) {
+      // Just use start and end points for a direct line
+      pathPoints = [start, end];
+      path = `M ${start.x} ${start.y} L ${end.x} ${end.y}`;
+    } else {
+      // Normal path calculation with waypoints
+      pathPoints = [start, ...waypoints];
+      pathPoints.push(end);
 
-    // Generate the SVG path data
-    let path = `M ${start.x} ${start.y}`;
+      // Generate the SVG path data
+      path = `M ${start.x} ${start.y}`;
 
     // Add each segment
     for (let i = 1; i < pathPoints.length; i++) {
@@ -203,14 +236,15 @@
         }
       }
     }
+    }
 
     return {
       id: connection.id,
       path,
       connection,
       start,
-      end: intersectionPoint, // Use the intersection point as the visual end
-      originalEnd: end, // Keep the original end for reference
+      end, // Use the calculated end point as the visual end
+      originalEnd: targetCenter, // Keep the original end for reference
       waypoints: adjustedWaypoints // Use the adjusted waypoints
     };
   }).filter(Boolean);
@@ -259,7 +293,9 @@
   // Handle connection click
   function handleConnectionClick(event, connectionId) {
     event.stopPropagation();
+    console.log('Connection clicked:', connectionId, 'Current selected:', selectedConnectionId);
     onSelect(connectionId);
+    console.log('After selection, selected connection ID:', selectedConnectionId);
   }
 
   // Handle connection double-click
@@ -294,9 +330,12 @@
   }
 
   // Handle drag start for connection endpoints
-  function handleHandleDragStart(event, connection, type) {
+  function handleEndpointDragStart(event, connection, type) {
     event.stopPropagation();
     event.preventDefault();
+
+    console.log(`Starting drag of ${type} endpoint for connection ${connection.id}`);
+    console.log('Event details:', { clientX: event.clientX, clientY: event.clientY, offsetX: event.offsetX, offsetY: event.offsetY });
 
     isDragging = true;
     dragType = type;
@@ -305,9 +344,16 @@
     dragStartY = event.clientY;
     originalWaypoints = [...(connection.waypoints || [])];
 
+    // Reset potential target state
+    potentialTargetElement = null;
+    isHoveringOverValidTarget = false;
+
     // Add event listeners for mouse move and mouse up
     window.addEventListener('mousemove', handleMouseMove);
     window.addEventListener('mouseup', handleMouseUp);
+
+    // Log the current state for debugging
+    console.log('Drag state initialized:', { isDragging, dragType, dragConnectionId, dragStartX, dragStartY });
   }
 
   // Handle drag start for waypoints
@@ -457,11 +503,18 @@
   // Handle mouse move during drag
   function handleMouseMove(event) {
     if (!isDragging || !dragConnectionId) {
-      console.log('Not dragging or no dragConnectionId');
+      // console.log('Not dragging or no dragConnectionId');
       return;
     }
 
-    console.log('Mouse move during drag:', { dragType, dragConnectionId });
+    console.log('Mouse move during drag:', {
+      dragType,
+      dragConnectionId,
+      clientX: event.clientX,
+      clientY: event.clientY,
+      offsetX: event.offsetX,
+      offsetY: event.offsetY
+    });
 
     const connection = connections.find(c => c.id === dragConnectionId);
     if (!connection) {
@@ -471,10 +524,21 @@
 
     const dx = event.clientX - dragStartX;
     const dy = event.clientY - dragStartY;
+    console.log('Movement delta:', { dx, dy });
 
     // Update the drag start position
     dragStartX = event.clientX;
     dragStartY = event.clientY;
+
+    // Current mouse position in SVG coordinates
+    const mousePosition = {
+      x: event.offsetX,
+      y: event.offsetY
+    };
+
+    // Store the current hover position
+    hoverPosition = mousePosition;
+    console.log('Current hover position:', hoverPosition);
 
     // Handle different drag types
     if (dragType === 'waypoint') {
@@ -647,28 +711,122 @@
         }
       }
     } else if (dragType === 'source' || dragType === 'target') {
-      // For now, we'll just update the waypoints
-      // In a more advanced implementation, we could update the source/target element
+      // Check if we're hovering over a valid target element
+      potentialTargetElement = null;
+      isHoveringOverValidTarget = false;
+
+      // Find potential target elements (excluding the current connection and the element at the other end)
+      const otherEndId = dragType === 'source' ? connection.targetId : connection.sourceId;
+
+      // Find elements under the mouse position
+      for (const element of elements) {
+        // Skip connections and the element at the other end
+        if (element.type === 'connection' || element.id === otherEndId) {
+          continue;
+        }
+
+        // Check if mouse is over this element
+        if (isPointInElement(hoverPosition, element)) {
+          potentialTargetElement = element;
+          isHoveringOverValidTarget = true;
+          break;
+        }
+      }
+
+      // Update the waypoints to show the connection being dragged
       const waypoints = [...(connection.waypoints || [])];
 
-      if (dragType === 'source' && waypoints.length > 0) {
-        // Update the first waypoint
-        waypoints[0] = {
-          x: snapToGrid(waypoints[0].x + dx, 20),
-          y: snapToGrid(waypoints[0].y + dy, 20)
-        };
-      } else if (dragType === 'target' && waypoints.length > 0) {
-        // Update the last waypoint
-        waypoints[waypoints.length - 1] = {
-          x: snapToGrid(waypoints[waypoints.length - 1].x + dx, 20),
-          y: snapToGrid(waypoints[waypoints.length - 1].y + dy, 20)
-        };
-      } else {
-        // If there are no waypoints, create one
-        const source = elements.find(el => el.id === connection.sourceId);
-        const target = elements.find(el => el.id === connection.targetId);
+      // Get the source and target elements
+      const source = elements.find(el => el.id === connection.sourceId);
+      const target = elements.find(el => el.id === connection.targetId);
+
+      if (!source || !target) {
+        console.error('Source or target element not found');
+        return;
+      }
+
+      // Calculate centers
+      const sourceCenter = {
+        x: source.x + source.width / 2,
+        y: source.y + source.height / 2
+      };
+
+      const targetCenter = {
+        x: target.x + target.width / 2,
+        y: target.y + target.height / 2
+      };
+
+      // Store the original waypoints if we haven't already
+      if (!connection.originalWaypoints) {
+        bpmnStore.updateElement(connection.id, { originalWaypoints: [...waypoints] });
+      }
+
+      // During dragging, we'll use a temporary straight line instead of modifying the routing
+      // We'll just update a temporary property to show the drag position
+      if (dragType === 'source') {
+        // If we have a potential target, use its best connection point
+        if (potentialTargetElement) {
+          const bestPoint = findBestConnectionPoint(potentialTargetElement, targetCenter);
+          bpmnStore.updateElement(connection.id, { tempSourcePoint: bestPoint });
+        } else {
+          // Otherwise, follow the mouse
+          const mousePoint = {
+            x: snapToGrid(hoverPosition.x, 20),
+            y: snapToGrid(hoverPosition.y, 20)
+          };
+          bpmnStore.updateElement(connection.id, { tempSourcePoint: mousePoint });
+        }
+      }
+      // If we're dragging the target endpoint
+      else if (dragType === 'target') {
+        // If we have a potential target, use its best connection point
+        if (potentialTargetElement) {
+          const bestPoint = findBestConnectionPoint(potentialTargetElement, sourceCenter);
+          bpmnStore.updateElement(connection.id, { tempTargetPoint: bestPoint });
+        } else {
+          // Otherwise, follow the mouse
+          const mousePoint = {
+            x: snapToGrid(hoverPosition.x, 20),
+            y: snapToGrid(hoverPosition.y, 20)
+          };
+          bpmnStore.updateElement(connection.id, { tempTargetPoint: mousePoint });
+        }
+      }
+    }
+  }
+
+  // Handle mouse up after drag
+  function handleMouseUp() {
+    console.log('Mouse up after drag');
+    if (!isDragging) return;
+
+    // Handle endpoint reconnection
+    if ((dragType === 'source' || dragType === 'target') && potentialTargetElement && isHoveringOverValidTarget) {
+      const connection = connections.find(c => c.id === dragConnectionId);
+      if (connection) {
+        console.log(`Reconnecting ${dragType} of connection ${connection.id} to element ${potentialTargetElement.id}`);
+
+        // Update the connection's source or target
+        if (dragType === 'source') {
+          bpmnStore.updateElement(connection.id, { sourceId: potentialTargetElement.id });
+        } else {
+          bpmnStore.updateElement(connection.id, { targetId: potentialTargetElement.id });
+        }
+
+        // Clear temporary points
+        bpmnStore.updateElement(connection.id, {
+          tempSourcePoint: null,
+          tempTargetPoint: null,
+          originalWaypoints: null
+        });
+
+        // Force recalculation of the path using the default routing
+        // This is the same as when a user creates a new connection
+        const source = elements.find(el => el.id === (dragType === 'source' ? potentialTargetElement.id : connection.sourceId));
+        const target = elements.find(el => el.id === (dragType === 'target' ? potentialTargetElement.id : connection.targetId));
 
         if (source && target) {
+          // Calculate source and target centers
           const sourceCenter = {
             x: source.x + source.width / 2,
             y: source.y + source.height / 2
@@ -679,48 +837,48 @@
             y: target.y + target.height / 2
           };
 
-          if (dragType === 'source') {
-            waypoints.push({
-              x: snapToGrid(sourceCenter.x + dx, 20),
-              y: snapToGrid(sourceCenter.y + dy, 20)
-            });
-          } else {
-            waypoints.push({
-              x: snapToGrid(targetCenter.x + dx, 20),
-              y: snapToGrid(targetCenter.y + dy, 20)
-            });
+          // Calculate default waypoints based on the centers
+          const dx = targetCenter.x - sourceCenter.x;
+          const dy = targetCenter.y - sourceCenter.y;
+
+          // Determine if we should go horizontal or vertical first
+          const goHorizontalFirst = Math.abs(dx) > Math.abs(dy);
+
+          let defaultWaypoints = [];
+
+          // For non-trivial distances, add a waypoint to create an orthogonal path
+          if (Math.abs(dx) > 10 && Math.abs(dy) > 10) {
+            if (goHorizontalFirst) {
+              defaultWaypoints = [{ x: targetCenter.x, y: sourceCenter.y }];
+            } else {
+              defaultWaypoints = [{ x: sourceCenter.x, y: targetCenter.y }];
+            }
           }
+
+          // Update the connection with the default waypoints
+          bpmnStore.updateElement(connection.id, { waypoints: defaultWaypoints });
         }
       }
-
-      // Update the connection
-      bpmnStore.updateElement(connection.id, { waypoints });
-    }
-  }
-
-  // Handle mouse up after drag
-  function handleMouseUp() {
-    console.log('Mouse up after drag');
-    if (!isDragging) return;
-
-    // Optimize waypoints for the connection that was being dragged
-    if (dragConnectionId) {
-      const connection = connections.find(c => c.id === dragConnectionId);
-      if (connection && connection.waypoints && connection.waypoints.length > 0) {
-        // Optimize the waypoints to remove unnecessary points
-        const optimizedWaypoints = optimizeWaypoints(connection.waypoints);
-
-        // Only update if the optimization actually changed something
-        if (JSON.stringify(optimizedWaypoints) !== JSON.stringify(connection.waypoints)) {
-          console.log('Optimizing waypoints:', {
-            before: connection.waypoints.length,
-            after: optimizedWaypoints.length,
-            originalWaypoints: connection.waypoints,
-            optimizedWaypoints: optimizedWaypoints
-          });
-
-          // Update the connection with optimized waypoints
-          bpmnStore.updateElement(connection.id, { waypoints: optimizedWaypoints });
+    } else {
+      // If we didn't reconnect to a new element, restore the original waypoints
+      if (dragConnectionId) {
+        const connection = connections.find(c => c.id === dragConnectionId);
+        if (connection) {
+          // Restore original waypoints if they exist
+          if (connection.originalWaypoints) {
+            bpmnStore.updateElement(connection.id, {
+              waypoints: [...connection.originalWaypoints],
+              originalWaypoints: null,
+              tempSourcePoint: null,
+              tempTargetPoint: null
+            });
+          } else {
+            // Clear temporary points
+            bpmnStore.updateElement(connection.id, {
+              tempSourcePoint: null,
+              tempTargetPoint: null
+            });
+          }
         }
       }
     }
@@ -731,6 +889,8 @@
     dragConnectionId = null;
     dragWaypointIndex = -1;
     originalWaypoints = [];
+    potentialTargetElement = null;
+    isHoveringOverValidTarget = false;
 
     // Clean up segment dragging state
     window.currentSegmentInfo = null;
@@ -744,6 +904,48 @@
     window.removeEventListener('mouseup', handleMouseUp);
 
     console.log('Drag state reset');
+  }
+
+  // Helper function to check if a point is inside an element
+  function isPointInElement(point, element) {
+    if (!element || !('x' in element) || !('y' in element) ||
+        !('width' in element) || !('height' in element)) {
+      return false;
+    }
+
+    // For regular rectangular elements
+    if (element.type !== 'gateway' && element.type !== 'event') {
+      return point.x >= element.x && point.x <= element.x + element.width &&
+             point.y >= element.y && point.y <= element.y + element.height;
+    }
+
+    // For circular events
+    if (element.type === 'event') {
+      const centerX = element.x + element.width / 2;
+      const centerY = element.y + element.height / 2;
+      const radius = element.width / 2;
+
+      const dx = point.x - centerX;
+      const dy = point.y - centerY;
+      const distance = Math.sqrt(dx * dx + dy * dy);
+
+      return distance <= radius;
+    }
+
+    // For diamond-shaped gateways
+    if (element.type === 'gateway') {
+      const centerX = element.x + element.width / 2;
+      const centerY = element.y + element.height / 2;
+
+      // Transform to diamond coordinates
+      const dx = Math.abs(point.x - centerX);
+      const dy = Math.abs(point.y - centerY);
+
+      // Check if point is inside the diamond
+      return (dx / (element.width / 2) + dy / (element.height / 2)) <= 1;
+    }
+
+    return false;
   }
 
   // Add event listeners for mouse move and mouse up
@@ -807,7 +1009,7 @@
 {#each connectionPaths as { id, path, connection, start, end } (id)}
   <g
     class="connection"
-    class:selected={id === selectedConnectionId}
+    class:selected={id === selectedConnectionId || connection.isSelected}
     on:click={(e) => handleConnectionClick(e, id)}
     on:dblclick={(e) => handleConnectionDoubleClick(e, connection)}
     on:keydown={(e) => e.key === 'Enter' && handleConnectionClick(e, id)}
@@ -819,7 +1021,7 @@
     <ConnectionSegment
       {path}
       style={getConnectionStyle(connection)}
-      isSelected={id === selectedConnectionId}
+      isSelected={id === selectedConnectionId || connection.isSelected}
       {start}
       {end}
       waypoints={connection.waypoints || []}
@@ -830,41 +1032,33 @@
     <!-- Connection Label -->
     <ConnectionLabel
       {connection}
-      isSelected={id === selectedConnectionId}
+      isSelected={id === selectedConnectionId || connection.isSelected}
       {onEditLabel}
     />
 
-    <!-- Connection handles (only when selected) -->
-    {#if id === selectedConnectionId}
+    <!-- Connection endpoint handles (always visible when selected) -->
+    {#if id === selectedConnectionId || connection.isSelected}
       <!-- Source handle -->
-      <circle
-        cx={start.x}
-        cy={start.y}
-        r="6"
-        fill="white"
-        stroke="#27ae60"
-        stroke-width="2"
-        class="connection-handle source"
-        on:mousedown={(e) => handleHandleDragStart(e, connection, 'source')}
-        role="button"
-        tabindex="0"
-        aria-label="Drag source connection point"
-      />
+      <g class="endpoint-container source">
+        <ConnectionEndpointHandle
+          x={start.x}
+          y={start.y}
+          isSource={true}
+          isVisible={true}
+          on:dragStart={(e) => handleEndpointDragStart(e.detail.event, connection, 'source')}
+        />
+      </g>
 
       <!-- Target handle -->
-      <circle
-        cx={end.x}
-        cy={end.y}
-        r="6"
-        fill="white"
-        stroke="#e74c3c"
-        stroke-width="2"
-        class="connection-handle target"
-        on:mousedown={(e) => handleHandleDragStart(e, connection, 'target')}
-        role="button"
-        tabindex="0"
-        aria-label="Drag target connection point"
-      />
+      <g class="endpoint-container target">
+        <ConnectionEndpointHandle
+          x={end.x}
+          y={end.y}
+          isSource={false}
+          isVisible={true}
+          on:dragStart={(e) => handleEndpointDragStart(e.detail.event, connection, 'target')}
+        />
+      </g>
 
       <!-- Waypoint handles -->
       {#if connection.waypoints && connection.waypoints.length > 0}
@@ -902,10 +1096,6 @@
   /* Add a custom focus style for accessibility */
   .connection:focus {
     outline: none;
-  }
-
-  .connection-handle {
-    cursor: move;
   }
 
   .waypoint-handle {

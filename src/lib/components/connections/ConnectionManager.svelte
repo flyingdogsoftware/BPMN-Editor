@@ -31,7 +31,26 @@
 
   // Handle connection selection
   function handleConnectionSelect(connectionId) {
-    selectedConnectionId = connectionId === selectedConnectionId ? null : connectionId;
+    console.log('ConnectionManager: handleConnectionSelect called with', connectionId);
+    console.log('ConnectionManager: current selectedConnectionId', selectedConnectionId);
+
+    // Toggle selection
+    if (connectionId === selectedConnectionId) {
+      selectedConnectionId = null;
+    } else {
+      // Deselect any previously selected connection in the store
+      connections.forEach(conn => {
+        if (conn.isSelected) {
+          bpmnStore.updateElement(conn.id, { isSelected: false });
+        }
+      });
+
+      // Select the new connection
+      selectedConnectionId = connectionId;
+      bpmnStore.updateElement(connectionId, { isSelected: true });
+    }
+
+    console.log('ConnectionManager: new selectedConnectionId', selectedConnectionId);
   }
 
   // Start creating a connection from an element
