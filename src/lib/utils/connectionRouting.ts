@@ -292,6 +292,47 @@ export function findBestConnectionPoint(
 }
 
 /**
+ * Optimize waypoints by removing unnecessary points
+ * @param waypoints The waypoints to optimize
+ * @returns The optimized waypoints
+ */
+export function optimizeWaypoints(waypoints: Position[]): Position[] {
+  if (!waypoints || waypoints.length <= 1) {
+    return waypoints;
+  }
+
+  const result: Position[] = [];
+  result.push(waypoints[0]);
+
+  // Iterate through waypoints and remove unnecessary ones
+  for (let i = 1; i < waypoints.length - 1; i++) {
+    const prev = result[result.length - 1];
+    const current = waypoints[i];
+    const next = waypoints[i + 1];
+
+    // Check if the current point is on the same line as the previous and next points
+    const isHorizontalLine = Math.abs(prev.y - current.y) < 0.001 && Math.abs(current.y - next.y) < 0.001;
+    const isVerticalLine = Math.abs(prev.x - current.x) < 0.001 && Math.abs(current.x - next.x) < 0.001;
+
+    // If the current point is not on the same line, keep it
+    if (!isHorizontalLine && !isVerticalLine) {
+      result.push(current);
+    }
+    // If we're at a corner (change of direction), keep the point
+    else if ((Math.abs(prev.x - current.x) > 0.001 && Math.abs(current.y - next.y) > 0.001) ||
+             (Math.abs(prev.y - current.y) > 0.001 && Math.abs(current.x - next.x) > 0.001)) {
+      result.push(current);
+    }
+    // Otherwise, the point is unnecessary and can be skipped
+  }
+
+  // Always add the last point
+  result.push(waypoints[waypoints.length - 1]);
+
+  return result;
+}
+
+/**
  * Adjust a waypoint to maintain orthogonal routing
  * @param waypoints The current waypoints
  * @param index The index of the waypoint to adjust

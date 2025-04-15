@@ -1,5 +1,5 @@
 <script>
-  import { calculateOrthogonalPath, adjustWaypoint } from '../../utils/connectionRouting';
+  import { calculateOrthogonalPath, adjustWaypoint, optimizeWaypoints } from '../../utils/connectionRouting';
   import ConnectionSegment from './ConnectionSegment.svelte';
 
   // Props
@@ -514,6 +514,26 @@
   function handleMouseUp() {
     console.log('Mouse up after drag');
     if (!isDragging) return;
+
+    // Optimize waypoints for the connection that was being dragged
+    if (dragConnectionId) {
+      const connection = connections.find(c => c.id === dragConnectionId);
+      if (connection && connection.waypoints && connection.waypoints.length > 0) {
+        // Optimize the waypoints to remove unnecessary points
+        const optimizedWaypoints = optimizeWaypoints(connection.waypoints);
+
+        // Only update if the optimization actually changed something
+        if (optimizedWaypoints.length !== connection.waypoints.length) {
+          console.log('Optimizing waypoints:', {
+            before: connection.waypoints.length,
+            after: optimizedWaypoints.length
+          });
+
+          // Update the connection with optimized waypoints
+          bpmnStore.updateElement(connection.id, { waypoints: optimizedWaypoints });
+        }
+      }
+    }
 
     // Reset drag state
     isDragging = false;
