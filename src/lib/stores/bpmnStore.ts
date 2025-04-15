@@ -71,64 +71,66 @@ const createBpmnStore = () => {
                 if (dx !== 0 || dy !== 0) {
                   const isSource = el.sourceId === id;
 
-                  // If waypoints exist, adjust them
-                  if (el.waypoints && el.waypoints.length > 0) {
-                    console.log(`  Adjusting waypoints for ${isSource ? 'source' : 'target'} movement`);
+                  // Completely reset the waypoints and recalculate the path
+                  // This ensures that the connection is properly rendered after element movement
+                  console.log(`  Resetting connection path for ${isSource ? 'source' : 'target'} movement`);
 
-                    // Store original waypoints for logging
-                    const originalWaypoints = [...el.waypoints];
+                  // Find source and target elements
+                  const source = updatedElements.find(e => e.id === el.sourceId);
+                  const target = updatedElements.find(e => e.id === el.targetId);
 
-                    // Adjust the waypoints
-                    el.waypoints = adjustWaypointsForElementMove(el.waypoints, isSource, dx, dy);
+                  if (source && target && 'x' in source && 'y' in source && 'width' in source && 'height' in source &&
+                      'x' in target && 'y' in target && 'width' in target && 'height' in target) {
+                    // Calculate centers
+                    const sourceCenter = {
+                      x: source.x + source.width / 2,
+                      y: source.y + source.height / 2
+                    };
 
-                    console.log(`  Original waypoints:`, originalWaypoints);
-                    console.log(`  Adjusted waypoints:`, el.waypoints);
-                  } else {
-                    // If there are no waypoints, we need to create some based on the current element positions
-                    console.log(`  No waypoints, creating initial path`);
+                    const targetCenter = {
+                      x: target.x + target.width / 2,
+                      y: target.y + target.height / 2
+                    };
 
-                    // Find source and target elements
-                    const source = updatedElements.find(e => e.id === el.sourceId);
-                    const target = updatedElements.find(e => e.id === el.targetId);
+                    // Determine whether to go horizontal or vertical first
+                    const dx = targetCenter.x - sourceCenter.x;
+                    const dy = targetCenter.y - sourceCenter.y;
+                    const goHorizontalFirst = Math.abs(dx) > Math.abs(dy);
 
-                    if (source && target && 'x' in source && 'y' in source && 'width' in source && 'height' in source &&
-                        'x' in target && 'y' in target && 'width' in target && 'height' in target) {
-                      // Create a simple path with one waypoint to maintain orthogonality
-                      const sourceCenter = {
-                        x: source.x + source.width / 2,
-                        y: source.y + source.height / 2
-                      };
-
-                      const targetCenter = {
-                        x: target.x + target.width / 2,
-                        y: target.y + target.height / 2
-                      };
-
-                      // Determine whether to go horizontal or vertical first
-                      const dx = targetCenter.x - sourceCenter.x;
-                      const dy = targetCenter.y - sourceCenter.y;
-                      const goHorizontalFirst = Math.abs(dx) > Math.abs(dy);
-
-                      if (goHorizontalFirst) {
-                        // Create a waypoint that goes horizontal first
-                        el.waypoints = [
-                          { x: targetCenter.x, y: sourceCenter.y }
-                        ];
-                      } else {
-                        // Create a waypoint that goes vertical first
-                        el.waypoints = [
-                          { x: sourceCenter.x, y: targetCenter.y }
-                        ];
-                      }
-
-                      console.log(`  Created initial waypoints:`, el.waypoints);
+                    // Create a new path with one waypoint
+                    if (goHorizontalFirst) {
+                      // Create a waypoint that goes horizontal first
+                      el.waypoints = [
+                        { x: targetCenter.x, y: sourceCenter.y }
+                      ];
                     } else {
-                      // If we can't find the elements, reset the path
-                      console.log(`  Could not find source or target elements, resetting path`);
-                      el.waypoints = [];
+                      // Create a waypoint that goes vertical first
+                      el.waypoints = [
+                        { x: sourceCenter.x, y: targetCenter.y }
+                      ];
                     }
+
+                    console.log(`  Created new waypoints:`, el.waypoints);
+
+                    // Force a refresh of the connection to ensure proper rendering of handles
+                    // This is important to ensure that the segment midpoints are recalculated
+                    // and the handles are positioned correctly
+                    setTimeout(() => {
+                      // Make a copy of the waypoints to trigger a reactive update
+                      const refreshedWaypoints = [...el.waypoints];
+                      update(elements =>
+                        elements.map(element =>
+                          element.id === el.id ? { ...element, waypoints: refreshedWaypoints } : element
+                        )
+                      );
+                    }, 0);
+                  } else {
+                    // If we can't find the elements, reset the path
+                    console.log(`  Could not find source or target elements, resetting path`);
+                    el.waypoints = [];
                   }
                 } else {
+                  // If there was no movement, keep existing path
                   console.log(`  No movement detected, keeping existing path`);
                 }
               }

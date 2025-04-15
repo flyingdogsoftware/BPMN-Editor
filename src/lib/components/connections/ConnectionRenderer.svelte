@@ -24,8 +24,11 @@
   let dragStartY = 0;
   let originalWaypoints = [];
 
+  // Force recalculation of paths when connections change
+  $: connectionPathsKey = JSON.stringify(connections.map(c => ({ id: c.id, waypoints: c.waypoints })));
+
   // Calculate connection paths
-  $: connectionPaths = connections.map(connection => {
+  $: connectionPaths = connectionPathsKey && connections.map(connection => {
     // Find source and target elements
     const source = elements.find(el => el.id === connection.sourceId);
     const target = elements.find(el => el.id === connection.targetId);

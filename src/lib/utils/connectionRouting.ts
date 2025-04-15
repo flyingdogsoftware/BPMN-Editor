@@ -601,6 +601,45 @@ export function adjustWaypointsForElementMove(
     }
   }
 
+  // Ensure all segment handles are properly positioned
+  // This is important for maintaining the visual appearance of the connection
+  // and ensuring that handles are correctly positioned after element movement
+  if (updatedWaypoints.length > 2) {
+    // Process intermediate waypoints to maintain orthogonal routing
+    for (let i = 1; i < updatedWaypoints.length - 1; i++) {
+      const prev = updatedWaypoints[i - 1];
+      const current = updatedWaypoints[i];
+      const next = updatedWaypoints[i + 1];
+
+      // Check if we have horizontal segments that need to be maintained
+      const prevSegmentHorizontal = Math.abs(prev.y - current.y) < EPSILON;
+      const nextSegmentHorizontal = Math.abs(current.y - next.y) < EPSILON;
+
+      // Check if we have vertical segments that need to be maintained
+      const prevSegmentVertical = Math.abs(prev.x - current.x) < EPSILON;
+      const nextSegmentVertical = Math.abs(current.x - next.x) < EPSILON;
+
+      // Maintain horizontal-vertical or vertical-horizontal patterns
+      if (prevSegmentHorizontal && nextSegmentVertical) {
+        // Corner point: horizontal then vertical
+        // Ensure the corner maintains its position relative to the segments
+        updatedWaypoints[i] = {
+          x: next.x,
+          y: prev.y
+        };
+      } else if (prevSegmentVertical && nextSegmentHorizontal) {
+        // Corner point: vertical then horizontal
+        // Ensure the corner maintains its position relative to the segments
+        updatedWaypoints[i] = {
+          x: prev.x,
+          y: next.y
+        };
+      }
+      // If both segments are horizontal or both are vertical, we might need to adjust
+      // but for now we'll leave those cases as they are to avoid unexpected changes
+    }
+  }
+
   // Log the result
   console.log('Waypoints adjustment result:', {
     original: waypoints,

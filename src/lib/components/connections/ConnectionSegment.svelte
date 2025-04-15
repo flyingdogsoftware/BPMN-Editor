@@ -21,15 +21,18 @@
   let isHovering = false;
   let segmentMidpoints = [];
 
+  // Force recalculation when waypoints change
+  $: waypointsKey = JSON.stringify({ start, end, waypoints });
+
   // Computed
   $: strokeWidth = isSelected ? parseInt(style.strokeWidth) + 1 : style.strokeWidth;
-  $: segmentMidpoints = calculateSegmentMidpoints(start, end, waypoints);
+  $: segmentMidpoints = waypointsKey && calculateSegmentMidpoints(start, end, waypoints);
 
   // Function to log midpoints (for debugging)
   function logMidpoints() {
-    // Uncomment for debugging
-    // console.log('Connection segment midpoints:', segmentMidpoints);
-    // console.log('Start:', start, 'End:', end, 'Waypoints:', waypoints);
+    // Log for debugging
+    console.log('Connection segment midpoints:', segmentMidpoints);
+    console.log('Start:', start, 'End:', end, 'Waypoints:', waypoints);
   }
 
   // Handle mouse enter/leave for hover state
@@ -83,13 +86,12 @@
       />
     {/each}
 
-    <!-- Debug points can be uncommented for troubleshooting
+    <!-- Debug points for troubleshooting -->
     <circle cx={start.x} cy={start.y} r="3" fill="green" />
     <circle cx={end.x} cy={end.y} r="3" fill="purple" />
     {#each waypoints as waypoint}
       <circle cx={waypoint.x} cy={waypoint.y} r="3" fill="orange" />
     {/each}
-    -->
   {/if}
 </g>
 
