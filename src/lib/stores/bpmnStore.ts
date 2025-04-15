@@ -1,6 +1,6 @@
 import { writable } from 'svelte/store';
 import type { BpmnConnection, BpmnElementUnion, ConnectionPoint, Position } from '../models/bpmnElements';
-import { calculateConnectionPoints, adjustWaypointsForElementMove } from '../utils/connectionRouting';
+import { calculateConnectionPoints, adjustWaypointsForElementMove, optimizeWaypoints } from '../utils/connectionRouting';
 
 // Initial elements - empty array for a blank canvas
 const initialElements: BpmnElementUnion[] = [];
@@ -143,10 +143,20 @@ const createBpmnStore = () => {
     // Add a new connection
     addConnection: (connection: BpmnConnection) => update(elements => [...elements, connection]),
     // Update connection waypoints
-    updateConnectionWaypoints: (id: string, waypoints: Position[]) =>
-      update(elements =>
-        elements.map(el => el.id === id && el.type === 'connection' ? { ...el, waypoints } : el)
-      ),
+    updateConnectionWaypoints: (id: string, waypoints: Position[]) => {
+      // Log the update operation
+      console.log('DEBUG: Updating connection waypoints for', id);
+      console.log('DEBUG: New waypoints:', JSON.stringify(waypoints));
+
+      // First, optimize the waypoints if they're not already optimized
+      // This ensures we always store optimized paths
+      const optimizedWaypoints = optimizeWaypoints(waypoints);
+
+      // Update the element with the optimized waypoints
+      return update(elements =>
+        elements.map(el => el.id === id && el.type === 'connection' ? { ...el, waypoints: optimizedWaypoints } : el)
+      );
+    },
     // Get connection points for an element
     getConnectionPoints: (elements: BpmnElementUnion[], elementId: string): ConnectionPoint[] => {
       const element = elements.find(el => el.id === elementId);

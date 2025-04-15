@@ -128,6 +128,7 @@
   // Import new connection management
   import ConnectionManager from './connections/ConnectionManager.svelte';
   import ElementContextMenu from './ElementContextMenu.svelte';
+  import OptimizeConnectionButton from './connections/OptimizeConnectionButton.svelte';
 
   // Listen for edit-label events from Connection components
   onMount(() => {
@@ -1036,6 +1037,14 @@
       Test Import Pools
     </button>
   </div>
+
+  <!-- Debug Optimize Button for any selected connection -->
+  {#each $bpmnStore.filter(el => el.type === 'connection' && el.isSelected) as selectedConnection}
+    <OptimizeConnectionButton
+      connectionId={selectedConnection.id}
+      waypoints={selectedConnection.waypoints || []}
+    />
+  {/each}
   <!-- Element Manager Component -->
   <ElementManagerComponent bind:this={elementManagerComponent} />
 

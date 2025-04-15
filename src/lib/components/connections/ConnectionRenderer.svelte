@@ -4,6 +4,7 @@
   import ConnectionSegment from './ConnectionSegment.svelte';
   import ConnectionLabel from './ConnectionLabel.svelte';
   import ConnectionEndpointHandle from './ConnectionEndpointHandle.svelte';
+  import OptimizeConnectionButton from './OptimizeConnectionButton.svelte';
 
   // Props
   export let connections = [];
@@ -405,6 +406,9 @@
       return;
     }
 
+    // Log the current waypoints for debugging
+    console.log('DEBUG: Current waypoints before drag:', JSON.stringify(connection.waypoints));
+
     // Calculate the position where the new waypoint should be added
     const source = elements.find(el => el.id === connection.sourceId);
     const target = elements.find(el => el.id === connection.targetId);
@@ -764,6 +768,9 @@
     console.log('Mouse up after drag');
     if (!isDragging) return;
 
+    // Store the connection ID for optimization after drag
+    const connectionToOptimize = dragConnectionId;
+
     // Handle endpoint reconnection
     if ((dragType === 'source' || dragType === 'target') && potentialTargetElement && isHoveringOverValidTarget) {
       const connection = connections.find(c => c.id === dragConnectionId);
@@ -867,6 +874,18 @@
     window.removeEventListener('mouseup', handleMouseUp);
 
     console.log('Drag state reset');
+
+    // Optimize the connection waypoints after a short delay to ensure all updates are complete
+    if (connectionToOptimize) {
+      setTimeout(() => {
+        const connection = connections.find(c => c.id === connectionToOptimize);
+        if (connection && connection.waypoints && connection.waypoints.length > 1) {
+          console.log('DEBUG: Auto-optimizing connection after drag:', connectionToOptimize);
+          const optimizedWaypoints = optimizeWaypoints(connection.waypoints);
+          bpmnStore.updateConnectionWaypoints(connectionToOptimize, optimizedWaypoints);
+        }
+      }, 100); // Small delay to ensure the connection is fully updated
+    }
   }
 
   // Helper function to check if a point is inside an element
@@ -967,6 +986,16 @@
     <path d="M 0 0 L 10 5 L 0 10" fill="none" stroke="#999" stroke-width="1.5" />
   </marker>
 </defs>
+
+<!-- Debug Optimize Button for selected connection -->
+{#if selectedConnectionId}
+  {#each connections.filter(c => c.id === selectedConnectionId) as selectedConnection}
+    <OptimizeConnectionButton
+      connectionId={selectedConnection.id}
+      waypoints={selectedConnection.waypoints || []}
+    />
+  {/each}
+{/if}
 
 <!-- Render connections -->
 {#each connectionPaths as { id, path, connection, start, end } (id)}

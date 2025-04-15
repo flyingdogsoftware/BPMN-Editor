@@ -88,12 +88,7 @@
       />
     {/each}
 
-    <!-- Debug points for troubleshooting -->
-    <circle cx={start.x} cy={start.y} r="3" fill="green" />
-    <circle cx={end.x} cy={end.y} r="3" fill="purple" />
-    {#each waypoints as waypoint}
-      <circle cx={waypoint.x} cy={waypoint.y} r="3" fill="orange" />
-    {/each}
+    <!-- Debug points are removed to avoid visual clutter -->
   {/if}
 </g>
 
