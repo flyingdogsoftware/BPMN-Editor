@@ -31,6 +31,15 @@
     dispatch('reset');
   }
 
+  // Zoom functionality
+  function zoomIn() {
+    dispatch('zoomIn');
+  }
+
+  function zoomOut() {
+    dispatch('zoomOut');
+  }
+
   // Handle drag start for toolbar elements
   function handleDragStart(event, element) {
     console.log('Toolbar: Drag start with element:', element);
@@ -119,7 +128,16 @@
   <div class="toolbar-section">
     <h3>Tools</h3>
     <div class="button-group">
-      <!-- Connection Points and Add Condition buttons removed -->
+      <!-- Zoom buttons -->
+      <button on:click={zoomIn} class="zoom-button" title="Zoom In">
+        <span class="zoom-icon">+</span>
+        <span>Zoom In</span>
+      </button>
+      <button on:click={zoomOut} class="zoom-button" title="Zoom Out">
+        <span class="zoom-icon">-</span>
+        <span>Zoom Out</span>
+      </button>
+      <!-- Reset button -->
       <button on:click={resetDiagram}>
         Reset
       </button>
@@ -217,5 +235,17 @@
   .more-button:hover {
     background-color: #bae7ff;
     border-color: #1890ff;
+  }
+
+  .zoom-button {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    background-color: #f0f0f0;
+  }
+
+  .zoom-icon {
+    font-size: 16px;
+    font-weight: bold;
   }
 </style>

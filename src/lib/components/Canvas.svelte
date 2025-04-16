@@ -6,6 +6,7 @@
   export let height = 600;
   export let viewportX = 0;
   export let viewportY = 0;
+  export let zoomLevel = 1.0; // Default zoom level is 100%
   export let isDraggingCanvas = false;
   export let onMouseDown = (event) => {};
   export let onWheel = (event) => {};
@@ -15,8 +16,11 @@
   const gridColor = '#e0e0e0';
   const gridStrokeWidth = 1;
 
+  // Calculate the transform string including zoom
+  $: transformString = `translate(${viewportX}px, ${viewportY}px) scale(${zoomLevel})`;
+
   // Debug: Log viewport changes
-  $: console.log('DEBUG: Canvas component - viewport changed:', { viewportX, viewportY });
+  $: console.log('DEBUG: Canvas component - viewport changed:', { viewportX, viewportY, zoomLevel });
 </script>
 
 <!-- Using role="presentation" to indicate this is a non-interactive element for visual presentation -->
@@ -32,9 +36,10 @@
     {width}
     {height}
     class="canvas"
-    style="transform: translate({viewportX}px, {viewportY}px) !important;"
+    style="transform: {transformString} !important;"
     data-viewport-x={viewportX}
     data-viewport-y={viewportY}
+    data-zoom-level={zoomLevel}
   >
     <!-- Draw grid -->
     <pattern id="grid" width={gridSize} height={gridSize} patternUnits="userSpaceOnUse">

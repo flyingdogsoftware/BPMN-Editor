@@ -183,10 +183,11 @@
   $: canvasHeight = viewport.height;
   $: viewportX = viewport.x;
   $: viewportY = viewport.y;
+  $: zoomLevel = viewport.zoomLevel || 1.0; // Default to 1.0 if not set
   $: isDraggingCanvas = canvasInteractionManager.getIsDraggingCanvas();
 
   // Log viewport dimensions for debugging
-  $: console.log('DEBUG: BpmnEditor - Current viewport dimensions:', { canvasWidth, canvasHeight, viewportX, viewportY, isDragging: isDraggingCanvas });
+  $: console.log('DEBUG: BpmnEditor - Current viewport dimensions:', { canvasWidth, canvasHeight, viewportX, viewportY, zoomLevel, isDragging: isDraggingCanvas });
 
   // Update canvas size based on elements
   $: canvasInteractionManager.updateCanvasSizeBasedOnElements($bpmnStore);
@@ -1219,6 +1220,8 @@
       }
     }}
     on:reset={() => bpmnStore.reset()}
+    on:zoomIn={() => canvasInteractionManager.zoomIn()}
+    on:zoomOut={() => canvasInteractionManager.zoomOut()}
   />
 
   <div
@@ -1239,6 +1242,7 @@
       height={canvasHeight}
       viewportX={viewportX}
       viewportY={viewportY}
+      zoomLevel={zoomLevel}
       isDraggingCanvas={isDraggingCanvas}
       onMouseDown={handleCanvasMouseDown}
       onWheel={handleCanvasWheel}

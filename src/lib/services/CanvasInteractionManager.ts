@@ -11,7 +11,8 @@ export class CanvasInteractionManager {
     x: 0,
     y: 0,
     width: 800,
-    height: 600
+    height: 600,
+    zoomLevel: 1.0 // 100% zoom by default
   });
 
   // Abgeleiteter Store für die transformierte Ansicht
@@ -322,6 +323,68 @@ export class CanvasInteractionManager {
     if (typeof window !== 'undefined') {
       window.removeEventListener('resize', () => this.updateCanvasSize());
     }
+  }
+
+  /**
+   * Verringert den Zoom-Level (Zoom Out)
+   * @param step Die Schrittgröße für die Zoom-Änderung
+   */
+  public zoomOut(step = 0.1) {
+    this.viewportStore.update(viewport => {
+      // Berechne neuen Zoom-Level, aber nicht unter 0.2 (20%)
+      const newZoomLevel = Math.max(0.2, viewport.zoomLevel - step);
+
+      // Nur Werte kleiner als 1.0 (100%) erlauben
+      if (newZoomLevel > 1.0) {
+        return viewport; // Keine Änderung, wenn über 100%
+      }
+
+      console.log('DEBUG: Zooming out to', newZoomLevel);
+      return {
+        ...viewport,
+        zoomLevel: newZoomLevel
+      };
+    });
+  }
+
+  /**
+   * Erhöht den Zoom-Level (Zoom In)
+   * @param step Die Schrittgröße für die Zoom-Änderung
+   */
+  public zoomIn(step = 0.1) {
+    this.viewportStore.update(viewport => {
+      // Berechne neuen Zoom-Level
+      const newZoomLevel = viewport.zoomLevel + step;
+
+      // Nur Werte kleiner oder gleich 1.0 (100%) erlauben
+      if (newZoomLevel > 1.0) {
+        // Setze auf genau 1.0, wenn wir darüber gehen würden
+        return {
+          ...viewport,
+          zoomLevel: 1.0
+        };
+      }
+
+      console.log('DEBUG: Zooming in to', newZoomLevel);
+      return {
+        ...viewport,
+        zoomLevel: newZoomLevel
+      };
+    });
+  }
+
+  /**
+   * Setzt den Zoom-Level auf einen bestimmten Wert
+   * @param zoomLevel Der neue Zoom-Level
+   */
+  public setZoomLevel(zoomLevel) {
+    // Begrenze den Zoom-Level auf den Bereich [0.2, 1.0]
+    const newZoomLevel = Math.min(1.0, Math.max(0.2, zoomLevel));
+
+    this.viewportStore.update(viewport => ({
+      ...viewport,
+      zoomLevel: newZoomLevel
+    }));
   }
 }
 
