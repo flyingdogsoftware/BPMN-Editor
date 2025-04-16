@@ -311,244 +311,37 @@ export function optimizeWaypoints(waypoints: Position[]): Position[] {
   // Define a small epsilon for floating point comparisons
   const EPSILON = 0.001;
 
-  // Special case for L-shaped connections with 3 points
-  if (waypoints.length === 3) {
-    const [p1, p2, p3] = waypoints;
-
-    // Check if this is an L-shaped connection (horizontal then vertical or vice versa)
-    const isHorizontalThenVertical =
-      Math.abs(p1.y - p2.y) < EPSILON && // First segment is horizontal
-      Math.abs(p2.x - p3.x) < EPSILON;   // Second segment is vertical
-
-    const isVerticalThenHorizontal =
-      Math.abs(p1.x - p2.x) < EPSILON && // First segment is vertical
-      Math.abs(p2.y - p3.y) < EPSILON;   // Second segment is horizontal
-
-    if (isHorizontalThenVertical || isVerticalThenHorizontal) {
-      console.log('DEBUG: Detected L-shaped connection with 3 points - keeping all points');
-      return waypoints; // This is already optimal
-    }
-  }
-
-  // First pass: Merge collinear segments
-  let madeChanges = true;
-  let passCount = 0;
-
-  // Keep optimizing until no more changes can be made
-  while (madeChanges && passCount < 10) { // Limit to 10 passes to prevent infinite loops
-    passCount++;
-    madeChanges = false;
-    const result: Position[] = [];
-
-    // Always keep the first point
-    result.push(optimized[0]);
-
-    console.log(`DEBUG: Pass ${passCount} - Starting with ${optimized.length} points`);
-
-    // Check each point to see if it's necessary
-    for (let i = 1; i < optimized.length - 1; i++) {
-      const prev = result[result.length - 1]; // Last point in our result so far
-      const current = optimized[i];           // Current point we're evaluating
-      const next = optimized[i + 1];          // Next point in the sequence
-
-      // Check if the current point forms a corner or is part of a straight line
-      // For a corner, we need to check if the direction changes
-
-      // Calculate direction vectors
-      const dir1 = {
-        x: current.x - prev.x,
-        y: current.y - prev.y
-      };
-
-      const dir2 = {
-        x: next.x - current.x,
-        y: next.y - current.y
-      };
-
-      // Normalize direction vectors to handle different segment lengths
-      const len1 = Math.sqrt(dir1.x * dir1.x + dir1.y * dir1.y);
-      const len2 = Math.sqrt(dir2.x * dir2.x + dir2.y * dir2.y);
-
-      // Avoid division by zero
-      const norm1 = len1 > EPSILON ? { x: dir1.x / len1, y: dir1.y / len1 } : { x: 0, y: 0 };
-      const norm2 = len2 > EPSILON ? { x: dir2.x / len2, y: dir2.y / len2 } : { x: 0, y: 0 };
-
-      // Calculate dot product to determine if directions are the same
-      const dotProduct = norm1.x * norm2.x + norm1.y * norm2.y;
-
-      // If dot product is close to 1, the segments are collinear
-      const isCollinear = Math.abs(dotProduct - 1) < EPSILON;
-
-      // For horizontal lines, all points should have the same y-coordinate
-      const isHorizontalLine = Math.abs(prev.y - current.y) < EPSILON && Math.abs(current.y - next.y) < EPSILON;
-
-      // For vertical lines, all points should have the same x-coordinate
-      const isVerticalLine = Math.abs(prev.x - current.x) < EPSILON && Math.abs(current.x - next.x) < EPSILON;
-
-      console.log(`DEBUG: Evaluating point ${i}:`, current,
-                  'isHorizontal:', isHorizontalLine,
-                  'isVertical:', isVerticalLine,
-                  'isCollinear:', isCollinear,
-                  'dotProduct:', dotProduct,
-                  'prev:', prev,
-                  'next:', next);
-
-      // If the current point is on the same line (horizontal, vertical, or collinear), skip it
-      if (isHorizontalLine || isVerticalLine || isCollinear) {
-        console.log(`DEBUG: Point ${i} is collinear - skipping`);
-        madeChanges = true;
-        // Skip this point (don't add to result)
-      }
-      // If the current point is a corner (change of direction), keep it
-      else {
-        console.log(`DEBUG: Point ${i} is a corner - keeping`);
-        result.push(current);
-      }
-    }
-
-    // Always keep the last point
-    result.push(optimized[optimized.length - 1]);
-
-    console.log(`DEBUG: Pass ${passCount} - Reduced to ${result.length} points`);
-
-    // If we made changes, update the optimized array for the next iteration
-    if (madeChanges) {
-      optimized = [...result];
-    }
-
-    // Safety check: if we're not reducing the number of points, stop
-    if (result.length >= optimized.length) {
-      madeChanges = false;
-    }
-  }
-
-  console.log('DEBUG: After collinear merging:', JSON.stringify(optimized));
-
-  // Second pass: Check for redundant corners (zigzags that can be simplified)
-  const finalResult: Position[] = [];
-  finalResult.push(optimized[0]);
-
-  for (let i = 1; i < optimized.length - 1; i++) {
-    const prev = finalResult[finalResult.length - 1];
-    const current = optimized[i];
-    const next = optimized[i + 1];
-
-    // Check if we can go directly from prev to next (skipping current)
-    // This would be the case if prev, current, and next form a zigzag pattern
-
-    // Check if prev and next are aligned horizontally or vertically
-    const prevNextHorizontal = Math.abs(prev.y - next.y) < EPSILON;
-    const prevNextVertical = Math.abs(prev.x - next.x) < EPSILON;
-
-    // Check if current is on a direct line between prev and next
-    // Calculate direction vectors
-    const dirPrevCurrent = {
-      x: current.x - prev.x,
-      y: current.y - prev.y
-    };
-
-    const dirCurrentNext = {
-      x: next.x - current.x,
-      y: next.y - current.y
-    };
-
-    const dirPrevNext = {
-      x: next.x - prev.x,
-      y: next.y - prev.y
-    };
-
-    // Normalize direction vectors
-    const lenPC = Math.sqrt(dirPrevCurrent.x * dirPrevCurrent.x + dirPrevCurrent.y * dirPrevCurrent.y);
-    const lenCN = Math.sqrt(dirCurrentNext.x * dirCurrentNext.x + dirCurrentNext.y * dirCurrentNext.y);
-    const lenPN = Math.sqrt(dirPrevNext.x * dirPrevNext.x + dirPrevNext.y * dirPrevNext.y);
-
-    // Avoid division by zero
-    const normPC = lenPC > EPSILON ? { x: dirPrevCurrent.x / lenPC, y: dirPrevCurrent.y / lenPC } : { x: 0, y: 0 };
-    const normCN = lenCN > EPSILON ? { x: dirCurrentNext.x / lenCN, y: dirCurrentNext.y / lenCN } : { x: 0, y: 0 };
-
-    // Calculate dot product to check if directions are opposite
-    const dotProduct = normPC.x * normCN.x + normPC.y * normCN.y;
-
-    // If dot product is close to -1, the segments are in opposite directions (zigzag)
-    const isZigzag = Math.abs(dotProduct + 1) < EPSILON;
-
-    // Check if current is on a direct line between prev and next
-    const isOnDirectLine = Math.abs(lenPC + lenCN - lenPN) < EPSILON;
-
-    const canSkipCurrent =
-      // If prev and next are aligned horizontally or vertically
-      (prevNextHorizontal || prevNextVertical) &&
-      // And current is not on a direct line between them
-      !isOnDirectLine &&
-      // And the segments form a zigzag pattern
-      isZigzag;
-
-    console.log(`DEBUG: Checking if point ${i} can be skipped:`, canSkipCurrent,
-                'prevNextHorizontal:', prevNextHorizontal,
-                'prevNextVertical:', prevNextVertical,
-                'isOnDirectLine:', isOnDirectLine,
-                'isZigzag:', isZigzag,
-                'dotProduct:', dotProduct);
-
-    if (!canSkipCurrent) {
-      finalResult.push(current);
-    } else {
-      console.log(`DEBUG: Skipping redundant corner at point ${i}`);
-    }
-  }
-
-  // Always add the last point
-  finalResult.push(optimized[optimized.length - 1]);
-
-  // Final pass: Ensure we don't have any remaining collinear segments
+  // For all cases, merge collinear segments
   const result: Position[] = [];
-  result.push(finalResult[0]);
 
-  for (let i = 1; i < finalResult.length - 1; i++) {
-    const prev = result[result.length - 1];
-    const current = finalResult[i];
-    const next = finalResult[i + 1];
+  // Always keep the first point
+  result.push(optimized[0]);
 
-    // Check again for collinearity using the same method as before
-    // Calculate direction vectors
-    const dir1 = {
-      x: current.x - prev.x,
-      y: current.y - prev.y
-    };
+  // Process each point
+  for (let i = 1; i < optimized.length - 1; i++) {
+    const prev = result[result.length - 1]; // Last point in our result so far
+    const current = optimized[i];           // Current point we're evaluating
+    const next = optimized[i + 1];          // Next point in the sequence
 
-    const dir2 = {
-      x: next.x - current.x,
-      y: next.y - current.y
-    };
-
-    // Normalize direction vectors
-    const len1 = Math.sqrt(dir1.x * dir1.x + dir1.y * dir1.y);
-    const len2 = Math.sqrt(dir2.x * dir2.x + dir2.y * dir2.y);
-
-    // Avoid division by zero
-    const norm1 = len1 > EPSILON ? { x: dir1.x / len1, y: dir1.y / len1 } : { x: 0, y: 0 };
-    const norm2 = len2 > EPSILON ? { x: dir2.x / len2, y: dir2.y / len2 } : { x: 0, y: 0 };
-
-    // Calculate dot product
-    const dotProduct = norm1.x * norm2.x + norm1.y * norm2.y;
-
-    // Check if collinear
-    const isCollinear = Math.abs(dotProduct - 1) < EPSILON;
-
-    // Also check for horizontal and vertical lines
+    // Check if the current point is on a straight line (horizontal or vertical)
     const isHorizontalLine = Math.abs(prev.y - current.y) < EPSILON && Math.abs(current.y - next.y) < EPSILON;
     const isVerticalLine = Math.abs(prev.x - current.x) < EPSILON && Math.abs(current.x - next.x) < EPSILON;
 
-    if (isHorizontalLine || isVerticalLine || isCollinear) {
-      // Skip this point as it's collinear
-      console.log(`DEBUG: Final pass - skipping collinear point ${i}`);
+    console.log(`DEBUG: Point ${i}:`, current, 'isHorizontal:', isHorizontalLine, 'isVertical:', isVerticalLine);
+
+    // If the point is on a straight line, skip it
+    if (isHorizontalLine || isVerticalLine) {
+      console.log(`DEBUG: Point ${i} is on a straight line - skipping`);
+      // Skip this point (don't add to result)
     } else {
+      // Otherwise, it's a corner point that changes direction, so keep it
+      console.log(`DEBUG: Point ${i} is a corner - keeping`);
       result.push(current);
     }
   }
 
-  // Add the last point
-  result.push(finalResult[finalResult.length - 1]);
+  // Always keep the last point
+  result.push(optimized[optimized.length - 1]);
 
   console.log('DEBUG: Final optimized waypoints:', JSON.stringify(result));
   console.log('DEBUG: Reduced from', waypoints.length, 'to', result.length, 'points');
@@ -845,17 +638,76 @@ export function calculateSegmentMidpoints(
     return calculateDirectPathMidpoints(start, end);
   }
 
+  const EPSILON = 0.001;
+
+  // Special case for L-shaped connections with 3 points
+  if (waypoints.length === 2) {
+    const p1 = start;
+    const p2 = waypoints[0];
+    const p3 = waypoints[1];
+
+    // Check if this is an L-shaped connection (horizontal then vertical)
+    const isHorizontalThenVertical =
+      Math.abs(p1.y - p2.y) < EPSILON && // First segment is horizontal
+      Math.abs(p2.x - p3.x) < EPSILON;   // Second segment is vertical
+
+    if (isHorizontalThenVertical) {
+      // Return only two midpoints - one for the horizontal segment and one for the vertical segment
+      return [
+        {
+          position: {
+            x: (p1.x + p2.x) / 2,
+            y: p1.y
+          },
+          orientation: 'horizontal'
+        },
+        {
+          position: {
+            x: p2.x,
+            y: (p2.y + p3.y) / 2
+          },
+          orientation: 'vertical'
+        }
+      ];
+    }
+
+    // Check if this is an L-shaped connection (vertical then horizontal)
+    const isVerticalThenHorizontal =
+      Math.abs(p1.x - p2.x) < EPSILON && // First segment is vertical
+      Math.abs(p2.y - p3.y) < EPSILON;   // Second segment is horizontal
+
+    if (isVerticalThenHorizontal) {
+      // Return only two midpoints - one for the vertical segment and one for the horizontal segment
+      return [
+        {
+          position: {
+            x: p1.x,
+            y: (p1.y + p2.y) / 2
+          },
+          orientation: 'vertical'
+        },
+        {
+          position: {
+            x: (p2.x + p3.x) / 2,
+            y: p2.y
+          },
+          orientation: 'horizontal'
+        }
+      ];
+    }
+  }
+
+  // For all other cases, use a simplified approach
   const allPoints: Position[] = [start, ...waypoints, end];
   const midpoints: Array<{position: Position, orientation: 'horizontal' | 'vertical'}> = [];
 
-  // Calculate midpoints between consecutive points
+  // Process each segment between consecutive points
   for (let i = 0; i < allPoints.length - 1; i++) {
     const p1 = allPoints[i];
     const p2 = allPoints[i + 1];
 
     // Determine if the segment is horizontal or vertical
-    const isHorizontal = Math.abs(p1.y - p2.y) < 0.001; // Use small epsilon for floating point comparison
-    const orientation = isHorizontal ? 'horizontal' : 'vertical';
+    const isHorizontal = Math.abs(p1.y - p2.y) < EPSILON;
 
     // Calculate the midpoint
     const midpoint = {
@@ -863,7 +715,7 @@ export function calculateSegmentMidpoints(
         x: (p1.x + p2.x) / 2,
         y: (p1.y + p2.y) / 2
       },
-      orientation
+      orientation: isHorizontal ? 'horizontal' : 'vertical' as 'horizontal' | 'vertical'
     };
 
     midpoints.push(midpoint);

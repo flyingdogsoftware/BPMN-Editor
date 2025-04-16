@@ -27,7 +27,12 @@
 
   // Computed
   $: strokeWidth = isSelected ? parseInt(style.strokeWidth) + 1 : style.strokeWidth;
-  $: segmentMidpoints = waypointsKey && calculateSegmentMidpoints(start, end, waypoints);
+  $: segmentMidpoints = waypointsKey && calculateCustomMidpoints(start, end, waypoints);
+
+  // Use the standard function for midpoints
+  function calculateCustomMidpoints(start, end, waypoints) {
+    return calculateSegmentMidpoints(start, end, waypoints);
+  }
 
   // Function to log midpoints (for debugging)
   function logMidpoints() {

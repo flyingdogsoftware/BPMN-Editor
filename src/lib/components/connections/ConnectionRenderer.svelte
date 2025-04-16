@@ -208,34 +208,57 @@
       // Generate the SVG path data
       path = `M ${start.x} ${start.y}`;
 
-    // Add each segment
-    for (let i = 1; i < pathPoints.length; i++) {
-      const prev = pathPoints[i - 1];
-      const curr = pathPoints[i];
+      // Special case for L-shaped connections with only 2 points (start and end)
+      if (pathPoints.length === 2) {
+        const p1 = pathPoints[0];
+        const p2 = pathPoints[1];
 
-      // If this is the last point (intersection point), just draw a line to it
-      if (i === pathPoints.length - 1) {
-        path += ` L ${curr.x.toFixed(2)} ${curr.y.toFixed(2)}`;
-      } else {
-        // Otherwise, create an orthogonal segment
-        const dx = curr.x - prev.x;
-        const dy = curr.y - prev.y;
-
-        // If the points are aligned horizontally or vertically, use a direct line
-        if (Math.abs(dx) < 0.001 || Math.abs(dy) < 0.001) {
-          path += ` L ${curr.x} ${curr.y}`;
-        } else {
-          // Otherwise, create a corner
-          const goHorizontalFirst = Math.abs(dx) > Math.abs(dy);
+        // Check if the points are not aligned horizontally or vertically
+        if (Math.abs(p1.x - p2.x) > 0.001 && Math.abs(p1.y - p2.y) > 0.001) {
+          // Not aligned, draw an L-shape
+          const goHorizontalFirst = Math.abs(p2.x - p1.x) > Math.abs(p2.y - p1.y);
 
           if (goHorizontalFirst) {
-            path += ` L ${curr.x} ${prev.y} L ${curr.x} ${curr.y}`;
+            // Go horizontal first, then vertical
+            path += ` L ${p2.x} ${p1.y} L ${p2.x} ${p2.y}`;
           } else {
-            path += ` L ${prev.x} ${curr.y} L ${curr.x} ${curr.y}`;
+            // Go vertical first, then horizontal
+            path += ` L ${p1.x} ${p2.y} L ${p2.x} ${p2.y}`;
+          }
+        } else {
+          // Aligned, draw a direct line
+          path += ` L ${p2.x} ${p2.y}`;
+        }
+      } else {
+        // Add each segment for paths with waypoints
+        for (let i = 1; i < pathPoints.length; i++) {
+          const prev = pathPoints[i - 1];
+          const curr = pathPoints[i];
+
+          // If this is the last point (intersection point), just draw a line to it
+          if (i === pathPoints.length - 1) {
+            path += ` L ${curr.x.toFixed(2)} ${curr.y.toFixed(2)}`;
+          } else {
+            // Otherwise, create an orthogonal segment
+            const dx = curr.x - prev.x;
+            const dy = curr.y - prev.y;
+
+            // If the points are aligned horizontally or vertically, use a direct line
+            if (Math.abs(dx) < 0.001 || Math.abs(dy) < 0.001) {
+              path += ` L ${curr.x} ${curr.y}`;
+            } else {
+              // Otherwise, create a corner
+              const goHorizontalFirst = Math.abs(dx) > Math.abs(dy);
+
+              if (goHorizontalFirst) {
+                path += ` L ${curr.x} ${prev.y} L ${curr.x} ${curr.y}`;
+              } else {
+                path += ` L ${prev.x} ${curr.y} L ${curr.x} ${curr.y}`;
+              }
+            }
           }
         }
       }
-    }
     }
 
     return {
