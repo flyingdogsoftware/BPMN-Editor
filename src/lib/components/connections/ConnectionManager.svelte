@@ -136,20 +136,18 @@
       const goHorizontalFirst = Math.abs(dx) > Math.abs(dy);
 
       // Create initial waypoints based on routing strategy
-      // For a proper L-shape, we need two waypoints
+      // For a proper L-shape, we need one waypoint
       let initialWaypoints = [];
 
       if (goHorizontalFirst) {
         // Horizontal first, then vertical
         initialWaypoints = [
-          { x: targetCenter.x, y: sourceCenter.y },  // Corner point
-          { x: targetCenter.x, y: targetCenter.y - 40 } // Point before target
+          { x: targetCenter.x, y: sourceCenter.y }  // Corner point
         ];
       } else {
         // Vertical first, then horizontal
         initialWaypoints = [
-          { x: sourceCenter.x, y: targetCenter.y },  // Corner point
-          { x: targetCenter.x - 40, y: targetCenter.y } // Point before target
+          { x: sourceCenter.x, y: targetCenter.y }  // Corner point
         ];
       }
 
@@ -168,10 +166,19 @@
       bpmnStore.addConnection(newConnection);
 
       // Force a refresh of the connection to ensure proper rendering
-      // This is a workaround to ensure the intersection points are calculated correctly
+      // This is similar to what happens when an element is moved
       setTimeout(() => {
-        bpmnStore.updateElement(newConnection.id, { waypoints: initialWaypoints });
-      }, 0);
+        // Make a copy of the waypoints to trigger a reactive update
+        const refreshedWaypoints = [...initialWaypoints];
+        bpmnStore.updateElement(newConnection.id, { waypoints: refreshedWaypoints });
+
+        // Force another refresh after a short delay to ensure all calculations are complete
+        setTimeout(() => {
+          // This is the same pattern used when elements are moved
+          const finalWaypoints = [...refreshedWaypoints];
+          bpmnStore.updateElement(newConnection.id, { waypoints: finalWaypoints });
+        }, 50);
+      }, 10);
     }
   }
 
