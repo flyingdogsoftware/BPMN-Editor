@@ -4,6 +4,7 @@
   // Removed old connection utils import
   import { onMount } from 'svelte';
   import { importBpmnXml } from '../utils/xml/bpmnXmlParser';
+  import { removeNonCornerWaypoints } from '../utils/connectionRouting';
 
   // Import Interaction Managers
   import { canvasInteractionManager } from '../services/CanvasInteractionManager';
@@ -128,7 +129,7 @@
   // Import new connection management
   import ConnectionManager from './connections/ConnectionManager.svelte';
   import ElementContextMenu from './ElementContextMenu.svelte';
-  import OptimizeConnectionButton from './connections/OptimizeConnectionButton.svelte';
+
 
   // Listen for edit-label events from Connection components
   onMount(() => {
@@ -262,6 +263,91 @@
   // Component references
   let elementManagerComponent;
   let connectionManagerComponent;
+
+  // Function to force a refresh of a connection's rendering
+  function forceConnectionRefresh(connectionId) {
+    console.log('DEBUG: Forcing refresh of connection', connectionId);
+    // This is a no-op update that forces a refresh
+    setTimeout(() => {
+      bpmnStore.updateElement(connectionId, { isSelected: false });
+      bpmnStore.updateElement(connectionId, { isSelected: true });
+    }, 10);
+  }
+
+  // Function to refresh all connections
+  function refreshAllConnections() {
+    console.log('DEBUG: Refreshing all connections');
+    const connections = $bpmnStore.filter(el => el.type === 'connection');
+
+    // Remember which connection was selected
+    const selectedConnectionId = $bpmnStore.find(el => el.type === 'connection' && el.isSelected)?.id;
+
+    // Refresh each connection
+    connections.forEach(connection => {
+      // Deselect all connections first
+      bpmnStore.updateElement(connection.id, { isSelected: false });
+    });
+
+    // Short delay to ensure deselection is processed
+    setTimeout(() => {
+      // Reselect the previously selected connection if any
+      if (selectedConnectionId) {
+        bpmnStore.updateElement(selectedConnectionId, { isSelected: true });
+      }
+    }, 50);
+  }
+
+  // Function to optimize the selected connection
+  function optimizeSelectedConnection() {
+    // Find the selected connection
+    const selectedConnection = $bpmnStore.find(el => el.type === 'connection' && el.isSelected);
+
+    if (!selectedConnection) {
+      console.error('No connection selected for optimization');
+      return;
+    }
+
+    // Get source and target elements
+    const source = $bpmnStore.find(el => el.id === selectedConnection.sourceId);
+    const target = $bpmnStore.find(el => el.id === selectedConnection.targetId);
+
+    if (!source || !target) {
+      console.error('Source or target element not found');
+      return;
+    }
+
+    // Calculate source and target centers
+    const sourceCenter = {
+      x: source.x + source.width / 2,
+      y: source.y + source.height / 2
+    };
+
+    const targetCenter = {
+      x: target.x + target.width / 2,
+      y: target.y + target.height / 2
+    };
+
+    console.log('DEBUG: Optimizing connection', selectedConnection.id);
+    console.log('DEBUG: Original waypoints:', JSON.stringify(selectedConnection.waypoints));
+
+    // Make a deep copy of the waypoints
+    const waypoints = JSON.parse(JSON.stringify(selectedConnection.waypoints || []));
+
+    // Use the simplified optimization function that ONLY removes redundant waypoints
+    // without changing the path structure
+    const optimized = removeNonCornerWaypoints(sourceCenter, targetCenter, waypoints);
+
+    // Update the connection with the optimized waypoints
+    bpmnStore.updateConnectionWaypoints(selectedConnection.id, optimized);
+
+    // Force a refresh of the connection to ensure proper rendering
+    forceConnectionRefresh(selectedConnection.id);
+
+    // Force another refresh after a longer delay to ensure all handles are properly rendered
+    setTimeout(() => {
+      forceConnectionRefresh(selectedConnection.id);
+    }, 100);
+  }
 
   // Context menu state
   let showElementContextMenu = false;
@@ -1036,15 +1122,29 @@
     <button type="button" on:click={() => importTestPoolsFile()} style="margin-left: 8px;">
       Test Import Pools
     </button>
+
+    <!-- Optimize Button for selected connections -->
+    {#if $bpmnStore.some(el => el.type === 'connection' && el.isSelected)}
+      <button
+        class="optimize-button"
+        on:click={optimizeSelectedConnection}
+        style="margin-left: 8px;"
+      >
+        Optimize Connection
+      </button>
+    {/if}
+
+    <!-- Refresh Connections Button -->
+    <button
+      type="button"
+      on:click={refreshAllConnections}
+      style="margin-left: 8px;"
+    >
+      Refresh Connections
+    </button>
   </div>
 
-  <!-- Debug Optimize Button for any selected connection -->
-  {#each $bpmnStore.filter(el => el.type === 'connection' && el.isSelected) as selectedConnection}
-    <OptimizeConnectionButton
-      connectionId={selectedConnection.id}
-      waypoints={selectedConnection.waypoints || []}
-    />
-  {/each}
+  <!-- Optimization buttons removed -->
   <!-- Element Manager Component -->
   <ElementManagerComponent bind:this={elementManagerComponent} />
 
@@ -1148,6 +1248,8 @@
         bind:this={connectionManagerComponent}
         onEditLabel={(conn) => openLabelDialog(conn)}
       />
+
+      <!-- Manual optimize button removed -->
 
       <!-- Draw other BPMN elements (on top of pools and lanes) -->
       {#each $bpmnStore as element (element.id)}

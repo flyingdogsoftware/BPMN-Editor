@@ -311,7 +311,9 @@ export function optimizeWaypoints(waypoints: Position[]): Position[] {
   // Define a small epsilon for floating point comparisons
   const EPSILON = 0.001;
 
-  // For all cases, merge collinear segments
+  // For all cases, check for collinear segments and remove them
+
+  // Merge collinear segments
   const result: Position[] = [];
 
   // Always keep the first point
@@ -345,6 +347,132 @@ export function optimizeWaypoints(waypoints: Position[]): Position[] {
 
   console.log('DEBUG: Final optimized waypoints:', JSON.stringify(result));
   console.log('DEBUG: Reduced from', waypoints.length, 'to', result.length, 'points');
+
+  return result;
+}
+
+/**
+ * Remove redundant waypoints without changing the path structure
+ * @param start The start position
+ * @param end The end position
+ * @param waypoints The waypoints to optimize
+ * @returns The optimized waypoints with only redundant points removed
+ */
+export function removeNonCornerWaypoints(
+  start: Position,
+  end: Position,
+  waypoints: Position[]
+): Position[] {
+  if (!waypoints || waypoints.length === 0) {
+    return waypoints;
+  }
+
+  console.log('DEBUG: Original waypoints:', JSON.stringify(waypoints));
+
+  // Make a deep copy of the waypoints to avoid modifying the original
+  const result = [...waypoints];
+
+  // Small epsilon for floating point comparisons
+  const EPSILON = 0.001;
+
+  // Special case: If we have exactly 2 waypoints, check if it's an L-shape
+  // If it is, we need to preserve both waypoints to maintain the L-shape
+  if (waypoints.length === 2) {
+    const p1 = start;
+    const p2 = waypoints[0];
+    const p3 = waypoints[1];
+    const p4 = end;
+
+    // Check if this is an L-shaped connection (horizontal then vertical)
+    const isHorizontalThenVertical =
+      Math.abs(p1.y - p2.y) < EPSILON && // First segment is horizontal
+      Math.abs(p2.x - p3.x) < EPSILON && // Second segment is vertical
+      Math.abs(p3.x - p4.x) < EPSILON;   // Third segment is vertical
+
+    // Check if this is an L-shaped connection (vertical then horizontal)
+    const isVerticalThenHorizontal =
+      Math.abs(p1.x - p2.x) < EPSILON && // First segment is vertical
+      Math.abs(p2.y - p3.y) < EPSILON && // Second segment is horizontal
+      Math.abs(p3.y - p4.y) < EPSILON;   // Third segment is horizontal
+
+    // If it's an L-shape, preserve both waypoints
+    if (isHorizontalThenVertical || isVerticalThenHorizontal) {
+      console.log('DEBUG: Preserving L-shaped connection with 2 waypoints');
+      return result;
+    }
+  }
+
+  // Helper function to check if three points are collinear (on the same line)
+  function areCollinear(p1: Position, p2: Position, p3: Position): boolean {
+    // Check if the three points are collinear using cross product
+    const dx1 = p2.x - p1.x;
+    const dy1 = p2.y - p1.y;
+    const dx2 = p3.x - p2.x;
+    const dy2 = p3.y - p2.y;
+
+    // Cross product == 0 means the points are collinear
+    return Math.abs(dx1 * dy2 - dy1 * dx2) < EPSILON;
+  }
+
+  // Helper function to check if a point is on a horizontal or vertical line
+  function isOrthogonal(p1: Position, p2: Position, p3: Position): boolean {
+    // Check if the three points form a horizontal or vertical line
+    return (
+      // All three points have the same x-coordinate (vertical line)
+      (Math.abs(p1.x - p2.x) < EPSILON && Math.abs(p2.x - p3.x) < EPSILON) ||
+      // All three points have the same y-coordinate (horizontal line)
+      (Math.abs(p1.y - p2.y) < EPSILON && Math.abs(p2.y - p3.y) < EPSILON)
+    );
+  }
+
+  // Helper function to check if removing a point would break an L-shape
+  function wouldBreakLShape(prev: Position, current: Position, next: Position): boolean {
+    // Check if we have a horizontal-vertical or vertical-horizontal pattern
+    const isHorizontalThenVertical =
+      Math.abs(prev.y - current.y) < EPSILON && // First segment is horizontal
+      Math.abs(current.x - next.x) < EPSILON;   // Second segment is vertical
+
+    const isVerticalThenHorizontal =
+      Math.abs(prev.x - current.x) < EPSILON && // First segment is vertical
+      Math.abs(current.y - next.y) < EPSILON;   // Second segment is horizontal
+
+    // If it's a corner point in an L-shape, we should preserve it
+    return isHorizontalThenVertical || isVerticalThenHorizontal;
+  }
+
+  // We'll use a simple approach: remove points that are on the same line as their neighbors
+  // but ONLY if they form a horizontal or vertical line (to maintain orthogonal routing)
+
+  // First, combine all points in order: start, waypoints, end
+  const allPoints = [start, ...result, end];
+
+  // We'll mark points for removal rather than removing them directly
+  // to avoid issues with changing indices during iteration
+  const pointsToRemove: number[] = [];
+
+  // Check each waypoint (excluding start and end)
+  for (let i = 1; i < allPoints.length - 1; i++) {
+    const prev = allPoints[i - 1];
+    const current = allPoints[i];
+    const next = allPoints[i + 1];
+
+    // Only remove points that are on the same orthogonal line AND not part of an L-shape
+    if (isOrthogonal(prev, current, next) &&
+        areCollinear(prev, current, next) &&
+        !wouldBreakLShape(prev, current, next)) {
+      // Mark this waypoint for removal (adjust index to match result array)
+      pointsToRemove.push(i - 1);
+    }
+  }
+
+  // Remove the marked points in reverse order to avoid index issues
+  for (let i = pointsToRemove.length - 1; i >= 0; i--) {
+    result.splice(pointsToRemove[i], 1);
+  }
+
+  console.log('DEBUG: Optimized waypoints (only redundant points removed):', JSON.stringify(result));
+  console.log('DEBUG: Reduced from', waypoints.length, 'to', result.length, 'points');
+  console.log('DEBUG: Removed', pointsToRemove.length, 'redundant points');
 
   return result;
 }
@@ -640,19 +768,22 @@ export function calculateSegmentMidpoints(
 
   const EPSILON = 0.001;
 
-  // Special case for L-shaped connections with 3 points
+  // Special case for L-shaped connections with 3 points (2 waypoints + end)
   if (waypoints.length === 2) {
     const p1 = start;
     const p2 = waypoints[0];
     const p3 = waypoints[1];
+    const p4 = end;
 
     // Check if this is an L-shaped connection (horizontal then vertical)
     const isHorizontalThenVertical =
       Math.abs(p1.y - p2.y) < EPSILON && // First segment is horizontal
-      Math.abs(p2.x - p3.x) < EPSILON;   // Second segment is vertical
+      Math.abs(p2.x - p3.x) < EPSILON && // Second segment is vertical
+      Math.abs(p3.x - p4.x) < EPSILON;   // Third segment is vertical
 
     if (isHorizontalThenVertical) {
-      // Return only two midpoints - one for the horizontal segment and one for the vertical segment
+      console.log('DEBUG: L-shaped connection with 2 waypoints detected (horizontal then vertical)');
+      // Return THREE midpoints - one for each segment
       return [
         {
           position: {
@@ -667,6 +798,13 @@ export function calculateSegmentMidpoints(
             y: (p2.y + p3.y) / 2
           },
           orientation: 'vertical'
+        },
+        {
+          position: {
+            x: p3.x,
+            y: (p3.y + p4.y) / 2
+          },
+          orientation: 'vertical'
         }
       ];
     }
@@ -674,10 +812,12 @@ export function calculateSegmentMidpoints(
     // Check if this is an L-shaped connection (vertical then horizontal)
     const isVerticalThenHorizontal =
       Math.abs(p1.x - p2.x) < EPSILON && // First segment is vertical
-      Math.abs(p2.y - p3.y) < EPSILON;   // Second segment is horizontal
+      Math.abs(p2.y - p3.y) < EPSILON && // Second segment is horizontal
+      Math.abs(p3.y - p4.y) < EPSILON;   // Third segment is horizontal
 
     if (isVerticalThenHorizontal) {
-      // Return only two midpoints - one for the vertical segment and one for the horizontal segment
+      console.log('DEBUG: L-shaped connection with 2 waypoints detected (vertical then horizontal)');
+      // Return THREE midpoints - one for each segment
       return [
         {
           position: {
@@ -692,6 +832,79 @@ export function calculateSegmentMidpoints(
             y: p2.y
           },
           orientation: 'horizontal'
+        },
+        {
+          position: {
+            x: (p3.x + p4.x) / 2,
+            y: p3.y
+          },
+          orientation: 'horizontal'
+        }
+      ];
+    }
+
+    // Check if this is a U-shaped connection (horizontal, vertical, horizontal)
+    const isUShapeHVH =
+      Math.abs(p1.y - p2.y) < EPSILON && // First segment is horizontal
+      Math.abs(p2.x - p3.x) < EPSILON && // Second segment is vertical
+      Math.abs(p3.y - p4.y) < EPSILON;   // Third segment is horizontal
+
+    if (isUShapeHVH) {
+      console.log('DEBUG: U-shaped connection detected (horizontal, vertical, horizontal)');
+      return [
+        {
+          position: {
+            x: (p1.x + p2.x) / 2,
+            y: p1.y
+          },
+          orientation: 'horizontal'
+        },
+        {
+          position: {
+            x: p2.x,
+            y: (p2.y + p3.y) / 2
+          },
+          orientation: 'vertical'
+        },
+        {
+          position: {
+            x: (p3.x + p4.x) / 2,
+            y: p3.y
+          },
+          orientation: 'horizontal'
+        }
+      ];
+    }
+
+    // Check if this is a U-shaped connection (vertical, horizontal, vertical)
+    const isUShapeVHV =
+      Math.abs(p1.x - p2.x) < EPSILON && // First segment is vertical
+      Math.abs(p2.y - p3.y) < EPSILON && // Second segment is horizontal
+      Math.abs(p3.x - p4.x) < EPSILON;   // Third segment is vertical
+
+    if (isUShapeVHV) {
+      console.log('DEBUG: U-shaped connection detected (vertical, horizontal, vertical)');
+      return [
+        {
+          position: {
+            x: p1.x,
+            y: (p1.y + p2.y) / 2
+          },
+          orientation: 'vertical'
+        },
+        {
+          position: {
+            x: (p2.x + p3.x) / 2,
+            y: p2.y
+          },
+          orientation: 'horizontal'
+        },
+        {
+          position: {
+            x: p3.x,
+            y: (p3.y + p4.y) / 2
+          },
+          orientation: 'vertical'
         }
       ];
     }
@@ -701,6 +914,65 @@ export function calculateSegmentMidpoints(
   const allPoints: Position[] = [start, ...waypoints, end];
   const midpoints: Array<{position: Position, orientation: 'horizontal' | 'vertical'}> = [];
 
+  // Special case for direct connections with no waypoints
+  if (waypoints.length === 0) {
+    // For direct connections, we need to ensure we have at least one handle
+    // Calculate a direct orthogonal path
+    const dx = end.x - start.x;
+    const dy = end.y - start.y;
+
+    // If the points are aligned horizontally or vertically, there's just one segment
+    if (Math.abs(start.x - end.x) < EPSILON || Math.abs(start.y - end.y) < EPSILON) {
+      const isHorizontal = Math.abs(start.y - end.y) < EPSILON;
+      midpoints.push({
+        position: {
+          x: (start.x + end.x) / 2,
+          y: (start.y + end.y) / 2
+        },
+        orientation: isHorizontal ? 'horizontal' : 'vertical'
+      });
+    } else {
+      // For L-shaped connections, add two handles
+      const goHorizontalFirst = Math.abs(dx) > Math.abs(dy);
+
+      if (goHorizontalFirst) {
+        // Horizontal then vertical
+        midpoints.push({
+          position: {
+            x: start.x + dx / 2,
+            y: start.y
+          },
+          orientation: 'horizontal'
+        });
+        midpoints.push({
+          position: {
+            x: end.x,
+            y: start.y + dy / 2
+          },
+          orientation: 'vertical'
+        });
+      } else {
+        // Vertical then horizontal
+        midpoints.push({
+          position: {
+            x: start.x,
+            y: start.y + dy / 2
+          },
+          orientation: 'vertical'
+        });
+        midpoints.push({
+          position: {
+            x: start.x + dx / 2,
+            y: end.y
+          },
+          orientation: 'horizontal'
+        });
+      }
+    }
+
+    return midpoints;
+  }
+
   // Process each segment between consecutive points
   for (let i = 0; i < allPoints.length - 1; i++) {
     const p1 = allPoints[i];
@@ -708,17 +980,134 @@ export function calculateSegmentMidpoints(
 
     // Determine if the segment is horizontal or vertical
     const isHorizontal = Math.abs(p1.y - p2.y) < EPSILON;
+    const isVertical = Math.abs(p1.x - p2.x) < EPSILON;
 
-    // Calculate the midpoint
-    const midpoint = {
-      position: {
-        x: (p1.x + p2.x) / 2,
-        y: (p1.y + p2.y) / 2
-      },
-      orientation: isHorizontal ? 'horizontal' : 'vertical' as 'horizontal' | 'vertical'
-    };
+    // Skip diagonal segments (should not happen in orthogonal routing)
+    if (!isHorizontal && !isVertical) {
+      console.warn('Diagonal segment detected in orthogonal path:', { p1, p2 });
+      // For diagonal segments, default to horizontal orientation
+      midpoints.push({
+        position: {
+          x: (p1.x + p2.x) / 2,
+          y: (p1.y + p2.y) / 2
+        },
+        orientation: 'horizontal'
+      });
+      continue;
+    }
+
+    // Calculate the midpoint - position it in the middle of the segment
+    let midpoint: {position: Position, orientation: 'horizontal' | 'vertical'};
+    if (isHorizontal) {
+      midpoint = {
+        position: {
+          x: (p1.x + p2.x) / 2, // Middle of horizontal segment
+          y: p1.y               // Same y as the segment
+        },
+        orientation: 'horizontal'
+      };
+    } else { // isVertical
+      midpoint = {
+        position: {
+          x: p1.x,               // Same x as the segment
+          y: (p1.y + p2.y) / 2  // Middle of vertical segment
+        },
+        orientation: 'vertical'
+      };
+    }
 
     midpoints.push(midpoint);
+    console.log(`DEBUG: Added midpoint for segment ${i}: ${JSON.stringify(midpoint)}`);
+  }
+
+  // IMPORTANT: ALWAYS ensure we have a handle for EVERY segment
+  // This is critical for complex paths with multiple waypoints
+
+  // Check if we have the right number of midpoints
+  // We should have one midpoint for each segment between points
+  if (midpoints.length < allPoints.length - 1) {
+    console.log('DEBUG: Missing midpoints. Adding handles for all segments. Expected:', allPoints.length - 1, 'Got:', midpoints.length);
+
+    // Clear existing midpoints and recalculate for all segments
+    midpoints.length = 0;
+
+    // Process each segment between consecutive points
+    for (let i = 0; i < allPoints.length - 1; i++) {
+      const p1 = allPoints[i];
+      const p2 = allPoints[i + 1];
+
+      // Determine if the segment is horizontal or vertical
+      const isHorizontal = Math.abs(p1.y - p2.y) < EPSILON;
+      const isVertical = Math.abs(p1.x - p2.x) < EPSILON;
+
+      // Calculate the midpoint with proper positioning
+      let midpoint: {position: Position, orientation: 'horizontal' | 'vertical'};
+
+      if (isHorizontal) {
+        midpoint = {
+          position: {
+            x: (p1.x + p2.x) / 2, // Middle of horizontal segment
+            y: p1.y               // Same y as the segment
+          },
+          orientation: 'horizontal'
+        };
+      } else if (isVertical) {
+        midpoint = {
+          position: {
+            x: p1.x,               // Same x as the segment
+            y: (p1.y + p2.y) / 2  // Middle of vertical segment
+          },
+          orientation: 'vertical'
+        };
+      } else {
+        // Default to horizontal for diagonal segments
+        midpoint = {
+          position: {
+            x: (p1.x + p2.x) / 2,
+            y: (p1.y + p2.y) / 2
+          },
+          orientation: 'horizontal'
+        };
+      }
+
+      midpoints.push(midpoint);
+      console.log(`DEBUG: Added midpoint for segment ${i}: ${JSON.stringify(midpoint)}`);
+    }
+  }
+
+  // Ensure we have at least one midpoint
+  if (midpoints.length === 0) {
+    console.log('DEBUG: No midpoints calculated, adding default midpoint');
+    // If no midpoints were calculated, add a default one based on segment orientation
+    const isHorizontal = Math.abs(start.y - end.y) < EPSILON;
+    const isVertical = Math.abs(start.x - end.x) < EPSILON;
+
+    if (isHorizontal) {
+      midpoints.push({
+        position: {
+          x: (start.x + end.x) / 2, // Middle of horizontal segment
+          y: start.y                // Same y as the segment
+        },
+        orientation: 'horizontal'
+      });
+    } else if (isVertical) {
+      midpoints.push({
+        position: {
+          x: start.x,                // Same x as the segment
+          y: (start.y + end.y) / 2  // Middle of vertical segment
+        },
+        orientation: 'vertical'
+      });
+    } else {
+      // For diagonal segments, use a direct midpoint with horizontal orientation
+      midpoints.push({
+        position: {
+          x: (start.x + end.x) / 2,
+          y: (start.y + end.y) / 2
+        },
+        orientation: 'horizontal'
+      });
+    }
   }
 
   return midpoints;
@@ -737,29 +1126,45 @@ function calculateDirectPathMidpoints(
   const dx = end.x - start.x;
   const dy = end.y - start.y;
   const midpoints: Array<{position: Position, orientation: 'horizontal' | 'vertical'}> = [];
+  const EPSILON = 0.001;
 
   // If the points are aligned horizontally or vertically, there's just one segment
-  if (Math.abs(start.x - end.x) < 0.001 || Math.abs(start.y - end.y) < 0.001) {
-    const isHorizontal = Math.abs(start.y - end.y) < 0.001;
-    midpoints.push({
-      position: {
-        x: (start.x + end.x) / 2,
-        y: (start.y + end.y) / 2
-      },
-      orientation: isHorizontal ? 'horizontal' : 'vertical'
-    });
+  if (Math.abs(start.x - end.x) < EPSILON || Math.abs(start.y - end.y) < EPSILON) {
+    const isHorizontal = Math.abs(start.y - end.y) < EPSILON;
+    if (isHorizontal) {
+      midpoints.push({
+        position: {
+          x: (start.x + end.x) / 2, // Middle of horizontal segment
+          y: start.y                // Same y as the segment
+        },
+        orientation: 'horizontal'
+      });
+    } else {
+      midpoints.push({
+        position: {
+          x: start.x,                // Same x as the segment
+          y: (start.y + end.y) / 2  // Middle of vertical segment
+        },
+        orientation: 'vertical'
+      });
+    }
     return midpoints;
   }
 
   // Determine whether to go horizontal or vertical first
   const goHorizontalFirst = Math.abs(dx) > Math.abs(dy);
 
+  // Calculate the corner point
+  const cornerPoint = goHorizontalFirst
+    ? { x: end.x, y: start.y }   // Horizontal then vertical
+    : { x: start.x, y: end.y };  // Vertical then horizontal
+
   if (goHorizontalFirst) {
     // First segment: horizontal from start to corner
     midpoints.push({
       position: {
-        x: start.x + dx / 2, // Midpoint of horizontal segment
-        y: start.y
+        x: (start.x + cornerPoint.x) / 2, // Middle of horizontal segment
+        y: start.y                        // Same y as the segment
       },
       orientation: 'horizontal'
     });
@@ -767,20 +1172,24 @@ function calculateDirectPathMidpoints(
     // Second segment: vertical from corner to end
     midpoints.push({
       position: {
-        x: end.x,
-        y: start.y + dy / 2 // Midpoint of vertical segment
+        x: cornerPoint.x,                      // Same x as the segment
+        y: (cornerPoint.y + end.y) / 2        // Middle of vertical segment
       },
       orientation: 'vertical'
     });
 
-    // Debug logging can be uncommented for troubleshooting
-    // console.log('Corner point (horizontal first):', { x: end.x, y: start.y });
+    console.log('DEBUG: Direct path (horizontal first):', {
+      start,
+      end,
+      corner: cornerPoint,
+      midpoints
+    });
   } else {
     // First segment: vertical from start to corner
     midpoints.push({
       position: {
-        x: start.x,
-        y: start.y + dy / 2 // Midpoint of vertical segment
+        x: start.x,                          // Same x as the segment
+        y: (start.y + cornerPoint.y) / 2    // Middle of vertical segment
       },
       orientation: 'vertical'
     });
@@ -788,18 +1197,19 @@ function calculateDirectPathMidpoints(
     // Second segment: horizontal from corner to end
     midpoints.push({
       position: {
-        x: start.x + dx / 2, // Midpoint of horizontal segment
-        y: end.y
+        x: (cornerPoint.x + end.x) / 2,     // Middle of horizontal segment
+        y: cornerPoint.y                     // Same y as the segment
       },
       orientation: 'horizontal'
     });
 
-    // Debug logging can be uncommented for troubleshooting
-    // console.log('Corner point (vertical first):', { x: start.x, y: end.y });
+    console.log('DEBUG: Direct path (vertical first):', {
+      start,
+      end,
+      corner: cornerPoint,
+      midpoints
+    });
   }
-
-  // Debug logging can be uncommented for troubleshooting
-  // console.log('Direct path midpoints:', midpoints);
 
   return midpoints;
 }

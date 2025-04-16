@@ -31,7 +31,15 @@
 
   // Use the standard function for midpoints
   function calculateCustomMidpoints(start, end, waypoints) {
-    return calculateSegmentMidpoints(start, end, waypoints);
+    const result = calculateSegmentMidpoints(start, end, waypoints);
+    console.log('DEBUG: Connection segment midpoints calculated:', {
+      start,
+      end,
+      waypoints,
+      midpoints: result,
+      count: result.length
+    });
+    return result;
   }
 
   // Function to log midpoints (for debugging)
@@ -82,7 +90,7 @@
   />
 
   <!-- Show handles when hovering or selected -->
-  {#if (isHovering || isSelected) && segmentMidpoints.length > 0}
+  {#if (isHovering || isSelected) && segmentMidpoints && segmentMidpoints.length > 0}
     {#each segmentMidpoints as midpoint, i}
       <ConnectionHandle
         x={midpoint.position.x}

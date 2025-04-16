@@ -1,6 +1,6 @@
 <script>
   import { bpmnStore } from '../../stores/bpmnStore';
-  import { calculateOrthogonalPath, findBestConnectionPoint } from '../../utils/connectionRouting';
+  import { calculateOrthogonalPath, findBestConnectionPoint, removeNonCornerWaypoints } from '../../utils/connectionRouting';
   import ConnectionRenderer from './ConnectionRenderer.svelte';
   import ConnectionContextMenu from './ConnectionContextMenu.svelte';
 
@@ -136,17 +136,20 @@
       const goHorizontalFirst = Math.abs(dx) > Math.abs(dy);
 
       // Create initial waypoints based on routing strategy
+      // For a proper L-shape, we need two waypoints
       let initialWaypoints = [];
 
       if (goHorizontalFirst) {
         // Horizontal first, then vertical
         initialWaypoints = [
-          { x: targetCenter.x, y: sourceCenter.y }
+          { x: targetCenter.x, y: sourceCenter.y },  // Corner point
+          { x: targetCenter.x, y: targetCenter.y - 40 } // Point before target
         ];
       } else {
         // Vertical first, then horizontal
         initialWaypoints = [
-          { x: sourceCenter.x, y: targetCenter.y }
+          { x: sourceCenter.x, y: targetCenter.y },  // Corner point
+          { x: targetCenter.x - 40, y: targetCenter.y } // Point before target
         ];
       }
 
@@ -208,9 +211,60 @@
       case 'change-type-association':
         bpmnStore.updateElement(contextMenuConnection.id, { connectionType: 'association' });
         break;
+      case 'optimize':
+        optimizeConnection(contextMenuConnection);
+        break;
     }
 
     hideContextMenu();
+  }
+
+  // Function to optimize a connection by removing redundant waypoints
+  function optimizeConnection(connection) {
+    if (!connection || !connection.waypoints || connection.waypoints.length === 0) {
+      console.error('Connection not found or has no waypoints');
+      return;
+    }
+
+    // Get source and target elements
+    const source = elements.find(el => el.id === connection.sourceId);
+    const target = elements.find(el => el.id === connection.targetId);
+
+    if (!source || !target) {
+      console.error('Source or target element not found');
+      return;
+    }
+
+    // Calculate source and target centers
+    const sourceCenter = {
+      x: source.x + source.width / 2,
+      y: source.y + source.height / 2
+    };
+
+    const targetCenter = {
+      x: target.x + target.width / 2,
+      y: target.y + target.height / 2
+    };
+
+    console.log('DEBUG: Optimizing connection', connection.id);
+    console.log('DEBUG: Original waypoints:', JSON.stringify(connection.waypoints));
+
+    // Make a deep copy of the waypoints
+    const waypoints = JSON.parse(JSON.stringify(connection.waypoints));
+
+    // Use the simplified optimization function that ONLY removes redundant waypoints
+    // without changing the path structure
+    const optimized = removeNonCornerWaypoints(sourceCenter, targetCenter, waypoints);
+
+    // Update the connection with the optimized waypoints
+    bpmnStore.updateConnectionWaypoints(connection.id, optimized);
+
+    // Force a refresh of the connection to ensure proper rendering
+    setTimeout(() => {
+      // This is a no-op update that forces a refresh
+      bpmnStore.updateElement(connection.id, { isSelected: true });
+      bpmnStore.updateElement(connection.id, { isSelected: selectedConnectionId === connection.id });
+    }, 10);
   }
 
   // Add event listeners for mouse move and mouse up

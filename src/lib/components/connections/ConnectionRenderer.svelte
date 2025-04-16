@@ -1,10 +1,11 @@
 <script>
-  import { calculateOrthogonalPath, adjustWaypoint, optimizeWaypoints, findBestConnectionPoint } from '../../utils/connectionRouting';
+  import { calculateOrthogonalPath, adjustWaypoint, findBestConnectionPoint, calculateSegmentMidpoints, removeNonCornerWaypoints } from '../../utils/connectionRouting';
   import { calculateElementIntersection } from '../../utils/geometryUtils';
   import ConnectionSegment from './ConnectionSegment.svelte';
   import ConnectionLabel from './ConnectionLabel.svelte';
   import ConnectionEndpointHandle from './ConnectionEndpointHandle.svelte';
-  import OptimizeConnectionButton from './OptimizeConnectionButton.svelte';
+  import ConnectionHandle from './ConnectionHandle.svelte';
+  import OptimizeButton from './OptimizeButton.svelte';
 
   // Props
   export let connections = [];
@@ -31,6 +32,9 @@
   let potentialTargetElement = null;
   let isHoveringOverValidTarget = false;
   let hoverPosition = { x: 0, y: 0 };
+
+  // Flag to track if we're creating a new connection
+  let isCreatingConnection = false;
 
   // Force recalculation of paths when connections change
   $: connectionPathsKey = JSON.stringify(connections.map(c => ({ id: c.id, waypoints: c.waypoints })));
@@ -316,9 +320,14 @@
   // Handle connection click
   function handleConnectionClick(event, connectionId) {
     event.stopPropagation();
+    event.preventDefault();
     console.log('Connection clicked:', connectionId, 'Current selected:', selectedConnectionId);
-    onSelect(connectionId);
-    console.log('After selection, selected connection ID:', selectedConnectionId);
+
+    // Make sure we're not in the middle of another operation
+    if (!isDragging && !isCreatingConnection) {
+      onSelect(connectionId);
+      console.log('After selection, selected connection ID:', selectedConnectionId);
+    }
   }
 
   // Handle connection double-click
@@ -366,6 +375,11 @@
     dragStartX = event.clientX;
     dragStartY = event.clientY;
     originalWaypoints = [...(connection.waypoints || [])];
+
+    // Also store the original waypoints in the connection object
+    if (!connection.originalWaypoints) {
+      bpmnStore.updateElement(connection.id, { originalWaypoints: [...(connection.waypoints || [])] });
+    }
 
     // Reset potential target state
     potentialTargetElement = null;
@@ -701,7 +715,7 @@
           }
         }
       }
-    } else if (dragType === 'source' || dragType === 'target') {
+    } else if (dragType === 'source' || dragType === 'target' || dragType === 'waypoint') {
       // Check if we're hovering over a valid target element
       potentialTargetElement = null;
       isHoveringOverValidTarget = false;
@@ -814,8 +828,7 @@
           originalWaypoints: null
         });
 
-        // Force recalculation of the path using the default routing
-        // This is the same as when a user creates a new connection
+        // Preserve the existing path structure when reconnecting
         const source = elements.find(el => el.id === (dragType === 'source' ? potentialTargetElement.id : connection.sourceId));
         const target = elements.find(el => el.id === (dragType === 'target' ? potentialTargetElement.id : connection.targetId));
 
@@ -831,26 +844,92 @@
             y: target.y + target.height / 2
           };
 
-          // Calculate default waypoints based on the centers
-          const dx = targetCenter.x - sourceCenter.x;
-          const dy = targetCenter.y - sourceCenter.y;
+          // Get the existing waypoints
+          let existingWaypoints = connection.originalWaypoints || connection.waypoints || [];
 
-          // Determine if we should go horizontal or vertical first
-          const goHorizontalFirst = Math.abs(dx) > Math.abs(dy);
+          // If we have existing waypoints, adapt them to the new source/target
+          if (existingWaypoints.length > 0) {
+            console.log('DEBUG: Preserving existing path structure when reconnecting');
 
-          let defaultWaypoints = [];
+            // Make a deep copy of the waypoints
+            let newWaypoints = JSON.parse(JSON.stringify(existingWaypoints));
 
-          // For non-trivial distances, add a waypoint to create an orthogonal path
-          if (Math.abs(dx) > 10 && Math.abs(dy) > 10) {
-            if (goHorizontalFirst) {
-              defaultWaypoints = [{ x: targetCenter.x, y: sourceCenter.y }];
-            } else {
-              defaultWaypoints = [{ x: sourceCenter.x, y: targetCenter.y }];
+            // Adjust the waypoints based on which endpoint was dragged
+            if (dragType === 'source') {
+              // If the first waypoint forms an L-shape with the source, adjust it
+              if (newWaypoints.length >= 1) {
+                const firstWaypoint = newWaypoints[0];
+
+                // Check if the first waypoint is horizontally or vertically aligned with the old source
+                const oldSource = elements.find(el => el.id === connection.sourceId);
+                if (oldSource) {
+                  const oldSourceCenter = {
+                    x: oldSource.x + oldSource.width / 2,
+                    y: oldSource.y + oldSource.height / 2
+                  };
+
+                  // If horizontally aligned with old source, keep the y-coordinate
+                  if (Math.abs(firstWaypoint.y - oldSourceCenter.y) < 0.001) {
+                    newWaypoints[0] = { x: firstWaypoint.x, y: sourceCenter.y };
+                  }
+                  // If vertically aligned with old source, keep the x-coordinate
+                  else if (Math.abs(firstWaypoint.x - oldSourceCenter.x) < 0.001) {
+                    newWaypoints[0] = { x: sourceCenter.x, y: firstWaypoint.y };
+                  }
+                }
+              }
+            } else if (dragType === 'target') {
+              // If the last waypoint forms an L-shape with the target, adjust it
+              if (newWaypoints.length >= 1) {
+                const lastWaypoint = newWaypoints[newWaypoints.length - 1];
+
+                // Check if the last waypoint is horizontally or vertically aligned with the old target
+                const oldTarget = elements.find(el => el.id === connection.targetId);
+                if (oldTarget) {
+                  const oldTargetCenter = {
+                    x: oldTarget.x + oldTarget.width / 2,
+                    y: oldTarget.y + oldTarget.height / 2
+                  };
+
+                  // If horizontally aligned with old target, keep the y-coordinate
+                  if (Math.abs(lastWaypoint.y - oldTargetCenter.y) < 0.001) {
+                    newWaypoints[newWaypoints.length - 1] = { x: lastWaypoint.x, y: targetCenter.y };
+                  }
+                  // If vertically aligned with old target, keep the x-coordinate
+                  else if (Math.abs(lastWaypoint.x - oldTargetCenter.x) < 0.001) {
+                    newWaypoints[newWaypoints.length - 1] = { x: targetCenter.x, y: lastWaypoint.y };
+                  }
+                }
+              }
             }
-          }
 
-          // Update the connection with the default waypoints
-          bpmnStore.updateElement(connection.id, { waypoints: defaultWaypoints });
+            // Update the connection with the adjusted waypoints
+            bpmnStore.updateElement(connection.id, { waypoints: newWaypoints });
+          } else {
+            // If no existing waypoints, create a default L-shaped path
+            console.log('DEBUG: Creating default L-shaped path for reconnection');
+
+            // Calculate default waypoints based on the centers
+            const dx = targetCenter.x - sourceCenter.x;
+            const dy = targetCenter.y - sourceCenter.y;
+
+            // Determine if we should go horizontal or vertical first
+            const goHorizontalFirst = Math.abs(dx) > Math.abs(dy);
+
+            let defaultWaypoints = [];
+
+            // For non-trivial distances, add a waypoint to create an orthogonal path
+            if (Math.abs(dx) > 10 && Math.abs(dy) > 10) {
+              if (goHorizontalFirst) {
+                defaultWaypoints = [{ x: targetCenter.x, y: sourceCenter.y }];
+              } else {
+                defaultWaypoints = [{ x: sourceCenter.x, y: targetCenter.y }];
+              }
+            }
+
+            // Update the connection with the default waypoints
+            bpmnStore.updateElement(connection.id, { waypoints: defaultWaypoints });
+          }
         }
       }
     } else {
@@ -898,13 +977,76 @@
 
     console.log('Drag state reset');
 
-    // Optimize the connection waypoints after a short delay to ensure all updates are complete
-    if (connectionToOptimize) {
+    // Only optimize the connection waypoints if we were dragging an endpoint, not a segment
+    if (connectionToOptimize && (dragType === 'source' || dragType === 'target')) {
       setTimeout(() => {
         const connection = connections.find(c => c.id === connectionToOptimize);
         if (connection && connection.waypoints && connection.waypoints.length > 1) {
-          console.log('DEBUG: Auto-optimizing connection after drag:', connectionToOptimize);
-          const optimizedWaypoints = optimizeWaypoints(connection.waypoints);
+          console.log('DEBUG: Auto-optimizing connection after endpoint drag:', connectionToOptimize);
+
+          // Find source and target elements
+          const source = elements.find(el => el.id === connection.sourceId);
+          const target = elements.find(el => el.id === connection.targetId);
+
+          if (!source || !target) {
+            console.error('Source or target element not found');
+            return;
+          }
+
+          // Calculate source and target positions
+          const start = {
+            x: source.x + source.width / 2,
+            y: source.y + source.height / 2
+          };
+
+          const end = {
+            x: target.x + target.width / 2,
+            y: target.y + target.height / 2
+          };
+
+          // Make a deep copy of the waypoints
+          const waypoints = JSON.parse(JSON.stringify(connection.waypoints));
+
+          // Check if this is a diagonal connection
+          const isDiagonal = Math.abs(start.x - end.x) > 0.001 && Math.abs(start.y - end.y) > 0.001;
+
+          // For L-shaped connections with exactly 2 waypoints, preserve the L-shape
+          if (isDiagonal && waypoints.length === 2) {
+            const p1 = start;
+            const p2 = waypoints[0];
+            const p3 = waypoints[1];
+
+            // Check if this is an L-shaped connection
+            const isLShape =
+              (Math.abs(p1.y - p2.y) < 0.001 && Math.abs(p2.x - p3.x) < 0.001) || // Horizontal then vertical
+              (Math.abs(p1.x - p2.x) < 0.001 && Math.abs(p2.y - p3.y) < 0.001);    // Vertical then horizontal
+
+            if (isLShape) {
+              console.log('DEBUG: Preserving L-shaped connection after drag');
+              // No need to optimize, keep the existing waypoints
+              return;
+            }
+          }
+
+          // Use the optimization function for other cases
+          const optimizedWaypoints = removeNonCornerWaypoints(start, end, waypoints);
+
+          // Make sure we have at least one waypoint for diagonal connections
+          if (optimizedWaypoints.length === 0 && isDiagonal) {
+            console.log('DEBUG: Adding waypoint for diagonal connection after drag');
+
+            // Determine whether to go horizontal or vertical first
+            const dx = end.x - start.x;
+            const dy = end.y - start.y;
+            const goHorizontalFirst = Math.abs(dx) > Math.abs(dy);
+
+            if (goHorizontalFirst) {
+              optimizedWaypoints.push({ x: end.x, y: start.y });
+            } else {
+              optimizedWaypoints.push({ x: start.x, y: end.y });
+            }
+          }
+
           bpmnStore.updateConnectionWaypoints(connectionToOptimize, optimizedWaypoints);
         }
       }, 100); // Small delay to ensure the connection is fully updated
@@ -1010,14 +1152,66 @@
   </marker>
 </defs>
 
-<!-- Debug Optimize Button for selected connection -->
+<!-- Optimize button for selected connection -->
 {#if selectedConnectionId}
-  {#each connections.filter(c => c.id === selectedConnectionId) as selectedConnection}
-    <OptimizeConnectionButton
-      connectionId={selectedConnection.id}
-      waypoints={selectedConnection.waypoints || []}
+  <OptimizeButton
+    connectionId={selectedConnectionId}
+    selectedConnectionId={selectedConnectionId}
+    {elements}
+  />
+
+  <!-- Force refresh button for selected connection -->
+  <g
+    transform="translate(30, 30)"
+    role="button"
+    tabindex="0"
+    aria-label="Refresh connection"
+    on:click={() => {
+      const connection = connections.find(c => c.id === selectedConnectionId);
+      if (connection) {
+        console.log('DEBUG: Forcing refresh of connection', selectedConnectionId);
+        // Force a refresh by toggling selection
+        bpmnStore.updateElement(selectedConnectionId, { isSelected: false });
+        setTimeout(() => {
+          bpmnStore.updateElement(selectedConnectionId, { isSelected: true });
+        }, 10);
+      }
+    }}
+    on:keydown={(e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        const connection = connections.find(c => c.id === selectedConnectionId);
+        if (connection) {
+          console.log('DEBUG: Forcing refresh of connection', selectedConnectionId);
+          // Force a refresh by toggling selection
+          bpmnStore.updateElement(selectedConnectionId, { isSelected: false });
+          setTimeout(() => {
+            bpmnStore.updateElement(selectedConnectionId, { isSelected: true });
+          }, 10);
+        }
+      }
+    }}
+  >
+    <rect
+      x="0"
+      y="0"
+      width="30"
+      height="30"
+      rx="5"
+      ry="5"
+      fill="#f0f0f0"
+      stroke="#999"
+      stroke-width="1"
     />
-  {/each}
+    <text
+      x="15"
+      y="20"
+      text-anchor="middle"
+      font-size="20"
+      fill="#333"
+      pointer-events="none"
+    >↻</text>
+  </g>
 {/if}
 
 <!-- Render connections -->
@@ -1075,7 +1269,7 @@
         />
       </g>
 
-      <!-- Waypoint handles removed -->
+
     {/if}
   </g>
 {/each}

@@ -35,6 +35,12 @@
   <button class="menu-item" class:active={connection.connectionType === 'association'} on:click={() => handleMenuItemClick('change-type-association')}>
     Association
   </button>
+
+  <div class="menu-separator"></div>
+
+  <button class="menu-item" on:click={() => handleMenuItemClick('optimize')}>
+    Optimize Connection
+  </button>
 </div>
 
 <style>
