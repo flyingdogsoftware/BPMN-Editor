@@ -1,5 +1,5 @@
 import { bpmnStore } from '../stores/bpmnStore';
-import type { BpmnElementUnion, Position } from '../models/bpmnElements';
+import type { BpmnElementUnion, Position, BpmnConnection } from '../models/bpmnElements';
 import { isNode } from '../models/bpmnElements';
 import { snapPositionToGrid, snapToGrid } from '../utils/gridUtils';
 import { removeNonCornerWaypoints } from '../utils/connectionRouting';
@@ -24,6 +24,11 @@ import {
  * for the BPMN editor.
  */
 class ElementManager {
+  // Debounce timer for connection updates
+  private connectionUpdateTimer: number | null = null;
+
+  // Collection of connections that need to be updated
+  private pendingConnectionUpdates: Set<string> = new Set();
   /**
    * Add a new task element to the BPMN store
    * @param taskType The type of task
@@ -431,6 +436,9 @@ class ElementManager {
           });
           storeUnsubscribe();
 
+          // Collect all connections that need to be updated
+          const connectionsToUpdate = new Set<string>();
+
           allElements.forEach(el => {
             if (el.type !== 'connection' && el.type !== 'pool' && el.type !== 'lane' && 'x' in el && 'y' in el) {
               if (this.isElementInsidePool(el, element!)) {
@@ -438,36 +446,102 @@ class ElementManager {
                   x: el.x + offsetX,
                   y: el.y + offsetY
                 });
+
+                // Add any connections connected to this element to the update list
+                allElements.forEach(conn => {
+                  if (conn.type === 'connection' && (conn.sourceId === el.id || conn.targetId === el.id)) {
+                    connectionsToUpdate.add(conn.id);
+                  }
+                });
               }
             }
           });
-        }
-      }
 
-      // Optimize all connections connected to this element
-      this.optimizeConnectedConnections(elementId);
+          // Schedule a batch update for all affected connections
+          if (connectionsToUpdate.size > 0) {
+            console.log(`Scheduling batch update for ${connectionsToUpdate.size} connections`);
+            this.scheduleBatchConnectionUpdate(connectionsToUpdate);
+          }
+        }
+      } else {
+        // For non-pool elements, just optimize the directly connected connections
+        this.optimizeConnectedConnections(elementId);
+      }
     }
   }
 
   /**
-   * Optimize all connections connected to an element
-   * @param elementId The ID of the element
+   * Schedule a batch update for multiple connections
+   * @param connectionIds Set of connection IDs to update
    */
-  private optimizeConnectedConnections(elementId: string): void {
-    // Get all connections from the store
-    let connections: BpmnElementUnion[] = [];
-    let allElements: BpmnElementUnion[] = [];
+  private scheduleBatchConnectionUpdate(connectionIds: Set<string>): void {
+    // Add all connection IDs to the pending updates set
+    connectionIds.forEach(id => this.pendingConnectionUpdates.add(id));
 
+    // Clear any existing timer
+    if (this.connectionUpdateTimer !== null) {
+      window.clearTimeout(this.connectionUpdateTimer);
+    }
+
+    // Set a new timer to process all pending updates
+    this.connectionUpdateTimer = window.setTimeout(() => {
+      console.log(`Processing batch update for ${this.pendingConnectionUpdates.size} connections`);
+      const startTime = performance.now();
+
+      // Process all pending updates
+      this.processPendingConnectionUpdates();
+
+      const endTime = performance.now();
+      console.log(`Batch connection update completed in ${endTime - startTime}ms`);
+
+      this.connectionUpdateTimer = null;
+    }, 200); // 200ms delay to batch updates
+  }
+
+  /**
+   * Process all pending connection updates
+   */
+  private processPendingConnectionUpdates(): void {
+    // Get all elements from the store
+    let allElements: BpmnElementUnion[] = [];
     const unsubscribe = bpmnStore.subscribe(store => {
-      connections = store.filter(el => el.type === 'connection' &&
-        (el.sourceId === elementId || el.targetId === elementId));
       allElements = store;
     });
     unsubscribe();
 
-    // Optimize each connection
-    connections.forEach(connection => {
-      if (connection.type !== 'connection') return;
+    // Process each pending connection
+    const pendingIds = Array.from(this.pendingConnectionUpdates);
+
+    // Clear the pending updates set
+    this.pendingConnectionUpdates.clear();
+
+    // Batch process connections in smaller chunks to avoid UI freezing
+    const chunkSize = 10;
+    for (let i = 0; i < pendingIds.length; i += chunkSize) {
+      const chunk = pendingIds.slice(i, i + chunkSize);
+
+      // Process this chunk immediately
+      this.processConnectionChunk(chunk, allElements);
+
+      // If there are more chunks, schedule them with a small delay
+      if (i + chunkSize < pendingIds.length) {
+        const nextChunk = pendingIds.slice(i + chunkSize, i + chunkSize * 2);
+        setTimeout(() => {
+          this.processConnectionChunk(nextChunk, allElements);
+        }, 10);
+      }
+    }
+  }
+
+  /**
+   * Process a chunk of connections
+   * @param connectionIds Array of connection IDs to process
+   * @param allElements All elements from the store
+   */
+  private processConnectionChunk(connectionIds: string[], allElements: BpmnElementUnion[]): void {
+    connectionIds.forEach(connectionId => {
+      const connection = allElements.find(el => el.id === connectionId && el.type === 'connection') as BpmnConnection | undefined;
+      if (!connection) return;
 
       // Find source and target elements
       const source = allElements.find(el => el.id === connection.sourceId);
@@ -493,10 +567,38 @@ class ElementManager {
       const optimizedWaypoints = removeNonCornerWaypoints(sourceCenter, targetCenter, waypoints);
 
       // Update the connection with optimized waypoints
-      setTimeout(() => {
-        bpmnStore.updateConnectionWaypoints(connection.id, optimizedWaypoints);
-      }, 100);
+      bpmnStore.updateConnectionWaypoints(connection.id, optimizedWaypoints);
     });
+  }
+
+  /**
+   * Optimize all connections connected to an element
+   * @param elementId The ID of the element
+   */
+  private optimizeConnectedConnections(elementId: string): void {
+    // Get all connections from the store
+    let connections: BpmnElementUnion[] = [];
+    let allElements: BpmnElementUnion[] = [];
+
+    const unsubscribe = bpmnStore.subscribe(store => {
+      connections = store.filter(el => el.type === 'connection' &&
+        (el.sourceId === elementId || el.targetId === elementId));
+      allElements = store;
+    });
+    unsubscribe();
+
+    // Create a set of connection IDs to update
+    const connectionIds = new Set<string>();
+    connections.forEach(connection => {
+      if (connection.type === 'connection') {
+        connectionIds.add(connection.id);
+      }
+    });
+
+    // Schedule a batch update
+    if (connectionIds.size > 0) {
+      this.scheduleBatchConnectionUpdate(connectionIds);
+    }
   }
 
   /**
