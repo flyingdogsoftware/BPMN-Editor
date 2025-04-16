@@ -476,42 +476,186 @@
 
   // Start dragging an element - delegated to ElementInteractionManager
   function handleMouseDown(event, element) {
-    // If in selection mode, handle selection instead of dragging
-    if ($selectionMode) {
+    console.log('DEBUG-EDITOR: ========== HANDLE MOUSE DOWN ==========');
+    console.log('DEBUG-EDITOR: Mouse down on element:', element.id, 'type:', element.type);
+    console.log('DEBUG-EDITOR: Element details:', {
+      id: element.id,
+      type: element.type,
+      position: element.type !== 'connection' ? { x: element.x, y: element.y } : 'N/A',
+      isSelected: element.isSelected
+    });
+    console.log('DEBUG-EDITOR: Current selection state:', {
+      selectionMode: $selectionMode,
+      selectedElementIds: $selectedElementIds,
+      selectedCount: $selectedElementIds.length
+    });
+
+    // Check if element is already in a multi-selection
+    const isInMultiSelection = $selectedElementIds.includes(element.id) && $selectedElementIds.length > 1;
+    console.log('DEBUG-EDITOR: Element in multi-selection:', isInMultiSelection, 'selectedElementIds:', $selectedElementIds);
+
+    // If in selection mode AND not trying to drag a multi-selection, handle selection instead of dragging
+    if ($selectionMode && !isInMultiSelection) {
       // Check if shift key is pressed for multi-select
       const addToSelection = event.shiftKey;
+      console.log('DEBUG-EDITOR: In selection mode, adding to selection:', addToSelection);
       multiSelectionManager.selectElement(element.id, addToSelection);
       return false; // Prevent dragging in selection mode
     }
 
-    // Check if element is already in a multi-selection
-    const isInMultiSelection = $selectedElementIds.includes(element.id) && $selectedElementIds.length > 1;
-
+    // If element is part of a multi-selection, handle group dragging
     if (isInMultiSelection) {
-      // Start dragging all selected elements
-      multiSelectionManager.startDragSelectedElements();
+      console.log('DEBUG-EDITOR: Starting multi-selection drag for element', element.id);
+
+      // Prevent default to avoid text selection during drag
+      event.preventDefault();
+      event.stopPropagation();
+
+      // Get all selected elements and their positions
+      const elements = $bpmnStore;
+      const selectedElements = elements.filter(el => $selectedElementIds.includes(el.id));
+
+      // Store original positions of all selected elements
+      const originalPositions = {};
+      selectedElements.forEach(el => {
+        if (el.type !== 'connection') {
+          originalPositions[el.id] = { x: el.x, y: el.y };
+          console.log(`DEBUG-EDITOR: Stored original position for ${el.id}: (${el.x}, ${el.y})`);
+        }
+      });
+
+      // Find all connections between selected elements
+      const internalConnections = [];
+      const internalWaypoints = {};
+
+      elements.forEach(el => {
+        if (el.type === 'connection') {
+          const sourceSelected = $selectedElementIds.includes(el.sourceId);
+          const targetSelected = $selectedElementIds.includes(el.targetId);
+
+          if (sourceSelected && targetSelected) {
+            internalConnections.push(el.id);
+            if (el.waypoints) {
+              internalWaypoints[el.id] = JSON.parse(JSON.stringify(el.waypoints));
+              console.log(`DEBUG-EDITOR: Stored waypoints for internal connection ${el.id}`);
+            }
+          }
+        }
+      });
 
       // Add event listeners for mouse move and mouse up
       if (isBrowser) {
         const startX = event.clientX;
         const startY = event.clientY;
+        console.log('DEBUG-EDITOR: Setting start position for drag:', { startX, startY });
 
         const handleMultiDragMove = (moveEvent) => {
+          // Calculate the distance moved
           const dx = moveEvent.clientX - startX;
           const dy = moveEvent.clientY - startY;
-          multiSelectionManager.dragSelectedElements(dx, dy);
+
+          // Prevent default to avoid text selection during drag
+          moveEvent.preventDefault();
+          moveEvent.stopPropagation();
+
+          // Only log occasionally to avoid flooding the console
+          if (Math.random() < 0.1) {
+            console.log('DEBUG-EDITOR: Multi-drag move', { dx, dy });
+          }
+
+          // Move each selected element
+          Object.keys(originalPositions).forEach(id => {
+            const originalPos = originalPositions[id];
+            if (originalPos) {
+              // Calculate new position
+              const newX = originalPos.x + dx;
+              const newY = originalPos.y + dy;
+
+              // Snap to grid
+              const [snappedX, snappedY] = snapPositionToGrid(newX, newY);
+
+              // Update the element position
+              bpmnStore.updateElement(id, {
+                x: snappedX,
+                y: snappedY
+              });
+            }
+          });
+
+          // Update internal connections to maintain their relative positions
+          internalConnections.forEach(id => {
+            const originalWaypoints = internalWaypoints[id];
+            if (originalWaypoints) {
+              // Move all waypoints by the same amount
+              const updatedWaypoints = originalWaypoints.map(wp => ({
+                x: wp.x + dx,
+                y: wp.y + dy
+              }));
+
+              // Update the connection waypoints
+              bpmnStore.updateConnectionWaypoints(id, updatedWaypoints);
+            }
+          });
         };
 
-        const handleMultiDragUp = () => {
-          multiSelectionManager.endDragSelectedElements();
+        const handleMultiDragUp = (upEvent) => {
+          console.log('DEBUG-EDITOR: Ending multi-selection drag');
+
+          // Prevent default
+          upEvent.preventDefault();
+          upEvent.stopPropagation();
+
+          // Find all connections that need to be refreshed
+          const connectionsToRefresh = [];
+
+          elements.forEach(el => {
+            if (el.type === 'connection') {
+              const sourceSelected = $selectedElementIds.includes(el.sourceId);
+              const targetSelected = $selectedElementIds.includes(el.targetId);
+
+              // Refresh connections where at least one endpoint is selected
+              if (sourceSelected || targetSelected) {
+                connectionsToRefresh.push(el.id);
+              }
+            }
+          });
+
+          // Force a refresh of all affected connections
+          if (connectionsToRefresh.length > 0) {
+            console.log('DEBUG-EDITOR: Refreshing connections after group drag', connectionsToRefresh);
+
+            // Use a small delay to ensure all element positions are updated first
+            setTimeout(() => {
+              connectionsToRefresh.forEach(id => {
+                // This is a no-op update that forces a refresh
+                bpmnStore.updateElement(id, { isSelected: false });
+                bpmnStore.updateElement(id, { isSelected: $selectedElementIds.includes(id) });
+              });
+
+              // Force another refresh after a longer delay to ensure all handles are properly rendered
+              setTimeout(() => {
+                connectionsToRefresh.forEach(id => {
+                  bpmnStore.updateElement(id, { isSelected: false });
+                  bpmnStore.updateElement(id, { isSelected: $selectedElementIds.includes(id) });
+                });
+              }, 100);
+            }, 10);
+          }
+
+          // Remove event listeners
           window.removeEventListener('mousemove', handleMultiDragMove);
           window.removeEventListener('mouseup', handleMultiDragUp);
+
+          console.log('DEBUG-EDITOR: Removed event listeners');
         };
 
+        // Add event listeners for mouse move and mouse up
+        console.log('DEBUG-EDITOR: Adding event listeners for multi-drag');
         window.addEventListener('mousemove', handleMultiDragMove);
         window.addEventListener('mouseup', handleMultiDragUp);
       }
 
+      console.log('DEBUG-EDITOR: ========== END HANDLE MOUSE DOWN (MULTI-SELECTION) ==========');
       return false; // We're handling the drag ourselves
     }
 

@@ -1,5 +1,5 @@
 import { writable, get } from 'svelte/store';
-import type { BpmnElementUnion } from '../models/bpmnElements';
+import type { BpmnElementUnion, Position } from '../models/bpmnElements';
 import { bpmnStore } from '../stores/bpmnStore';
 import { snapPositionToGrid } from '../utils/gridUtils';
 
@@ -287,28 +287,136 @@ export class MultiSelectionManager {
    * Start dragging selected elements
    */
   public startDragSelectedElements(): void {
+    console.log('DEBUG-MULTI: ========== START DRAG SELECTED ELEMENTS ==========');
     const selectedIds = get(this.selectedElementIds);
     const elements = get(bpmnStore);
+
+    console.log('DEBUG-MULTI: Selected element IDs:', selectedIds);
+
+    // Log details about each selected element
+    selectedIds.forEach(id => {
+      const element = elements.find(el => el.id === id);
+      if (element) {
+        console.log(`DEBUG-MULTI: Selected element ${id}:`, {
+          type: element.type,
+          position: element.type !== 'connection' ? { x: element.x, y: element.y } : 'N/A',
+          isSelected: element.isSelected
+        });
+      } else {
+        console.warn(`DEBUG-MULTI: Selected element ${id} not found in store!`);
+      }
+    });
 
     // Store original positions
     const positions: Record<string, { x: number, y: number }> = {};
 
+    // First, identify connections between selected elements
+    const internalConnections: string[] = [];
+    const externalConnections: string[] = [];
+
+    elements.forEach(el => {
+      if (el.type === 'connection') {
+        const sourceSelected = selectedIds.includes(el.sourceId);
+        const targetSelected = selectedIds.includes(el.targetId);
+
+        if (sourceSelected && targetSelected) {
+          // Both endpoints are selected elements
+          internalConnections.push(el.id);
+          console.log(`DEBUG-MULTI: Internal connection ${el.id} between ${el.sourceId} and ${el.targetId}`);
+        } else if (sourceSelected || targetSelected) {
+          // Only one endpoint is a selected element
+          externalConnections.push(el.id);
+          console.log(`DEBUG-MULTI: External connection ${el.id} between ${el.sourceId} and ${el.targetId}`);
+        }
+      }
+    });
+
+    // Store positions of selected elements
     selectedIds.forEach(id => {
       const element = elements.find(el => el.id === id);
       if (element && element.type !== 'connection') {
         positions[id] = { x: element.x, y: element.y };
+        console.log(`DEBUG-MULTI: Storing original position for ${id}: (${element.x}, ${element.y})`);
       }
     });
 
+    // Log for debugging
+    console.log('DEBUG-MULTI: Starting drag of selected elements', {
+      selectedCount: selectedIds.length,
+      internalConnectionsCount: internalConnections.length,
+      externalConnectionsCount: externalConnections.length,
+      positionsCount: Object.keys(positions).length
+    });
+
+    // Store the original positions
     this.originalPositions.set(positions);
+
+    // Log the stored positions
+    console.log('DEBUG-MULTI: Original positions stored:', JSON.stringify(positions));
+    console.log('DEBUG-MULTI: ========== END START DRAG SELECTED ELEMENTS ==========');
   }
 
   /**
    * Drag selected elements
    */
   public dragSelectedElements(dx: number, dy: number): void {
+    console.log('DEBUG-MULTI: ========== DRAG SELECTED ELEMENTS ==========');
     const selectedIds = get(this.selectedElementIds);
     const originalPositions = get(this.originalPositions);
+    const elements = get(bpmnStore);
+
+    console.log('DEBUG-MULTI: dragSelectedElements', {
+      dx,
+      dy,
+      selectedCount: selectedIds.length,
+      originalPositionsCount: Object.keys(originalPositions).length
+    });
+
+    // Log the current state of the originalPositions store
+    console.log('DEBUG-MULTI: Original positions:', JSON.stringify(originalPositions));
+
+    if (selectedIds.length === 0 || Object.keys(originalPositions).length === 0) {
+      console.warn('DEBUG-MULTI: No selected elements or original positions to drag');
+      return;
+    }
+
+    // First, collect all the connections between selected elements
+    const internalConnections: string[] = [];
+    const externalConnections: string[] = [];
+
+    // Find all connections and categorize them
+    elements.forEach(el => {
+      if (el.type === 'connection') {
+        const sourceSelected = selectedIds.includes(el.sourceId);
+        const targetSelected = selectedIds.includes(el.targetId);
+
+        if (sourceSelected && targetSelected) {
+          // Both endpoints are selected elements
+          internalConnections.push(el.id);
+        } else if (sourceSelected || targetSelected) {
+          // Only one endpoint is a selected element
+          externalConnections.push(el.id);
+        }
+      }
+    });
+
+    console.log('DEBUG-MULTI: Connection counts', {
+      internal: internalConnections.length,
+      external: externalConnections.length
+    });
+
+    // Store original waypoints for connections
+    const originalWaypoints: Record<string, Position[]> = {};
+
+    // Store waypoints for internal connections
+    internalConnections.forEach(id => {
+      const connection = elements.find(el => el.id === id);
+      if (connection && connection.type === 'connection' && connection.waypoints) {
+        originalWaypoints[id] = JSON.parse(JSON.stringify(connection.waypoints));
+        console.log(`DEBUG-MULTI: Stored original waypoints for connection ${id}:`,
+          JSON.stringify(originalWaypoints[id]));
+      }
+    });
 
     // Move each selected element
     selectedIds.forEach(id => {
@@ -321,21 +429,114 @@ export class MultiSelectionManager {
         // Snap to grid
         const [snappedX, snappedY] = snapPositionToGrid(newX, newY);
 
+        console.log(`DEBUG-MULTI: Moving element ${id} from (${originalPos.x},${originalPos.y}) to (${snappedX},${snappedY})`);
+
         // Update the element position
         bpmnStore.updateElement(id, {
           x: snappedX,
           y: snappedY
         });
+
+        // Verify the element was updated
+        const updatedElement = elements.find(el => el.id === id);
+        if (updatedElement && updatedElement.type !== 'connection') {
+          console.log(`DEBUG-MULTI: Element ${id} position after update: (${updatedElement.x}, ${updatedElement.y})`);
+        }
+      } else {
+        console.warn(`DEBUG-MULTI: No original position for element ${id}`);
       }
     });
+
+    // Update internal connections to maintain their relative positions
+    internalConnections.forEach(id => {
+      const connection = elements.find(el => el.id === id);
+      const originalWaypointsForConnection = originalWaypoints[id];
+
+      if (connection && connection.type === 'connection' && originalWaypointsForConnection) {
+        // Move all waypoints by the same amount
+        const updatedWaypoints = originalWaypointsForConnection.map(wp => ({
+          x: wp.x + dx,
+          y: wp.y + dy
+        }));
+
+        console.log(`DEBUG-MULTI: Updating waypoints for connection ${id}:`,
+          JSON.stringify(updatedWaypoints));
+
+        // Update the connection waypoints
+        bpmnStore.updateConnectionWaypoints(id, updatedWaypoints);
+      }
+    });
+    console.log('DEBUG-MULTI: ========== END DRAG SELECTED ELEMENTS ==========');
   }
 
   /**
    * End dragging selected elements
    */
   public endDragSelectedElements(): void {
+    console.log('DEBUG-MULTI: ========== END DRAG SELECTED ELEMENTS ==========');
+    const selectedIds = get(this.selectedElementIds);
+    const elements = get(bpmnStore);
+    const originalPositions = get(this.originalPositions);
+
+    console.log('DEBUG-MULTI: endDragSelectedElements', {
+      selectedCount: selectedIds.length,
+      originalPositionsCount: Object.keys(originalPositions).length
+    });
+
+    // Find all connections that need to be refreshed
+    const connectionsToRefresh: string[] = [];
+
+    elements.forEach(el => {
+      if (el.type === 'connection') {
+        const sourceSelected = selectedIds.includes(el.sourceId);
+        const targetSelected = selectedIds.includes(el.targetId);
+
+        // Refresh connections where at least one endpoint is selected
+        if (sourceSelected || targetSelected) {
+          connectionsToRefresh.push(el.id);
+          console.log(`DEBUG-MULTI: Connection ${el.id} needs refresh (source: ${el.sourceId}, target: ${el.targetId})`);
+        }
+      }
+    });
+
+    // Force a refresh of all affected connections
+    if (connectionsToRefresh.length > 0) {
+      console.log('DEBUG-MULTI: Refreshing connections after group drag', connectionsToRefresh);
+
+      // Use a small delay to ensure all element positions are updated first
+      setTimeout(() => {
+        console.log('DEBUG-MULTI: First refresh timeout triggered');
+        connectionsToRefresh.forEach(id => {
+          // This is a no-op update that forces a refresh
+          console.log(`DEBUG-MULTI: Refreshing connection ${id}`);
+          bpmnStore.updateElement(id, { isSelected: false });
+          bpmnStore.updateElement(id, { isSelected: selectedIds.includes(id) });
+        });
+
+        // Force another refresh after a longer delay to ensure all handles are properly rendered
+        setTimeout(() => {
+          console.log('DEBUG-MULTI: Second refresh timeout triggered');
+          connectionsToRefresh.forEach(id => {
+            console.log(`DEBUG-MULTI: Second refresh for connection ${id}`);
+            bpmnStore.updateElement(id, { isSelected: false });
+            bpmnStore.updateElement(id, { isSelected: selectedIds.includes(id) });
+          });
+        }, 100);
+      }, 10);
+    }
+
+    // Log the final positions of all selected elements
+    selectedIds.forEach(id => {
+      const element = elements.find(el => el.id === id);
+      if (element && element.type !== 'connection') {
+        console.log(`DEBUG-MULTI: Final position of element ${id}: (${element.x}, ${element.y})`);
+      }
+    });
+
     // Clear original positions
     this.originalPositions.set({});
+    console.log('DEBUG-MULTI: Group drag ended, cleared original positions');
+    console.log('DEBUG-MULTI: ========== END OF END DRAG SELECTED ELEMENTS ==========');
   }
 }
 

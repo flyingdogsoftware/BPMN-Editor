@@ -1,0 +1,154 @@
+// Alternative Implementierung für die Gruppenbewegung
+
+// In BpmnEditor.svelte:
+function handleMouseDown(event, element) {
+  // Wenn im Auswahlmodus, Auswahl statt Ziehen behandeln
+  if ($selectionMode) {
+    const addToSelection = event.shiftKey;
+    multiSelectionManager.selectElement(element.id, addToSelection);
+    return false; // Ziehen im Auswahlmodus verhindern
+  }
+
+  // Prüfen, ob das Element bereits in einer Mehrfachauswahl ist
+  const isInMultiSelection = $selectedElementIds.includes(element.id) && $selectedElementIds.length > 1;
+
+  if (isInMultiSelection) {
+    console.log('Starte Gruppenbewegung für Element', element.id);
+    
+    // Standard-Ereignisverhalten verhindern
+    event.preventDefault();
+    event.stopPropagation();
+    
+    // Startposition speichern
+    const startX = event.clientX;
+    const startY = event.clientY;
+    
+    // Originalpositionen aller ausgewählten Elemente speichern
+    const elements = $bpmnStore;
+    const positions = {};
+    
+    $selectedElementIds.forEach(id => {
+      const el = elements.find(e => e.id === id);
+      if (el && el.type !== 'connection') {
+        positions[id] = { x: el.x, y: el.y };
+      }
+    });
+    
+    // Verbindungen zwischen ausgewählten Elementen identifizieren
+    const internalConnections = [];
+    const internalWaypoints = {};
+    
+    elements.forEach(el => {
+      if (el.type === 'connection') {
+        const sourceSelected = $selectedElementIds.includes(el.sourceId);
+        const targetSelected = $selectedElementIds.includes(el.targetId);
+        
+        if (sourceSelected && targetSelected) {
+          internalConnections.push(el.id);
+          if (el.waypoints) {
+            internalWaypoints[el.id] = JSON.parse(JSON.stringify(el.waypoints));
+          }
+        }
+      }
+    });
+    
+    // Mausbewegung behandeln
+    function handleMouseMove(moveEvent) {
+      // Bewegungsabstand berechnen
+      const dx = moveEvent.clientX - startX;
+      const dy = moveEvent.clientY - startY;
+      
+      // Standard-Ereignisverhalten verhindern
+      moveEvent.preventDefault();
+      moveEvent.stopPropagation();
+      
+      // Jedes ausgewählte Element bewegen
+      $selectedElementIds.forEach(id => {
+        const originalPos = positions[id];
+        if (originalPos) {
+          // Neue Position berechnen
+          const newX = originalPos.x + dx;
+          const newY = originalPos.y + dy;
+          
+          // Zum Raster einrasten
+          const [snappedX, snappedY] = snapPositionToGrid(newX, newY);
+          
+          // Element-Position aktualisieren
+          bpmnStore.updateElement(id, {
+            x: snappedX,
+            y: snappedY
+          });
+        }
+      });
+      
+      // Interne Verbindungen aktualisieren
+      internalConnections.forEach(id => {
+        const originalWaypoints = internalWaypoints[id];
+        if (originalWaypoints) {
+          // Alle Wegpunkte um den gleichen Betrag verschieben
+          const updatedWaypoints = originalWaypoints.map(wp => ({
+            x: wp.x + dx,
+            y: wp.y + dy
+          }));
+          
+          // Verbindungs-Wegpunkte aktualisieren
+          bpmnStore.updateConnectionWaypoints(id, updatedWaypoints);
+        }
+      });
+    }
+    
+    // Mausloslassen behandeln
+    function handleMouseUp(upEvent) {
+      // Standard-Ereignisverhalten verhindern
+      upEvent.preventDefault();
+      upEvent.stopPropagation();
+      
+      // Verbindungen aktualisieren
+      const connectionsToRefresh = [];
+      
+      elements.forEach(el => {
+        if (el.type === 'connection') {
+          const sourceSelected = $selectedElementIds.includes(el.sourceId);
+          const targetSelected = $selectedElementIds.includes(el.targetId);
+          
+          if (sourceSelected || targetSelected) {
+            connectionsToRefresh.push(el.id);
+          }
+        }
+      });
+      
+      // Verbindungen aktualisieren
+      if (connectionsToRefresh.length > 0) {
+        setTimeout(() => {
+          connectionsToRefresh.forEach(id => {
+            bpmnStore.updateElement(id, { isSelected: false });
+            bpmnStore.updateElement(id, { isSelected: $selectedElementIds.includes(id) });
+          });
+          
+          setTimeout(() => {
+            connectionsToRefresh.forEach(id => {
+              bpmnStore.updateElement(id, { isSelected: false });
+              bpmnStore.updateElement(id, { isSelected: $selectedElementIds.includes(id) });
+            });
+          }, 100);
+        }, 10);
+      }
+      
+      // Event-Listener entfernen
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    }
+    
+    // Event-Listener hinzufügen
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+    
+    return false; // Wir behandeln das Ziehen selbst
+  }
+  
+  // Normales Ziehen eines einzelnen Elements
+  const result = elementInteractionManager.handleMouseDown(event, element);
+  if (!result) return false;
+  
+  // Rest der Funktion...
+}
