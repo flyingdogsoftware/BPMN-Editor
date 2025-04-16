@@ -5,7 +5,6 @@
   import ConnectionLabel from './ConnectionLabel.svelte';
   import ConnectionEndpointHandle from './ConnectionEndpointHandle.svelte';
   import ConnectionHandle from './ConnectionHandle.svelte';
-  import OptimizeButton from './OptimizeButton.svelte';
 
   // Props
   export let connections = [];
@@ -977,8 +976,8 @@
 
     console.log('Drag state reset');
 
-    // Only optimize the connection waypoints if we were dragging an endpoint, not a segment
-    if (connectionToOptimize && (dragType === 'source' || dragType === 'target')) {
+    // Optimize the connection waypoints after any connection change
+    if (connectionToOptimize) {
       setTimeout(() => {
         const connection = connections.find(c => c.id === connectionToOptimize);
         if (connection && connection.waypoints && connection.waypoints.length > 1) {
@@ -1152,15 +1151,8 @@
   </marker>
 </defs>
 
-<!-- Optimize button for selected connection -->
+<!-- Force refresh button for selected connection -->
 {#if selectedConnectionId}
-  <OptimizeButton
-    connectionId={selectedConnectionId}
-    selectedConnectionId={selectedConnectionId}
-    {elements}
-  />
-
-  <!-- Force refresh button for selected connection -->
   <g
     transform="translate(30, 30)"
     role="button"

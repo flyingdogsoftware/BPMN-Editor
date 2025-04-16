@@ -2,6 +2,7 @@ import { bpmnStore } from '../stores/bpmnStore';
 import type { BpmnElementUnion, Position } from '../models/bpmnElements';
 import { isNode } from '../models/bpmnElements';
 import { snapPositionToGrid, snapToGrid } from '../utils/gridUtils';
+import { removeNonCornerWaypoints } from '../utils/connectionRouting';
 import {
   createTask,
   createEvent,
@@ -373,7 +374,60 @@ class ElementManager {
           }
         });
       }
+
+      // Optimize all connections connected to this element
+      this.optimizeConnectedConnections(elementId);
     }
+  }
+
+  /**
+   * Optimize all connections connected to an element
+   * @param elementId The ID of the element
+   */
+  private optimizeConnectedConnections(elementId: string): void {
+    // Get all connections from the store
+    let connections: BpmnElementUnion[] = [];
+    let allElements: BpmnElementUnion[] = [];
+
+    const unsubscribe = bpmnStore.subscribe(store => {
+      connections = store.filter(el => el.type === 'connection' &&
+        (el.sourceId === elementId || el.targetId === elementId));
+      allElements = store;
+    });
+    unsubscribe();
+
+    // Optimize each connection
+    connections.forEach(connection => {
+      if (connection.type !== 'connection') return;
+
+      // Find source and target elements
+      const source = allElements.find(el => el.id === connection.sourceId);
+      const target = allElements.find(el => el.id === connection.targetId);
+
+      if (!source || !target) return;
+
+      // Calculate source and target centers
+      const sourceCenter = {
+        x: source.x + source.width / 2,
+        y: source.y + source.height / 2
+      };
+
+      const targetCenter = {
+        x: target.x + target.width / 2,
+        y: target.y + target.height / 2
+      };
+
+      // Make a deep copy of the waypoints
+      const waypoints = JSON.parse(JSON.stringify(connection.waypoints || []));
+
+      // Optimize the waypoints
+      const optimizedWaypoints = removeNonCornerWaypoints(sourceCenter, targetCenter, waypoints);
+
+      // Update the connection with optimized waypoints
+      setTimeout(() => {
+        bpmnStore.updateConnectionWaypoints(connection.id, optimizedWaypoints);
+      }, 100);
+    });
   }
 
   /**

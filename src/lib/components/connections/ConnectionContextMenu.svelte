@@ -36,11 +36,7 @@
     Association
   </button>
 
-  <div class="menu-separator"></div>
 
-  <button class="menu-item" on:click={() => handleMenuItemClick('optimize')}>
-    Optimize Connection
-  </button>
 </div>
 
 <style>

@@ -218,9 +218,6 @@
       case 'change-type-association':
         bpmnStore.updateElement(contextMenuConnection.id, { connectionType: 'association' });
         break;
-      case 'optimize':
-        optimizeConnection(contextMenuConnection);
-        break;
     }
 
     hideContextMenu();
