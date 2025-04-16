@@ -3,6 +3,31 @@ import type { BpmnElementUnion, Position } from '../models/bpmnElements';
 import { bpmnStore } from '../stores/bpmnStore';
 import { snapPositionToGrid } from '../utils/gridUtils';
 
+// Helper function to check if element is a node (any element with position and size)
+function isNode(element: BpmnElementUnion): boolean {
+  return element.type !== 'connection';
+}
+
+// Helper function to check if an element is inside a pool
+function isElementInsidePool(element: BpmnElementUnion, pool: BpmnElementUnion): boolean {
+  if (!isNode(element) || !isNode(pool)) return false;
+
+  // Check if the element is fully contained within the pool boundaries
+  const elementX = element.x;
+  const elementY = element.y;
+  const elementWidth = element.width;
+  const elementHeight = element.height;
+  const poolX = pool.x;
+  const poolY = pool.y;
+  const poolWidth = pool.width;
+  const poolHeight = pool.height;
+
+  return elementX >= poolX &&
+         elementY >= poolY &&
+         elementX + elementWidth <= poolX + poolWidth &&
+         elementY + elementHeight <= poolY + poolHeight;
+}
+
 /**
  * MultiSelectionManager
  *
@@ -127,9 +152,32 @@ export class MultiSelectionManager {
 
     // Select elements within the rectangle
     const elements = get(bpmnStore);
+
+    // First, find all pools and lanes that contain the selection rectangle
+    const containingPoolsAndLanes = elements.filter(element => {
+      if (element.type !== 'pool' && element.type !== 'lane') return false;
+
+      // Check if the selection rectangle is completely inside this pool/lane
+      return (
+        normalizedRect.left >= element.x &&
+        normalizedRect.right <= element.x + element.width &&
+        normalizedRect.top >= element.y &&
+        normalizedRect.bottom <= element.y + element.height
+      );
+    });
+
+    console.log('DEBUG: Selection rectangle is inside these pools/lanes:',
+      containingPoolsAndLanes.map(el => el.id));
+
+    // Now find all elements that overlap with the selection rectangle
     const elementsInRect = elements.filter(element => {
       // Skip connections for now
       if (element.type === 'connection') return false;
+
+      // Always skip pools and lanes - we never want to select them in rectangle selection
+      if (element.type === 'pool' || element.type === 'lane') {
+        return false;
+      }
 
       // Check if element overlaps with the selection rectangle
       // An element is considered selected if any part of it is within the selection rectangle
@@ -187,19 +235,49 @@ export class MultiSelectionManager {
    * Select a single element
    */
   public selectElement(elementId: string, addToSelection: boolean = false): void {
+    console.log('DEBUG: selectElement called with elementId:', elementId, 'addToSelection:', addToSelection);
+
+    // Get the element from the store
+    const elements = get(bpmnStore);
+    const element = elements.find(el => el.id === elementId);
+    console.log('DEBUG: Element to select:', element);
+
+    // Skip pools and lanes
+    if (element && (element.type === 'pool' || element.type === 'lane')) {
+      console.log('DEBUG: Skipping selection of pool/lane:', elementId);
+      return;
+    }
+
+    // Check if the element is inside a pool
+    if (element && element.type !== 'pool' && element.type !== 'lane' && element.type !== 'connection') {
+      const pools = elements.filter(el => el.type === 'pool');
+      for (const pool of pools) {
+        if (isElementInsidePool(element, pool)) {
+          console.log('DEBUG: Element is inside pool:', pool.id);
+          break;
+        }
+      }
+    }
+
     if (addToSelection) {
       // Add to existing selection
       this.selectedElementIds.update(ids => {
+        console.log('DEBUG: Current selection before update:', ids);
         if (ids.includes(elementId)) {
           // If already selected, deselect it
-          return ids.filter(id => id !== elementId);
+          const newIds = ids.filter(id => id !== elementId);
+          console.log('DEBUG: Element was already selected, deselecting. New selection:', newIds);
+          return newIds;
         } else {
           // Otherwise add to selection
-          return [...ids, elementId];
+          const newIds = [...ids, elementId];
+          console.log('DEBUG: Adding element to selection. New selection:', newIds);
+          return newIds;
         }
       });
     } else {
       // Replace existing selection
+      console.log('DEBUG: Replacing entire selection with:', [elementId]);
       this.selectedElementIds.set([elementId]);
     }
 
@@ -211,16 +289,40 @@ export class MultiSelectionManager {
    * Select multiple elements
    */
   public selectElements(elementIds: string[], addToSelection: boolean = false): void {
+    console.log('DEBUG: selectElements called with elementIds:', elementIds, 'addToSelection:', addToSelection);
+
+    // Get the elements from the store
+    const elements = get(bpmnStore);
+
+    // Filter out pools and lanes from the selection
+    const filteredElementIds = elementIds.filter(id => {
+      const element = elements.find(el => el.id === id);
+      if (!element) return false;
+
+      // Skip pools and lanes
+      if (element.type === 'pool' || element.type === 'lane') {
+        console.log('DEBUG: Filtering out pool/lane from selection:', id, element.type);
+        return false;
+      }
+
+      return true;
+    });
+
+    console.log('DEBUG: Filtered element IDs (no pools/lanes):', filteredElementIds);
+
     if (addToSelection) {
       // Add to existing selection
       this.selectedElementIds.update(ids => {
         // Combine existing and new IDs, removing duplicates
-        const combinedIds = [...ids, ...elementIds];
-        return [...new Set(combinedIds)];
+        const combinedIds = [...ids, ...filteredElementIds];
+        const uniqueIds = [...new Set(combinedIds)];
+        console.log('DEBUG: Combined selection:', uniqueIds);
+        return uniqueIds;
       });
     } else {
       // Replace existing selection
-      this.selectedElementIds.set(elementIds);
+      console.log('DEBUG: Replacing entire selection with filtered IDs');
+      this.selectedElementIds.set(filteredElementIds);
     }
 
     // Update the isSelected property in the store
@@ -253,7 +355,7 @@ export class MultiSelectionManager {
   public selectAll(): void {
     const elements = get(bpmnStore);
     const elementIds = elements
-      .filter(element => element.type !== 'connection') // Skip connections for now
+      .filter(element => element.type !== 'connection' && element.type !== 'pool' && element.type !== 'lane') // Skip connections, pools, and lanes
       .map(element => element.id);
 
     this.selectedElementIds.set(elementIds);
@@ -313,7 +415,12 @@ export class MultiSelectionManager {
     const originalPositions = get(this.originalPositions);
     const elements = get(bpmnStore);
 
+    console.log('DEBUG: dragSelectedElements called with dx:', dx, 'dy:', dy);
+    console.log('DEBUG: Selected element IDs:', selectedIds);
+    console.log('DEBUG: Original positions:', originalPositions);
+
     if (selectedIds.length === 0 || Object.keys(originalPositions).length === 0) {
+      console.log('DEBUG: No selected elements or no original positions, returning');
       return;
     }
 
@@ -348,23 +455,68 @@ export class MultiSelectionManager {
       }
     });
 
+    // Find all pools and lanes to check boundaries
+    const pools = elements.filter(el => el.type === 'pool');
+
     // Move each selected element
     selectedIds.forEach(id => {
+      const element = elements.find(el => el.id === id);
       const originalPos = originalPositions[id];
-      if (originalPos) {
-        // Calculate new position
-        const newX = originalPos.x + dx;
-        const newY = originalPos.y + dy;
 
-        // Snap to grid
-        const [snappedX, snappedY] = snapPositionToGrid(newX, newY);
-
-        // Update the element position
-        bpmnStore.updateElement(id, {
-          x: snappedX,
-          y: snappedY
-        });
+      if (!element || !originalPos || element.type === 'connection') {
+        return;
       }
+
+      // Calculate new position
+      let newX = originalPos.x + dx;
+      let newY = originalPos.y + dy;
+
+      // Check if element is inside a pool
+      let containingPool = null;
+      let containingLane = null;
+
+      // Find the pool and lane that contains this element
+      for (const pool of pools) {
+        if (isElementInsidePool(element, pool)) {
+          containingPool = pool;
+
+          // Check if element is in a lane
+          if (pool.lanes && pool.lanes.length > 0) {
+            for (const laneId of pool.lanes) {
+              const lane = elements.find(el => el.id === laneId && el.type === 'lane');
+              if (lane && isElementInsidePool(element, lane)) {
+                containingLane = lane;
+                break;
+              }
+            }
+          }
+          break;
+        }
+      }
+
+      // If element is inside a pool/lane, ensure it stays within boundaries
+      if (containingPool) {
+        const container = containingLane || containingPool;
+
+        // Calculate boundaries
+        const minX = container.x;
+        const minY = container.y;
+        const maxX = container.x + container.width - element.width;
+        const maxY = container.y + container.height - element.height;
+
+        // Constrain position to stay within boundaries
+        newX = Math.max(minX, Math.min(maxX, newX));
+        newY = Math.max(minY, Math.min(maxY, newY));
+      }
+
+      // Snap to grid
+      const [snappedX, snappedY] = snapPositionToGrid(newX, newY);
+
+      // Update the element position
+      bpmnStore.updateElement(id, {
+        x: snappedX,
+        y: snappedY
+      });
     });
 
     // Update internal connections to maintain their relative positions

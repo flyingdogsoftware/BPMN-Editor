@@ -14,16 +14,16 @@
 <!-- Selection highlight if element is selected -->
 {#if isSelected}
   <rect
-    x={element.x - 3}
-    y={element.y - 3}
-    width={element.width + 6}
-    height={element.height + 6}
-    fill="none"
+    x={element.x - 4}
+    y={element.y - 4}
+    width={element.width + 8}
+    height={element.height + 8}
+    fill="rgba(0, 123, 255, 0.1)"
     stroke="#007bff"
-    stroke-width="2"
+    stroke-width="2.5"
     stroke-dasharray="5,3"
-    rx="3"
-    ry="3"
+    rx="4"
+    ry="4"
     class="selection-indicator"
   />
 {/if}

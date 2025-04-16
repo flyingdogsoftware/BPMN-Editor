@@ -816,7 +816,7 @@ export function calculateSegmentMidpoints(
       Math.abs(p3.y - p4.y) < EPSILON;   // Third segment is horizontal
 
     if (isVerticalThenHorizontal) {
-      console.log('DEBUG: L-shaped connection with 2 waypoints detected (vertical then horizontal)');
+      // L-shaped connection with 2 waypoints detected (vertical then horizontal)
       // Return THREE midpoints - one for each segment
       return [
         {
@@ -850,7 +850,7 @@ export function calculateSegmentMidpoints(
       Math.abs(p3.y - p4.y) < EPSILON;   // Third segment is horizontal
 
     if (isUShapeHVH) {
-      console.log('DEBUG: U-shaped connection detected (horizontal, vertical, horizontal)');
+      // U-shaped connection detected (horizontal, vertical, horizontal)
       return [
         {
           position: {
@@ -883,7 +883,7 @@ export function calculateSegmentMidpoints(
       Math.abs(p3.x - p4.x) < EPSILON;   // Third segment is vertical
 
     if (isUShapeVHV) {
-      console.log('DEBUG: U-shaped connection detected (vertical, horizontal, vertical)');
+      // U-shaped connection detected (vertical, horizontal, vertical)
       return [
         {
           position: {
@@ -1017,7 +1017,7 @@ export function calculateSegmentMidpoints(
     }
 
     midpoints.push(midpoint);
-    console.log(`DEBUG: Added midpoint for segment ${i}: ${JSON.stringify(midpoint)}`);
+    // Added midpoint for segment
   }
 
   // IMPORTANT: ALWAYS ensure we have a handle for EVERY segment
@@ -1026,7 +1026,7 @@ export function calculateSegmentMidpoints(
   // Check if we have the right number of midpoints
   // We should have one midpoint for each segment between points
   if (midpoints.length < allPoints.length - 1) {
-    console.log('DEBUG: Missing midpoints. Adding handles for all segments. Expected:', allPoints.length - 1, 'Got:', midpoints.length);
+    // Missing midpoints. Adding handles for all segments.
 
     // Clear existing midpoints and recalculate for all segments
     midpoints.length = 0;
@@ -1071,13 +1071,13 @@ export function calculateSegmentMidpoints(
       }
 
       midpoints.push(midpoint);
-      console.log(`DEBUG: Added midpoint for segment ${i}: ${JSON.stringify(midpoint)}`);
+      // Added midpoint for segment
     }
   }
 
   // Ensure we have at least one midpoint
   if (midpoints.length === 0) {
-    console.log('DEBUG: No midpoints calculated, adding default midpoint');
+    // No midpoints calculated, adding default midpoint
     // If no midpoints were calculated, add a default one based on segment orientation
     const isHorizontal = Math.abs(start.y - end.y) < EPSILON;
     const isVertical = Math.abs(start.x - end.x) < EPSILON;
@@ -1178,12 +1178,7 @@ function calculateDirectPathMidpoints(
       orientation: 'vertical'
     });
 
-    console.log('DEBUG: Direct path (horizontal first):', {
-      start,
-      end,
-      corner: cornerPoint,
-      midpoints
-    });
+    // Direct path (horizontal first)
   } else {
     // First segment: vertical from start to corner
     midpoints.push({
@@ -1203,12 +1198,7 @@ function calculateDirectPathMidpoints(
       orientation: 'horizontal'
     });
 
-    console.log('DEBUG: Direct path (vertical first):', {
-      start,
-      end,
-      corner: cornerPoint,
-      midpoints
-    });
+    // Direct path (vertical first)
   }
 
   return midpoints;

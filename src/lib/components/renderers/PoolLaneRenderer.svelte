@@ -1,7 +1,8 @@
 <script >
   import { bpmnStore } from '../../stores/bpmnStore';
+  import { multiSelectionManager } from '../../services/MultiSelectionManager';
   import ResizeHandle from '../ResizeHandle.svelte';
-  
+
   // Props
   export let element;
   export let isDragging = false;
@@ -11,11 +12,14 @@
   export let onNodeDoubleClick;
   export let onLaneDoubleClick;
   export let onAddLane;
+
+  // Get selection mode from MultiSelectionManager
+  const selectionMode = multiSelectionManager.getSelectionModeStore();
 </script>
 
 <!-- Group for the pool/lane element -->
 <g
-  class="bpmn-element {isDragging ? 'dragging' : ''}"
+  class="bpmn-element {isDragging ? 'dragging' : ''} {$selectionMode ? 'selection-mode' : ''}"
   data-element-type={element.type}
 >
   {#if element.type === 'pool'}
@@ -28,39 +32,42 @@
       fill="white"
       stroke="black"
       stroke-width="2"
-      class="element-shape"
+      class="element-shape {$selectionMode ? 'selection-mode' : ''}"
+      pointer-events={$selectionMode ? 'none' : 'auto'}
     />
 
-    <!-- Resize handles for pool -->
-    <ResizeHandle
-      x={element.x + element.width}
-      y={element.y + element.height/2}
-      position="right"
-      onDragStart={() => onStartResize(element, 'right')}
-      onDrag={(dx, dy) => onResizeDrag(dx, dy, 'right', element)}
-      onDragEnd={(dx, dy) => onResizeEnd(dx, dy, 'right', element)}
-    />
+    <!-- Resize handles for pool (not shown in selection mode) -->
+    {#if !$selectionMode}
+      <ResizeHandle
+        x={element.x + element.width}
+        y={element.y + element.height/2}
+        position="right"
+        onDragStart={() => onStartResize(element, 'right')}
+        onDrag={(dx, dy) => onResizeDrag(dx, dy, 'right', element)}
+        onDragEnd={(dx, dy) => onResizeEnd(dx, dy, 'right', element)}
+      />
 
-    <ResizeHandle
-      x={element.x + element.width/2}
-      y={element.y + element.height}
-      position="bottom"
-      onDragStart={() => onStartResize(element, 'bottom')}
-      onDrag={(dx, dy) => onResizeDrag(dx, dy, 'bottom', element)}
-      onDragEnd={(dx, dy) => onResizeEnd(dx, dy, 'bottom', element)}
-    />
+      <ResizeHandle
+        x={element.x + element.width/2}
+        y={element.y + element.height}
+        position="bottom"
+        onDragStart={() => onStartResize(element, 'bottom')}
+        onDrag={(dx, dy) => onResizeDrag(dx, dy, 'bottom', element)}
+        onDragEnd={(dx, dy) => onResizeEnd(dx, dy, 'bottom', element)}
+      />
 
-    <ResizeHandle
-      x={element.x + element.width}
-      y={element.y + element.height}
-      position="bottom-right"
-      onDragStart={() => onStartResize(element, 'bottom-right')}
-      onDrag={(dx, dy) => onResizeDrag(dx, dy, 'bottom-right', element)}
-      onDragEnd={(dx, dy) => onResizeEnd(dx, dy, 'bottom-right', element)}
-    />
+      <ResizeHandle
+        x={element.x + element.width}
+        y={element.y + element.height}
+        position="bottom-right"
+        onDragStart={() => onStartResize(element, 'bottom-right')}
+        onDrag={(dx, dy) => onResizeDrag(dx, dy, 'bottom-right', element)}
+        onDragEnd={(dx, dy) => onResizeEnd(dx, dy, 'bottom-right', element)}
+      />
+    {/if}
 
-    <!-- Add Lane Button (always visible) -->
-    {#if element.isHorizontal}
+    <!-- Add Lane Button (always visible except in selection mode) -->
+    {#if element.isHorizontal && !$selectionMode}
       <!-- Horizontal pool add lane button -->
       <g
         class="add-lane-button"
@@ -75,7 +82,7 @@
         <text x="0" y="0" text-anchor="middle" dominant-baseline="middle" font-size="16" font-weight="bold" fill="white">+</text>
         <title>Add Lane</title>
       </g>
-    {:else}
+    {:else if !$selectionMode}
       <!-- Vertical pool add lane button -->
       <g
         class="add-lane-button"
@@ -96,11 +103,12 @@
     {#if element.isHorizontal}
       <!-- Pool Label Area with clickable rect -->
       <g
-        class="pool-label-area"
+        class="pool-label-area {$selectionMode ? 'selection-mode' : ''}"
         on:dblclick|stopPropagation={() => onNodeDoubleClick(element)}
         role="button"
         tabindex="0"
         aria-label="Edit pool label"
+        pointer-events={$selectionMode ? 'none' : 'auto'}
       >
         <rect
           x={element.x}
@@ -139,11 +147,12 @@
             />
             <!-- Lane label with clickable area -->
             <g
-              class="lane-label-area"
+              class="lane-label-area {$selectionMode ? 'selection-mode' : ''}"
               on:dblclick|stopPropagation={() => onLaneDoubleClick(lane)}
               role="button"
               tabindex="0"
               aria-label="Edit lane label"
+              pointer-events={$selectionMode ? 'none' : 'auto'}
             >
               <rect
                 x={element.x + 30}
@@ -166,7 +175,7 @@
             </g>
 
             <!-- Resize handle for lane (bottom edge) -->
-            {#if index < element.lanes.length - 1}
+            {#if index < element.lanes.length - 1 && !$selectionMode}
               <ResizeHandle
                 x={element.x + element.width/2}
                 y={lane.y + lane.height}
@@ -183,11 +192,12 @@
       <!-- Vertical pool rendering -->
       <!-- Vertical pool label area with clickable rect -->
       <g
-        class="pool-label-area"
+        class="pool-label-area {$selectionMode ? 'selection-mode' : ''}"
         on:dblclick|stopPropagation={() => onNodeDoubleClick(element)}
         role="button"
         tabindex="0"
         aria-label="Edit pool label"
+        pointer-events={$selectionMode ? 'none' : 'auto'}
       >
         <rect
           x={element.x}
@@ -225,11 +235,12 @@
             />
             <!-- Lane label with clickable area -->
             <g
-              class="lane-label-area"
+              class="lane-label-area {$selectionMode ? 'selection-mode' : ''}"
               on:dblclick|stopPropagation={() => onLaneDoubleClick(lane)}
               role="button"
               tabindex="0"
               aria-label="Edit lane label"
+              pointer-events={$selectionMode ? 'none' : 'auto'}
             >
               <rect
                 x={lane.x}
@@ -251,7 +262,7 @@
             </g>
 
             <!-- Resize handle for lane (right edge) -->
-            {#if index < element.lanes.length - 1}
+            {#if index < element.lanes.length - 1 && !$selectionMode}
               <ResizeHandle
                 x={lane.x + lane.width}
                 y={element.y + element.height/2}
@@ -277,12 +288,21 @@
       stroke="none"
       stroke-width="0"
       fill-opacity="0.1"
-      class="element-shape"
+      class="element-shape {$selectionMode ? 'selection-mode' : ''}"
+      pointer-events={$selectionMode ? 'none' : 'auto'}
     />
   {/if}
 </g>
 
 <style>
+  /* Selection mode styling */
+  .element-shape.selection-mode,
+  .pool-label-area.selection-mode,
+  .lane-label-area.selection-mode,
+  .bpmn-element.selection-mode {
+    pointer-events: none;
+  }
+
   /* Add Lane Button styling */
   .add-lane-button {
     cursor: pointer;

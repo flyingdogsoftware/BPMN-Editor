@@ -158,6 +158,9 @@
       // Skip connections for now
       if (element.type === 'connection') return false;
 
+      // Skip pools and lanes - we never want to select them in rectangle selection
+      if (element.type === 'pool' || element.type === 'lane') return false;
+
       // Check if element overlaps with the selection rectangle
       return (
         element.x < Math.max(startX, currentX) &&

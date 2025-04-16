@@ -54,6 +54,40 @@
     }
   }
 
+  // Function to import a test BPMN file with swimlanes
+  async function importTestSwimlanesFile() {
+    try {
+      // Fetch the test file
+      const response = await fetch('/test-swimlanes.bpmn');
+      if (!response.ok) {
+        throw new Error(`Failed to fetch test file: ${response.statusText}`);
+      }
+
+      const xmlString = await response.text();
+      console.log('Importing test swimlanes BPMN XML...');
+      console.log('XML content:', xmlString);
+
+      const elements = importBpmnXml(xmlString);
+      console.log('Imported elements:', elements);
+
+      // Log pools and lanes specifically
+      const pools = elements.filter(el => el.type === 'pool');
+      const lanes = elements.filter(el => el.type === 'lane');
+      console.log('Imported pools:', JSON.stringify(pools, null, 2));
+      console.log('Imported lanes:', JSON.stringify(lanes, null, 2));
+
+      // Reset the store and add the imported elements
+      bpmnStore.reset();
+      elements.forEach(el => bpmnStore.addElement(el));
+
+      // Log the store after import
+      console.log('Store after import:', $bpmnStore);
+    } catch (err) {
+      console.error('Failed to import test swimlanes BPMN XML:', err);
+      alert('Failed to import test swimlanes BPMN XML: ' + err.message);
+    }
+  }
+
   // Import BPMN XML handler
   async function handleImportBpmnXml(event) {
     const file = event.target.files && event.target.files[0];
@@ -476,15 +510,47 @@
 
   // Start dragging an element - delegated to ElementInteractionManager
   function handleMouseDown(event, element) {
+    console.log('DEBUG: handleMouseDown called for element:', element.id, 'type:', element.type);
+
+    // Check if element is inside a pool
+    if (element.type !== 'pool' && element.type !== 'lane') {
+      const pools = $bpmnStore.filter(el => el.type === 'pool');
+      for (const pool of pools) {
+        if (isElementInsidePool(element, pool)) {
+          console.log('DEBUG: Element is inside pool:', pool.id);
+          break;
+        }
+      }
+    }
+
     // Check if element is already in a multi-selection
     const isInMultiSelection = $selectedElementIds.includes(element.id) && $selectedElementIds.length > 1;
+    console.log('DEBUG: isInMultiSelection:', isInMultiSelection, 'selectedElementIds:', $selectedElementIds);
 
-    // If in selection mode AND not trying to drag a multi-selection, handle selection instead of dragging
-    if ($selectionMode && !isInMultiSelection) {
-      // Check if shift key is pressed for multi-select
-      const addToSelection = event.shiftKey;
-      multiSelectionManager.selectElement(element.id, addToSelection);
-      return false; // Prevent dragging in selection mode
+    // If in selection mode, handle selection or dragging of selected elements
+    if ($selectionMode) {
+      // If the element is already selected, allow dragging it
+      if ($selectedElementIds.includes(element.id)) {
+        console.log('DEBUG: In selection mode, dragging already selected element:', element.id);
+        // Continue with the drag operation
+      } else {
+        // Otherwise, select the element instead of dragging
+        // Check if shift key is pressed for multi-select
+        const addToSelection = event.shiftKey;
+        console.log('DEBUG: In selection mode, selecting element, addToSelection:', addToSelection);
+
+        // Don't select pools or lanes when in selection mode
+        if (element.type === 'pool' || element.type === 'lane') {
+          // In selection mode, pools and lanes should not be selectable
+          // The pointer-events are set to 'none' in the PoolLaneRenderer component
+          // This is just a fallback in case the event still reaches here
+          console.log('DEBUG: Ignoring selection of pool/lane in selection mode');
+          return false;
+        }
+
+        multiSelectionManager.selectElement(element.id, addToSelection);
+        return false; // Prevent dragging when selecting a new element
+      }
     }
 
     // If element is part of a multi-selection, handle group dragging
@@ -496,6 +562,9 @@
       // Get all selected elements and their positions
       const elements = $bpmnStore;
       const selectedElements = elements.filter(el => $selectedElementIds.includes(el.id));
+
+      // Check if any pools or lanes are selected
+      const hasPoolsOrLanes = selectedElements.some(el => el.type === 'pool' || el.type === 'lane');
 
       // Store original positions of all selected elements
       const originalPositions = {};
@@ -523,6 +592,54 @@
         }
       });
 
+      // Find containing pools and lanes for boundary checking
+      const pools = elements.filter(el => el.type === 'pool');
+      const containingPoolsAndLanes = new Map(); // Map of elementId -> { pool, lane }
+
+      // For each selected element, find its containing pool and lane
+      selectedElements.forEach(el => {
+        if (el.type !== 'connection' && el.type !== 'pool' && el.type !== 'lane') {
+          // Find containing pool
+          for (const pool of pools) {
+            // Skip if the pool itself is selected - we don't want to constrain movement in that case
+            // This should never happen now since we're not selecting pools in rectangle selection
+            if ($selectedElementIds.includes(pool.id)) {
+              console.log('DEBUG: Pool is selected, skipping constraint check:', pool.id);
+              continue;
+            }
+
+            if (isElementInsidePool(el, pool)) {
+              console.log('DEBUG: Element is inside pool:', el.id, 'pool:', pool.id);
+              let containingLane = null;
+
+              // Find containing lane
+              if (pool.lanes && pool.lanes.length > 0) {
+                for (const laneId of pool.lanes) {
+                  // Skip if the lane itself is selected
+                  // This should never happen now since we're not selecting lanes in rectangle selection
+                  if ($selectedElementIds.includes(laneId)) {
+                    console.log('DEBUG: Lane is selected, skipping constraint check:', laneId);
+                    continue;
+                  }
+
+                  const lane = elements.find(l => l.id === laneId && l.type === 'lane');
+                  if (lane && isElementInsidePool(el, lane)) {
+                    containingLane = lane;
+                    console.log('DEBUG: Element is inside lane:', el.id, 'lane:', lane.id);
+                    break;
+                  }
+                }
+              }
+
+              containingPoolsAndLanes.set(el.id, { pool, lane: containingLane });
+              break;
+            }
+          }
+        }
+      });
+
+      console.log('DEBUG: Containing pools and lanes map:', Object.fromEntries(containingPoolsAndLanes));
+
       // Add event listeners for mouse move and mouse up
       if (isBrowser) {
         const startX = event.clientX;
@@ -540,20 +657,40 @@
           // Move each selected element
           Object.keys(originalPositions).forEach(id => {
             const originalPos = originalPositions[id];
-            if (originalPos) {
-              // Calculate new position
-              const newX = originalPos.x + dx;
-              const newY = originalPos.y + dy;
+            const element = elements.find(el => el.id === id);
 
-              // Snap to grid
-              const [snappedX, snappedY] = snapPositionToGrid(newX, newY);
-
-              // Update the element position
-              bpmnStore.updateElement(id, {
-                x: snappedX,
-                y: snappedY
-              });
+            if (!originalPos || !element || element.type === 'connection') {
+              return;
             }
+
+            // Calculate new position
+            let newX = originalPos.x + dx;
+            let newY = originalPos.y + dy;
+
+            // Check if element is inside a pool/lane and constrain movement
+            const container = containingPoolsAndLanes.get(id);
+            if (container) {
+              const boundaryElement = container.lane || container.pool;
+
+              // Calculate boundaries
+              const minX = boundaryElement.x;
+              const minY = boundaryElement.y;
+              const maxX = boundaryElement.x + boundaryElement.width - element.width;
+              const maxY = boundaryElement.y + boundaryElement.height - element.height;
+
+              // Constrain position to stay within boundaries
+              newX = Math.max(minX, Math.min(maxX, newX));
+              newY = Math.max(minY, Math.min(maxY, newY));
+            }
+
+            // Snap to grid
+            const [snappedX, snappedY] = snapPositionToGrid(newX, newY);
+
+            // Update the element position
+            bpmnStore.updateElement(id, {
+              x: snappedX,
+              y: snappedY
+            });
           });
 
           // Update internal connections to maintain their relative positions
@@ -626,15 +763,23 @@
     }
 
     // First delegate to the ElementInteractionManager to set up basic dragging
+    console.log('DEBUG: Delegating to ElementInteractionManager.handleMouseDown');
     const result = elementInteractionManager.handleMouseDown(event, element);
+    console.log('DEBUG: ElementInteractionManager.handleMouseDown result:', result);
     if (!result) return false;
 
-    // Then handle pool/lane specific logic
-    if (isNode(element)) {
+    // Then handle pool/lane specific logic - ONLY if we're directly dragging a pool or lane
+    if (isNode(element) && (element.type === 'pool' || element.type === 'lane')) {
+      console.log('DEBUG: Handling pool/lane specific logic for element:', element.id, 'type:', element.type);
+
       // If this is a pool, store positions of all lanes and contained elements
+      // BUT ONLY if we're directly dragging the pool itself (not elements inside it)
       if (element.type === 'pool' && element.lanes && element.lanes.length > 0) {
+        console.log('DEBUG: This is a pool with lanes, storing positions of contained elements');
+
         // Get current original positions
         const positions = elementInteractionManager.getOriginalPositions();
+        console.log('DEBUG: Current original positions:', positions);
         const updatedPositions = { ...positions };
 
         // Store positions of all lanes in this pool
@@ -642,21 +787,43 @@
           const lane = $bpmnStore.find(el => el.id === laneId && el.type === 'lane');
           if (lane && 'x' in lane && 'y' in lane) {
             updatedPositions[lane.id] = { x: lane.x, y: lane.y };
+            console.log('DEBUG: Stored position for lane:', lane.id, 'position:', updatedPositions[lane.id]);
           }
         });
 
         // Store positions of all elements contained within the pool
+        let elementsInsidePoolCount = 0;
         $bpmnStore.forEach(el => {
           if (isNode(el) && el.type !== 'pool' && el.type !== 'lane' && 'x' in el && 'y' in el) {
             // Check if element is inside the pool
-            if (isElementInsidePool(el, element)) {
+            const isInside = isElementInsidePool(el, element);
+            console.log('DEBUG: Checking if element is inside pool:', el.id, 'type:', el.type, 'result:', isInside);
+
+            if (isInside) {
+              elementsInsidePoolCount++;
               updatedPositions[el.id] = { x: el.x, y: el.y };
+              console.log('DEBUG: Stored position for contained element:', el.id, 'position:', updatedPositions[el.id]);
             }
           }
         });
+        console.log('DEBUG: Total elements inside pool:', elementsInsidePoolCount);
 
         // Update the original positions in the manager
+        console.log('DEBUG: Setting updated positions in ElementInteractionManager');
         elementInteractionManager.setOriginalPositions(updatedPositions);
+      }
+    } else {
+      console.log('DEBUG: Not handling pool/lane specific logic for element:', element.id, 'type:', element.type);
+
+      // Check if this element is inside a pool
+      if (isNode(element)) {
+        const pools = $bpmnStore.filter(el => el.type === 'pool');
+        for (const pool of pools) {
+          if (isElementInsidePool(element, pool)) {
+            console.log('DEBUG: Element is inside pool but pool is not being dragged directly:', pool.id);
+            break;
+          }
+        }
       }
     }
 
@@ -1367,6 +1534,9 @@
     <button type="button" on:click={() => importTestPoolsFile()} style="margin-left: 8px;">
       Test Import Pools
     </button>
+    <button type="button" on:click={() => importTestSwimlanesFile()} style="margin-left: 8px;">
+      Test Import Swimlanes
+    </button>
 
     <!-- Optimize Button for selected connections -->
     {#if $bpmnStore.some(el => el.type === 'connection' && el.isSelected)}
@@ -1905,9 +2075,11 @@
   .bpmn-element.selected path,
   .bpmn-element.selected rect,
   .bpmn-element.selected ellipse {
-    stroke: #e74c3c;
-    stroke-width: 2px;
+    stroke: #007bff;
+    stroke-width: 2.5px;
   }
+
+
 
   .element-shape:hover {
     stroke: #2980b9;

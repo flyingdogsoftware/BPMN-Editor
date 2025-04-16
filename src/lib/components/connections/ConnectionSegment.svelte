@@ -32,13 +32,6 @@
   // Use the standard function for midpoints
   function calculateCustomMidpoints(start, end, waypoints) {
     const result = calculateSegmentMidpoints(start, end, waypoints);
-    console.log('DEBUG: Connection segment midpoints calculated:', {
-      start,
-      end,
-      waypoints,
-      midpoints: result,
-      count: result.length
-    });
     return result;
   }
 
