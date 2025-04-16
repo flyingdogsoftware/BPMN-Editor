@@ -476,37 +476,19 @@
 
   // Start dragging an element - delegated to ElementInteractionManager
   function handleMouseDown(event, element) {
-    console.log('DEBUG-EDITOR: ========== HANDLE MOUSE DOWN ==========');
-    console.log('DEBUG-EDITOR: Mouse down on element:', element.id, 'type:', element.type);
-    console.log('DEBUG-EDITOR: Element details:', {
-      id: element.id,
-      type: element.type,
-      position: element.type !== 'connection' ? { x: element.x, y: element.y } : 'N/A',
-      isSelected: element.isSelected
-    });
-    console.log('DEBUG-EDITOR: Current selection state:', {
-      selectionMode: $selectionMode,
-      selectedElementIds: $selectedElementIds,
-      selectedCount: $selectedElementIds.length
-    });
-
     // Check if element is already in a multi-selection
     const isInMultiSelection = $selectedElementIds.includes(element.id) && $selectedElementIds.length > 1;
-    console.log('DEBUG-EDITOR: Element in multi-selection:', isInMultiSelection, 'selectedElementIds:', $selectedElementIds);
 
     // If in selection mode AND not trying to drag a multi-selection, handle selection instead of dragging
     if ($selectionMode && !isInMultiSelection) {
       // Check if shift key is pressed for multi-select
       const addToSelection = event.shiftKey;
-      console.log('DEBUG-EDITOR: In selection mode, adding to selection:', addToSelection);
       multiSelectionManager.selectElement(element.id, addToSelection);
       return false; // Prevent dragging in selection mode
     }
 
     // If element is part of a multi-selection, handle group dragging
     if (isInMultiSelection) {
-      console.log('DEBUG-EDITOR: Starting multi-selection drag for element', element.id);
-
       // Prevent default to avoid text selection during drag
       event.preventDefault();
       event.stopPropagation();
@@ -520,7 +502,6 @@
       selectedElements.forEach(el => {
         if (el.type !== 'connection') {
           originalPositions[el.id] = { x: el.x, y: el.y };
-          console.log(`DEBUG-EDITOR: Stored original position for ${el.id}: (${el.x}, ${el.y})`);
         }
       });
 
@@ -537,7 +518,6 @@
             internalConnections.push(el.id);
             if (el.waypoints) {
               internalWaypoints[el.id] = JSON.parse(JSON.stringify(el.waypoints));
-              console.log(`DEBUG-EDITOR: Stored waypoints for internal connection ${el.id}`);
             }
           }
         }
@@ -547,7 +527,6 @@
       if (isBrowser) {
         const startX = event.clientX;
         const startY = event.clientY;
-        console.log('DEBUG-EDITOR: Setting start position for drag:', { startX, startY });
 
         const handleMultiDragMove = (moveEvent) => {
           // Calculate the distance moved
@@ -557,11 +536,6 @@
           // Prevent default to avoid text selection during drag
           moveEvent.preventDefault();
           moveEvent.stopPropagation();
-
-          // Only log occasionally to avoid flooding the console
-          if (Math.random() < 0.1) {
-            console.log('DEBUG-EDITOR: Multi-drag move', { dx, dy });
-          }
 
           // Move each selected element
           Object.keys(originalPositions).forEach(id => {
@@ -599,8 +573,6 @@
         };
 
         const handleMultiDragUp = (upEvent) => {
-          console.log('DEBUG-EDITOR: Ending multi-selection drag');
-
           // Prevent default
           upEvent.preventDefault();
           upEvent.stopPropagation();
@@ -622,8 +594,6 @@
 
           // Force a refresh of all affected connections
           if (connectionsToRefresh.length > 0) {
-            console.log('DEBUG-EDITOR: Refreshing connections after group drag', connectionsToRefresh);
-
             // Use a small delay to ensure all element positions are updated first
             setTimeout(() => {
               connectionsToRefresh.forEach(id => {
@@ -645,17 +615,13 @@
           // Remove event listeners
           window.removeEventListener('mousemove', handleMultiDragMove);
           window.removeEventListener('mouseup', handleMultiDragUp);
-
-          console.log('DEBUG-EDITOR: Removed event listeners');
         };
 
         // Add event listeners for mouse move and mouse up
-        console.log('DEBUG-EDITOR: Adding event listeners for multi-drag');
         window.addEventListener('mousemove', handleMultiDragMove);
         window.addEventListener('mouseup', handleMultiDragUp);
       }
 
-      console.log('DEBUG-EDITOR: ========== END HANDLE MOUSE DOWN (MULTI-SELECTION) ==========');
       return false; // We're handling the drag ourselves
     }
 
