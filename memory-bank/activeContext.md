@@ -2,6 +2,9 @@
 
 ## Aktueller Fokus
 
+- Behebung von Problemen mit der Verbindungsoptimierung: Kollineare Segmente werden nicht korrekt zusammengeführt, was zu mehreren Handles auf einer geraden Linie führt.
+- Verbesserung des Verhaltens beim Ziehen von Verbindungs-Handles, um ein konsistentes und intuitives Verhalten zu gewährleisten.
+- Entfernung von Debug-Visualisierungen (orange Punkte) auf den Verbindungen.
 - Refactoring: Extraktion der Element-Interaktionslogik (Dragging, Resizing, Connection Creation) aus BpmnEditor.svelte in einen dedizierten Service (ElementInteractionManager) zur Verbesserung von Wartbarkeit, Testbarkeit und Separation of Concerns.
 - Weiterentwicklung des BPMN-Editors: Ausbau der BPMN-Elemente, Verbindungen und Interaktionen.
 - Verbesserung der Toolbar und der Benutzerinteraktion (Drag & Drop, Dialoge).
@@ -10,6 +13,10 @@
 
 ## Zuletzt umgesetzt
 
+- Implementierung der Verbindungsroutinglogik in connectionRouting.ts mit Funktionen zur Berechnung orthogonaler Pfade und Optimierung von Wegpunkten.
+- Entwicklung der Komponenten für Verbindungen: ConnectionRenderer.svelte, ConnectionSegment.svelte, ConnectionHandle.svelte.
+- Implementierung der Drag-and-Drop-Funktionalität für Verbindungs-Handles und Segmente.
+- Hinzufügung eines Debug-Buttons zur Optimierung von Verbindungen (OptimizeConnectionButton.svelte).
 - Start des Refactorings: Vorbereitung zur Auslagerung der Interaktionslogik in ElementInteractionManager.ts.
 - Svelte-Projektstruktur mit src/lib/components, models, stores, utils, styles, routes aufgebaut.
 - Zentrale BPMN-Editor-Komponente (BpmnEditor.svelte) und Toolbar mit Elementauswahl und -erstellung implementiert.
@@ -19,6 +26,10 @@
 
 ## Nächste Schritte
 
+- Verbindungsroutingprobleme beheben:
+  - Optimierung des Algorithmus zur Erkennung und Zusammenführung kollinearer Segmente
+  - Verbesserung des Verhaltens beim Ziehen von Handles
+  - Entfernung von Debug-Visualisierungen
 - Refactoring abschließen: ElementInteractionManager implementieren, Interaktionslogik aus BpmnEditor.svelte extrahieren und Integration testen.
 - Properties Panel für BPMN-Elemente umsetzen.
 - Undo/Redo-Mechanismus im Store ausbauen.
@@ -28,6 +39,8 @@
 
 ## Wichtige Überlegungen
 
+- Die Verbindungsroutinglogik ist ein kritischer Teil des Editors, der eine intuitive und visuell ansprechende Benutzererfahrung ermöglichen muss.
+- Die Optimierung von Wegpunkten muss zuverlässig funktionieren, um unnötige Komplexität in den Verbindungen zu vermeiden.
 - Refactoring ist ein zentraler Schritt für bessere Wartbarkeit und zukünftige Erweiterbarkeit (z.B. für komplexere Interaktionen, Tests, Custom-Features).
 - Unabhängigkeit von bpmn-js und Camunda-Lizenz.
 - MVP-Fokus: Kernfunktionalität vor Erweiterungen.
