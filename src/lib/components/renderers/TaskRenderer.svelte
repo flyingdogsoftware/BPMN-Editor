@@ -2,6 +2,7 @@
   // Props
   export let element;
   export let isDragging = false;
+  export let isSelected = false;
 </script>
 
 <!-- Base task rectangle -->
@@ -13,9 +14,9 @@
   rx="5"
   ry="5"
   fill="white"
-  stroke="black"
-  stroke-width={isDragging ? "2" : "1.5"}
-  class="task-element"
+  stroke={isSelected ? "#007bff" : "black"}
+  stroke-width={isDragging || isSelected ? "2" : "1.5"}
+  class="task-element {isSelected ? 'selected' : ''}"
 />
 
 <!-- Task label -->
@@ -142,7 +143,7 @@
   .task-element {
     transition: stroke-width 0.2s;
   }
-  
+
   .task-label {
     font-family: Arial, sans-serif;
     font-size: 12px;

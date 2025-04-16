@@ -2,7 +2,8 @@
   // Props
   export let element;
   export let isDragging = false;
-  
+  export let isSelected = false;
+
   // Computed properties
   $: centerX = element.x + element.width / 2;
   $: centerY = element.y + element.height / 2;
@@ -15,9 +16,9 @@
   cy={centerY}
   r={radius}
   fill="white"
-  stroke="black"
-  stroke-width={isDragging ? "2" : "1.5"}
-  class="event-element"
+  stroke={isSelected ? "#007bff" : "black"}
+  stroke-width={isDragging || isSelected ? "2" : "1.5"}
+  class="event-element {isSelected ? 'selected' : ''}"
 />
 
 <!-- Event type specific styling -->
@@ -122,7 +123,7 @@
   .event-element {
     transition: stroke-width 0.2s;
   }
-  
+
   .event-label {
     font-family: Arial, sans-serif;
     font-size: 12px;

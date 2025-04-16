@@ -2,7 +2,8 @@
   // Props
   export let element;
   export let isDragging = false;
-  
+  export let isSelected = false;
+
   // Computed properties
   $: centerX = element.x + element.width / 2;
   $: centerY = element.y + element.height / 2;
@@ -17,9 +18,9 @@
       L${centerX - size/2},${centerY}
       Z`}
   fill="white"
-  stroke="black"
-  stroke-width={isDragging ? "2" : "1.5"}
-  class="gateway-element"
+  stroke={isSelected ? "#007bff" : "black"}
+  stroke-width={isDragging || isSelected ? "2" : "1.5"}
+  class="gateway-element {isSelected ? 'selected' : ''}"
 />
 
 <!-- Gateway type specific icons -->
@@ -108,7 +109,7 @@
   .gateway-element {
     transition: stroke-width 0.2s;
   }
-  
+
   .gateway-label {
     font-family: Arial, sans-serif;
     font-size: 12px;

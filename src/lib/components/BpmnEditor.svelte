@@ -9,6 +9,7 @@
   // Import Interaction Managers
   import { canvasInteractionManager } from '../services/CanvasInteractionManager';
   import { elementInteractionManager } from '../services/ElementInteractionManager';
+  import { multiSelectionManager } from '../services/MultiSelectionManager';
 
   // Import new utility modules
   import { createElement } from '../utils/elementFactory';
@@ -223,6 +224,11 @@
 
   // Dragging state - managed by ElementInteractionManager
   $: ({ isDragging, draggedElementId } = elementInteractionManager.getDraggingState());
+
+  // Selection state - managed by MultiSelectionManager
+  const selectionMode = multiSelectionManager.getSelectionModeStore();
+  const selectedElementIds = multiSelectionManager.getSelectedElementIdsStore();
+  const selectionRect = multiSelectionManager.getSelectionRectStore();
 
   // Resizing state
   let isResizing = false;
@@ -470,6 +476,45 @@
 
   // Start dragging an element - delegated to ElementInteractionManager
   function handleMouseDown(event, element) {
+    // If in selection mode, handle selection instead of dragging
+    if ($selectionMode) {
+      // Check if shift key is pressed for multi-select
+      const addToSelection = event.shiftKey;
+      multiSelectionManager.selectElement(element.id, addToSelection);
+      return false; // Prevent dragging in selection mode
+    }
+
+    // Check if element is already in a multi-selection
+    const isInMultiSelection = $selectedElementIds.includes(element.id) && $selectedElementIds.length > 1;
+
+    if (isInMultiSelection) {
+      // Start dragging all selected elements
+      multiSelectionManager.startDragSelectedElements();
+
+      // Add event listeners for mouse move and mouse up
+      if (isBrowser) {
+        const startX = event.clientX;
+        const startY = event.clientY;
+
+        const handleMultiDragMove = (moveEvent) => {
+          const dx = moveEvent.clientX - startX;
+          const dy = moveEvent.clientY - startY;
+          multiSelectionManager.dragSelectedElements(dx, dy);
+        };
+
+        const handleMultiDragUp = () => {
+          multiSelectionManager.endDragSelectedElements();
+          window.removeEventListener('mousemove', handleMultiDragMove);
+          window.removeEventListener('mouseup', handleMultiDragUp);
+        };
+
+        window.addEventListener('mousemove', handleMultiDragMove);
+        window.addEventListener('mouseup', handleMultiDragUp);
+      }
+
+      return false; // We're handling the drag ourselves
+    }
+
     // First delegate to the ElementInteractionManager to set up basic dragging
     const result = elementInteractionManager.handleMouseDown(event, element);
     if (!result) return false;
@@ -559,6 +604,18 @@
 
   // Handle keyboard events for accessibility - delegated to ElementInteractionManager
   function handleKeyDown(event, element) {
+    // Handle global keyboard shortcuts
+    if (event.key === 'Escape') {
+      // Escape key - deselect all elements
+      multiSelectionManager.deselectAll();
+      return true;
+    } else if (event.key === 'a' && (event.ctrlKey || event.metaKey)) {
+      // Ctrl+A or Cmd+A - select all elements
+      event.preventDefault();
+      multiSelectionManager.selectAll();
+      return true;
+    }
+
     return elementInteractionManager.handleKeyDown(event, element);
   }
 
@@ -891,6 +948,12 @@
     // Element dragging is now handled by ElementInteractionManager
   }
 
+  // Handle selection of elements from the selection rectangle
+  function handleSelectElements(elementIds) {
+    console.log('DEBUG: Elements selected by rectangle:', elementIds);
+    multiSelectionManager.selectElements(elementIds);
+  }
+
   // Handle drag over event for drop zone
   function handleDragOver(event) {
     // Prevent default to allow drop
@@ -986,35 +1049,64 @@
     }
   }
 
-  // Handle canvas mouse down for panning
+  // Handle canvas mouse down for panning or selection rectangle
   function handleCanvasMouseDown(event) {
-    console.log('DEBUG: handleCanvasMouseDown called', {
+    console.log('BPMN-EDITOR-CANVAS-DOWN: Function called', {
       target: event.target.tagName,
       button: event.button,
-      fill: event.target.tagName === 'rect' ? event.target.getAttribute('fill') : null
+      fill: event.target.tagName === 'rect' ? event.target.getAttribute('fill') : null,
+      selectionMode: $selectionMode,
+      time: new Date().toISOString()
     });
 
     // Only handle if it's directly on the canvas, not on an element
     if (event.target.tagName === 'svg' || event.target.tagName === 'rect' && event.target.getAttribute('fill') === 'url(#grid)') {
       // Only handle left mouse button
-      if (event.button !== 0) return;
-
-      console.log('DEBUG: Canvas drag initiated');
-      event.preventDefault();
-      canvasInteractionManager.startCanvasDrag(event);
-
-      // Add event listeners for mouse move and mouse up
-      if (isBrowser) {
-        console.log('DEBUG: Adding mousemove and mouseup event listeners');
-        window.addEventListener('mousemove', handleCanvasMouseMove);
-        window.addEventListener('mouseup', handleCanvasMouseUp);
+      if (event.button !== 0) {
+        console.log('BPMN-EDITOR-CANVAS-DOWN: Not left mouse button, returning');
+        return;
       }
+
+      event.preventDefault();
+
+      // Get canvas coordinates
+      const canvasRect = document.getElementById('canvas-container').getBoundingClientRect();
+      const canvasX = event.clientX - canvasRect.left - viewportX;
+      const canvasY = event.clientY - canvasRect.top - viewportY;
+      console.log('BPMN-EDITOR-CANVAS-DOWN: Canvas coordinates', { canvasX, canvasY });
+
+      // If in selection mode, let the SelectionRectangle component handle it
+      if ($selectionMode) {
+        // Do nothing here, the SelectionRectangle component will handle it
+        console.log('BPMN-EDITOR-CANVAS-DOWN: In selection mode, letting SelectionRectangle handle it');
+      } else {
+        // Otherwise start canvas dragging
+        console.log('BPMN-EDITOR-CANVAS-DOWN: Canvas drag initiated');
+        canvasInteractionManager.startCanvasDrag(event);
+
+        // Add event listeners for mouse move and mouse up
+        if (isBrowser) {
+          console.log('BPMN-EDITOR-CANVAS-DOWN: Adding mousemove and mouseup event listeners');
+          window.addEventListener('mousemove', handleCanvasMouseMove);
+          window.addEventListener('mouseup', handleCanvasMouseUp);
+        }
+      }
+    } else {
+      console.log('BPMN-EDITOR-CANVAS-DOWN: Not on canvas or grid, ignoring');
     }
   }
 
   // Handle canvas mouse move for panning
   function handleCanvasMouseMove(event) {
-    console.log('DEBUG: handleCanvasMouseMove called', { clientX: event.clientX, clientY: event.clientY });
+    // Log only occasionally to avoid flooding the console
+    if (Math.random() < 0.05) {
+      console.log('BPMN-EDITOR-CANVAS-MOVE: Function called', {
+        clientX: event.clientX,
+        clientY: event.clientY,
+        time: new Date().toISOString()
+      });
+    }
+
     canvasInteractionManager.dragCanvas(event);
 
     // Sofort den Viewport-Store aktualisieren, um Reaktivität zu verbessern
@@ -1023,7 +1115,10 @@
 
   // Handle canvas mouse up for panning
   function handleCanvasMouseUp() {
-    console.log('DEBUG: handleCanvasMouseUp called');
+    console.log('BPMN-EDITOR-CANVAS-UP: Function called', {
+      time: new Date().toISOString()
+    });
+
     canvasInteractionManager.endCanvasDrag();
 
     // Sofort den Viewport-Store aktualisieren, um Reaktivität zu verbessern
@@ -1031,10 +1126,12 @@
 
     // Remove event listeners
     if (isBrowser) {
-      console.log('DEBUG: Removing mousemove and mouseup event listeners');
+      console.log('BPMN-EDITOR-CANVAS-UP: Removing mousemove and mouseup event listeners');
       window.removeEventListener('mousemove', handleCanvasMouseMove);
       window.removeEventListener('mouseup', handleCanvasMouseUp);
     }
+
+    console.log('BPMN-EDITOR-CANVAS-UP: Canvas drag ended');
   }
 
   // Handle canvas wheel for zooming (future enhancement)
@@ -1290,6 +1387,141 @@
         onEditLabel={(conn) => openLabelDialog(conn)}
       />
 
+      <!-- Selection Rectangle (only shown in selection mode) -->
+      {#if $selectionMode}
+        <g>
+          <rect
+            x="0"
+            y="0"
+            width="1"
+            height="1"
+            fill="none"
+            stroke="none"
+            tabindex="0"
+            role="button"
+            aria-label="Selection area"
+            on:mousedown={(e) => {
+              console.log('BPMN-EDITOR: Selection mousedown', {
+                target: e.target.tagName,
+                button: e.button,
+                time: new Date().toISOString()
+              });
+
+              // Only handle left mouse button
+              if (e.button !== 0) return;
+
+              // Only handle if it's directly on the canvas, not on an element
+              if (!(e.target.tagName === 'svg' ||
+                    (e.target.tagName === 'rect' && e.target.getAttribute('fill') === 'url(#grid)'))) {
+                return;
+              }
+
+              // Get canvas coordinates
+              const canvas = document.getElementById('canvas-container');
+              if (!canvas) return;
+
+              const rect = canvas.getBoundingClientRect();
+              const startX = e.clientX - rect.left - viewportX;
+              const startY = e.clientY - rect.top - viewportY;
+              let currentX = startX;
+              let currentY = startY;
+
+              console.log('BPMN-EDITOR: Started selection at', { startX, startY });
+
+              // Create selection rectangle
+              const selectionRect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+              selectionRect.setAttribute('fill', 'rgba(0, 123, 255, 0.1)');
+              selectionRect.setAttribute('stroke', 'rgba(0, 123, 255, 0.8)');
+              selectionRect.setAttribute('stroke-width', '1');
+              selectionRect.setAttribute('stroke-dasharray', '5,5');
+              selectionRect.setAttribute('x', startX);
+              selectionRect.setAttribute('y', startY);
+              selectionRect.setAttribute('width', '0');
+              selectionRect.setAttribute('height', '0');
+
+              // Add selection rectangle to SVG
+              const svg = document.querySelector('svg');
+              if (svg) {
+                svg.appendChild(selectionRect);
+              }
+
+              // Handle mouse move
+              const handleMouseMove = (moveEvent) => {
+                // Get canvas coordinates
+                const canvasRect = canvas.getBoundingClientRect();
+                currentX = moveEvent.clientX - canvasRect.left - viewportX;
+                currentY = moveEvent.clientY - canvasRect.top - viewportY;
+
+                // Update selection rectangle
+                const left = Math.min(startX, currentX);
+                const top = Math.min(startY, currentY);
+                const width = Math.abs(currentX - startX);
+                const height = Math.abs(currentY - startY);
+
+                selectionRect.setAttribute('x', left);
+                selectionRect.setAttribute('y', top);
+                selectionRect.setAttribute('width', width);
+                selectionRect.setAttribute('height', height);
+              };
+
+              // Handle mouse up
+              const handleMouseUp = (upEvent) => {
+                // Remove event listeners
+                document.removeEventListener('mousemove', handleMouseMove);
+                document.removeEventListener('mouseup', handleMouseUp);
+
+                // Get selection rectangle dimensions
+                const left = Math.min(startX, currentX);
+                const top = Math.min(startY, currentY);
+                const width = Math.abs(currentX - startX);
+                const height = Math.abs(currentY - startY);
+
+                console.log('BPMN-EDITOR: Ended selection at', {
+                  left,
+                  top,
+                  width,
+                  height
+                });
+
+                // Remove selection rectangle
+                if (svg && selectionRect) {
+                  svg.removeChild(selectionRect);
+                }
+
+                // Select elements within the rectangle
+                const elements = $bpmnStore.filter(element => {
+                  // Skip connections for now
+                  if (element.type === 'connection') return false;
+
+                  // Check if element overlaps with the selection rectangle
+                  return (
+                    element.x < left + width &&
+                    element.x + element.width > left &&
+                    element.y < top + height &&
+                    element.y + element.height > top
+                  );
+                });
+
+                // Get element IDs
+                const elementIds = elements.map(element => element.id);
+                console.log('BPMN-EDITOR: Selected elements:', elementIds);
+
+                // Select the elements
+                multiSelectionManager.selectElements(elementIds);
+              };
+
+              // Add event listeners
+              document.addEventListener('mousemove', handleMouseMove);
+              document.addEventListener('mouseup', handleMouseUp);
+
+              // Prevent default to avoid text selection
+              e.preventDefault();
+              e.stopPropagation();
+            }}
+          />
+        </g>
+      {/if}
+
       <!-- Manual optimize button removed -->
 
       <!-- Draw other BPMN elements (on top of pools and lanes) -->
@@ -1297,7 +1529,7 @@
         {#if element.type !== 'pool' && element.type !== 'lane' && isNode(element)}
           <!-- Group for each element to handle events together -->
           <g
-            class="bpmn-element {draggedElementId === element.id ? 'dragging' : ''}"
+            class="bpmn-element {draggedElementId === element.id ? 'dragging' : ''} {element.isSelected ? 'selected' : ''}"
             data-element-type={element.type}
             on:mousedown={e => handleMouseDown(e, element)}
             on:dblclick={() => handleNodeDoubleClick(element)}
@@ -1308,11 +1540,11 @@
             aria-label="Draggable {element.type} element: {element.label}"
           >
             {#if element.type === 'task'}
-              <TaskRenderer {element} isDragging={draggedElementId === element.id} />
+              <TaskRenderer {element} isDragging={draggedElementId === element.id} isSelected={element.isSelected} />
             {:else if element.type === 'event'}
-              <EventRenderer {element} isDragging={draggedElementId === element.id} />
+              <EventRenderer {element} isDragging={draggedElementId === element.id} isSelected={element.isSelected} />
             {:else if element.type === 'gateway'}
-              <GatewayRenderer {element} isDragging={draggedElementId === element.id} />
+              <GatewayRenderer {element} isDragging={draggedElementId === element.id} isSelected={element.isSelected} />
             {:else if element.type === 'dataobject'}
               <!-- Data Object -->
               <path
@@ -1557,6 +1789,14 @@
   .bpmn-element.dragging .element-shape {
     stroke: #3498db;
     stroke-width: 3px;
+  }
+
+  .bpmn-element.selected .element-shape,
+  .bpmn-element.selected path,
+  .bpmn-element.selected rect,
+  .bpmn-element.selected ellipse {
+    stroke: #e74c3c;
+    stroke-width: 2px;
   }
 
   .element-shape:hover {

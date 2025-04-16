@@ -118,7 +118,8 @@
   }
 
   path.selected {
-    filter: drop-shadow(0 0 4px rgba(52, 152, 219, 0.7));
+    filter: drop-shadow(0 0 4px rgba(231, 76, 60, 0.7));
+    stroke: #e74c3c;
     stroke-width: 3px;
   }
 </style>

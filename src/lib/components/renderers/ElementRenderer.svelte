@@ -2,18 +2,38 @@
   import TaskRenderer from './TaskRenderer.svelte';
   import EventRenderer from './EventRenderer.svelte';
   import GatewayRenderer from './GatewayRenderer.svelte';
-  
+
   // Props
   export let element;
   export let isDragging = false;
+
+  // Computed property for selection state
+  $: isSelected = element.isSelected || false;
 </script>
 
+<!-- Selection highlight if element is selected -->
+{#if isSelected}
+  <rect
+    x={element.x - 3}
+    y={element.y - 3}
+    width={element.width + 6}
+    height={element.height + 6}
+    fill="none"
+    stroke="#007bff"
+    stroke-width="2"
+    stroke-dasharray="5,3"
+    rx="3"
+    ry="3"
+    class="selection-indicator"
+  />
+{/if}
+
 {#if element.type === 'task'}
-  <TaskRenderer {element} {isDragging} />
+  <TaskRenderer {element} {isDragging} {isSelected} />
 {:else if element.type === 'event'}
-  <EventRenderer {element} {isDragging} />
+  <EventRenderer {element} {isDragging} {isSelected} />
 {:else if element.type === 'gateway'}
-  <GatewayRenderer {element} {isDragging} />
+  <GatewayRenderer {element} {isDragging} {isSelected} />
 {:else}
   <!-- Fallback for other element types -->
   <rect
@@ -22,8 +42,8 @@
     width={element.width}
     height={element.height}
     fill="white"
-    stroke="black"
-    stroke-width={isDragging ? "2" : "1.5"}
+    stroke={isSelected ? "#007bff" : "black"}
+    stroke-width={isDragging || isSelected ? "2" : "1.5"}
   />
   <text
     x={element.x + element.width / 2}

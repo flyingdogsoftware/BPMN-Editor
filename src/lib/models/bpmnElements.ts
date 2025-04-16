@@ -38,6 +38,7 @@ export interface BpmnElementBase {
   labelPosition?: Position;
   labelVisible?: boolean;
   documentation?: string; // Documentation for the element
+  isSelected?: boolean; // Whether the element is selected
 }
 
 // Base interface for all node elements (elements with position and size)

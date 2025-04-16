@@ -1,9 +1,13 @@
 <script>
   import { createEventDispatcher } from 'svelte';
   import ElementCreationDialog from './ElementCreationDialog.svelte';
+  import { multiSelectionManager } from '../../services/MultiSelectionManager';
 
   const dispatch = createEventDispatcher();
   let showElementDialog = false;
+
+  // Get the selection mode store
+  const selectionMode = multiSelectionManager.getSelectionModeStore();
 
   function addCommonElement(type, subtype) {
     // Default position when clicking from toolbar
@@ -38,6 +42,11 @@
 
   function zoomOut() {
     dispatch('zoomOut');
+  }
+
+  // Toggle selection mode
+  function toggleSelectionMode() {
+    multiSelectionManager.toggleSelectionMode();
   }
 
   // Handle drag start for toolbar elements
@@ -128,6 +137,15 @@
   <div class="toolbar-section">
     <h3>Tools</h3>
     <div class="button-group">
+      <!-- Selection button -->
+      <button
+        on:click={toggleSelectionMode}
+        class="tool-button {$selectionMode ? 'active' : ''}"
+        title="Toggle Selection Mode"
+      >
+        <div class="tool-icon selection-icon"></div>
+        <span>Selection</span>
+      </button>
       <!-- Zoom buttons -->
       <button on:click={zoomIn} class="zoom-button" title="Zoom In">
         <span class="zoom-icon">+</span>
@@ -247,5 +265,31 @@
   .zoom-icon {
     font-size: 16px;
     font-weight: bold;
+  }
+
+  .tool-button {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 8px;
+  }
+
+  .tool-button.active {
+    background-color: #e6f7ff;
+    border-color: #1890ff;
+    color: #1890ff;
+  }
+
+  .tool-icon {
+    width: 24px;
+    height: 24px;
+    margin-bottom: 4px;
+    background-repeat: no-repeat;
+    background-position: center;
+    background-size: contain;
+  }
+
+  .selection-icon {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M3,3 h18 v18 h-18 z' fill='none' stroke='black' stroke-width='1.5' stroke-dasharray='4,2'/%3E%3Cpath d='M7,9 h10 M7,12 h10 M7,15 h10' stroke='black' stroke-width='1.5'/%3E%3C/svg%3E");
   }
 </style>
