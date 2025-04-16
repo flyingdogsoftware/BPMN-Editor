@@ -165,13 +165,16 @@ export class CanvasInteractionManager {
    * @param event Das Mausereignis
    */
   public startCanvasDrag(event) {
+    console.log('DEBUG: startCanvasDrag called', { clientX: event.clientX, clientY: event.clientY });
     this.isDraggingCanvas.set(true);
 
     this.viewportStore.update(viewport => {
-      this.dragStartPosition.set({
+      const startPos = {
         x: event.clientX - viewport.x,
         y: event.clientY - viewport.y
-      });
+      };
+      console.log('DEBUG: Setting dragStartPosition', startPos, 'current viewport:', viewport);
+      this.dragStartPosition.set(startPos);
       return viewport;
     });
   }
@@ -181,35 +184,57 @@ export class CanvasInteractionManager {
    * @param event Das Mausereignis
    */
   public dragCanvas(event) {
-    let isDragging;
-    this.isDraggingCanvas.subscribe(value => {
-      isDragging = value;
-    })();
+    console.log('DEBUG: dragCanvas called', { clientX: event.clientX, clientY: event.clientY });
 
+    // Verwende get-Methoden statt direkter Store-Subscription
+    const isDragging = this.getIsDraggingCanvas();
+    console.log('DEBUG: isDragging =', isDragging);
     if (!isDragging) return;
 
-    let dragStart;
-    this.dragStartPosition.subscribe(value => {
+    // Hole den aktuellen Viewport und die Startposition
+    let dragStart = { x: 0, y: 0 };
+    const unsubscribe = this.dragStartPosition.subscribe(value => {
       dragStart = value;
-    })();
+    });
+    unsubscribe();
+    console.log('DEBUG: dragStart =', dragStart);
 
     // Berechne neue Viewport-Position
     const newViewportX = event.clientX - dragStart.x;
     const newViewportY = event.clientY - dragStart.y;
+    console.log('DEBUG: Calculated new viewport position:', { newViewportX, newViewportY });
 
-    // Erlaube nur Panning nach links und oben (negative Werte)
-    // Dies verhindert Panning nach rechts und unten (positive Werte)
-    this.viewportStore.update(viewport => ({
-      ...viewport,
-      x: Math.min(0, newViewportX),
-      y: Math.min(0, newViewportY)
-    }));
+    // Erlaube Panning in alle Richtungen, aber mit Grenzen
+    // Verhindere zu starkes Panning nach rechts/unten, erlaube aber etwas Spielraum
+    const viewport = this.getViewport();
+    console.log('DEBUG: Current viewport =', viewport);
+
+    const minX = Math.min(0, -viewport.width * 0.2); // Erlaube etwas Panning nach rechts
+    const minY = Math.min(0, -viewport.height * 0.2); // Erlaube etwas Panning nach unten
+    const maxX = viewport.width * 0.2; // Maximales Panning nach rechts
+    const maxY = viewport.height * 0.2; // Maximales Panning nach unten
+    console.log('DEBUG: Panning limits:', { minX, minY, maxX, maxY });
+
+    // Berechne die finalen Werte mit Begrenzungen
+    const finalX = Math.max(minX, Math.min(maxX, newViewportX));
+    const finalY = Math.max(minY, Math.min(maxY, newViewportY));
+    console.log('DEBUG: Final viewport position after limits:', { finalX, finalY });
+
+    this.viewportStore.update(viewport => {
+      console.log('DEBUG: Updating viewport from', viewport, 'to', { ...viewport, x: finalX, y: finalY });
+      return {
+        ...viewport,
+        x: finalX,
+        y: finalY
+      };
+    });
   }
 
   /**
    * Beendet das Ziehen des Canvas
    */
   public endCanvasDrag() {
+    console.log('DEBUG: endCanvasDrag called');
     this.isDraggingCanvas.set(false);
   }
 
@@ -221,46 +246,58 @@ export class CanvasInteractionManager {
     // Verhindere Standard-Scrollverhalten
     event.preventDefault();
 
-    // Berechne Scrollrichtung und passe Viewport an
-    this.viewportStore.update(viewport => {
-      let newX = viewport.x;
-      let newY = viewport.y;
+    // Hole den aktuellen Viewport
+    const viewport = this.getViewport();
+    const scrollStep = 50; // Scrollgeschwindigkeit
 
+    // Berechne Grenzen für das Panning
+    const minX = Math.min(0, -viewport.width * 0.2); // Erlaube etwas Panning nach rechts
+    const minY = Math.min(0, -viewport.height * 0.2); // Erlaube etwas Panning nach unten
+    const maxX = viewport.width * 0.2; // Maximales Panning nach rechts
+    const maxY = viewport.height * 0.2; // Maximales Panning nach unten
+
+    // Berechne neue Viewport-Position
+    let newX = viewport.x;
+    let newY = viewport.y;
+
+    if (event.deltaY < 0) {
+      // Scroll nach oben - bewege Viewport nach unten
+      newY = Math.min(maxY, viewport.y + scrollStep);
+    } else {
+      // Scroll nach unten - bewege Viewport nach oben
+      newY = Math.max(minY, viewport.y - scrollStep);
+    }
+
+    // Horizontales Scrollen mit Umschalttaste
+    if (event.shiftKey) {
       if (event.deltaY < 0) {
-        // Scroll nach oben - bewege Viewport nach unten
-        newY = Math.min(0, viewport.y + 50);
+        // Scroll nach rechts - bewege Viewport nach links
+        newX = Math.max(minX, viewport.x - scrollStep);
       } else {
-        // Scroll nach unten - bewege Viewport nach oben
-        newY = Math.min(0, viewport.y - 50);
+        // Scroll nach links - bewege Viewport nach rechts
+        newX = Math.min(maxX, viewport.x + scrollStep);
       }
+    }
 
-      // Horizontales Scrollen mit Umschalttaste
-      if (event.shiftKey) {
-        if (event.deltaY < 0) {
-          // Scroll nach rechts
-          newX = Math.min(0, viewport.x - 50);
-        } else {
-          // Scroll nach links
-          newX = Math.min(0, viewport.x + 50);
-        }
-      }
-
-      return {
-        ...viewport,
-        x: newX,
-        y: newY
-      };
-    });
+    // Aktualisiere den Viewport
+    this.viewportStore.update(viewport => ({
+      ...viewport,
+      x: newX,
+      y: newY
+    }));
   }
 
   /**
    * Gibt zurück, ob der Canvas gerade gezogen wird
    */
   public getIsDraggingCanvas() {
-    let isDragging;
-    this.isDraggingCanvas.subscribe(value => {
+    let isDragging = false;
+    // Korrekte Verwendung von subscribe ohne sofortigen Aufruf
+    const unsubscribe = this.isDraggingCanvas.subscribe(value => {
       isDragging = value;
-    })();
+    });
+    // Unsubscribe um Memory-Leaks zu vermeiden
+    unsubscribe();
     return isDragging;
   }
 
@@ -268,10 +305,13 @@ export class CanvasInteractionManager {
    * Gibt die aktuelle Viewport-Position zurück
    */
   public getViewport() {
-    let viewport;
-    this.viewport.subscribe(value => {
+    let viewport = { x: 0, y: 0, width: 800, height: 600 };
+    // Korrekte Verwendung von subscribe ohne sofortigen Aufruf
+    const unsubscribe = this.viewport.subscribe(value => {
       viewport = value;
-    })();
+    });
+    // Unsubscribe um Memory-Leaks zu vermeiden
+    unsubscribe();
     return viewport;
   }
 

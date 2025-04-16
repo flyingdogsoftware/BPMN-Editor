@@ -161,7 +161,24 @@
   const isBrowser = typeof window !== 'undefined';
 
   // Use CanvasInteractionManager for canvas dimensions and viewport
-  $: viewport = canvasInteractionManager.getViewport();
+  // Erstelle einen Store für den Viewport, um Reaktivität zu verbessern
+  import { writable } from 'svelte/store';
+  const viewportStore = writable(canvasInteractionManager.getViewport());
+
+  // Aktualisiere den Store alle 50ms, um sicherzustellen, dass Änderungen erkannt werden
+  let viewportUpdateInterval;
+  onMount(() => {
+    viewportUpdateInterval = setInterval(() => {
+      viewportStore.set(canvasInteractionManager.getViewport());
+    }, 50);
+
+    return () => {
+      clearInterval(viewportUpdateInterval);
+    };
+  });
+
+  // Reaktive Variablen aus dem Store ableiten
+  $: viewport = $viewportStore;
   $: canvasWidth = viewport.width;
   $: canvasHeight = viewport.height;
   $: viewportX = viewport.x;
@@ -169,7 +186,7 @@
   $: isDraggingCanvas = canvasInteractionManager.getIsDraggingCanvas();
 
   // Log viewport dimensions for debugging
-  $: console.log('Current viewport dimensions:', { canvasWidth, canvasHeight, viewportX, viewportY });
+  $: console.log('DEBUG: BpmnEditor - Current viewport dimensions:', { canvasWidth, canvasHeight, viewportX, viewportY, isDragging: isDraggingCanvas });
 
   // Update canvas size based on elements
   $: canvasInteractionManager.updateCanvasSizeBasedOnElements($bpmnStore);
@@ -970,16 +987,24 @@
 
   // Handle canvas mouse down for panning
   function handleCanvasMouseDown(event) {
+    console.log('DEBUG: handleCanvasMouseDown called', {
+      target: event.target.tagName,
+      button: event.button,
+      fill: event.target.tagName === 'rect' ? event.target.getAttribute('fill') : null
+    });
+
     // Only handle if it's directly on the canvas, not on an element
     if (event.target.tagName === 'svg' || event.target.tagName === 'rect' && event.target.getAttribute('fill') === 'url(#grid)') {
       // Only handle left mouse button
       if (event.button !== 0) return;
 
+      console.log('DEBUG: Canvas drag initiated');
       event.preventDefault();
       canvasInteractionManager.startCanvasDrag(event);
 
       // Add event listeners for mouse move and mouse up
       if (isBrowser) {
+        console.log('DEBUG: Adding mousemove and mouseup event listeners');
         window.addEventListener('mousemove', handleCanvasMouseMove);
         window.addEventListener('mouseup', handleCanvasMouseUp);
       }
@@ -988,15 +1013,24 @@
 
   // Handle canvas mouse move for panning
   function handleCanvasMouseMove(event) {
+    console.log('DEBUG: handleCanvasMouseMove called', { clientX: event.clientX, clientY: event.clientY });
     canvasInteractionManager.dragCanvas(event);
+
+    // Sofort den Viewport-Store aktualisieren, um Reaktivität zu verbessern
+    viewportStore.set(canvasInteractionManager.getViewport());
   }
 
   // Handle canvas mouse up for panning
   function handleCanvasMouseUp() {
+    console.log('DEBUG: handleCanvasMouseUp called');
     canvasInteractionManager.endCanvasDrag();
+
+    // Sofort den Viewport-Store aktualisieren, um Reaktivität zu verbessern
+    viewportStore.set(canvasInteractionManager.getViewport());
 
     // Remove event listeners
     if (isBrowser) {
+      console.log('DEBUG: Removing mousemove and mouseup event listeners');
       window.removeEventListener('mousemove', handleCanvasMouseMove);
       window.removeEventListener('mouseup', handleCanvasMouseUp);
     }
@@ -1005,6 +1039,9 @@
   // Handle canvas wheel for zooming (future enhancement)
   function handleCanvasWheel(event) {
     canvasInteractionManager.handleCanvasWheel(event);
+
+    // Sofort den Viewport-Store aktualisieren, um Reaktivität zu verbessern
+    viewportStore.set(canvasInteractionManager.getViewport());
   }
 
   // End dragging or resizing

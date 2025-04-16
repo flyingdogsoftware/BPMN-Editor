@@ -14,6 +14,9 @@
   const gridSize = 20;
   const gridColor = '#e0e0e0';
   const gridStrokeWidth = 1;
+
+  // Debug: Log viewport changes
+  $: console.log('DEBUG: Canvas component - viewport changed:', { viewportX, viewportY });
 </script>
 
 <!-- Using role="presentation" to indicate this is a non-interactive element for visual presentation -->
@@ -29,7 +32,9 @@
     {width}
     {height}
     class="canvas"
-    style="transform: translate({viewportX}px, {viewportY}px);"
+    style="transform: translate({viewportX}px, {viewportY}px) !important;"
+    data-viewport-x={viewportX}
+    data-viewport-y={viewportY}
   >
     <!-- Draw grid -->
     <pattern id="grid" width={gridSize} height={gridSize} patternUnits="userSpaceOnUse">
@@ -67,5 +72,7 @@
     left: 0;
     min-width: 100%;
     min-height: 100vh; /* Mindestens die volle Höhe des Viewports */
+    will-change: transform; /* Optimiert die Transformation für bessere Performance */
+    transform-origin: 0 0; /* Setzt den Transformationsursprung auf die obere linke Ecke */
   }
 </style>
