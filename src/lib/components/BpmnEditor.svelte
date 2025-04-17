@@ -4,6 +4,7 @@
   // Removed old connection utils import
   import { onMount } from 'svelte';
   import { importBpmnXml } from '../utils/xml/bpmnXmlParser';
+  import { exportBpmnXml, downloadBpmnXml } from '../utils/xml/bpmnXmlExporter';
   import { removeNonCornerWaypoints } from '../utils/connectionRouting';
 
   // Import Interaction Managers
@@ -85,6 +86,20 @@
     } catch (err) {
       console.error('Failed to import test swimlanes BPMN XML:', err);
       alert('Failed to import test swimlanes BPMN XML: ' + err.message);
+    }
+  }
+
+  // Export BPMN XML handler
+  function handleExportBpmnXml() {
+    try {
+      console.log('Exporting BPMN XML...');
+      const elements = $bpmnStore;
+      const xml = exportBpmnXml(elements);
+      console.log('Exported XML:', xml);
+      downloadBpmnXml(xml, 'diagram.bpmn');
+    } catch (error) {
+      console.error('Error exporting BPMN XML:', error);
+      alert(`Failed to export BPMN XML: ${error.message}`);
     }
   }
 
@@ -1542,6 +1557,9 @@
     <button type="button" on:click={() => importTestSwimlanesFile()} style="margin-left: 8px;">
       Test Import Swimlanes
     </button>
+    <button type="button" on:click={handleExportBpmnXml} style="margin-left: 8px;">
+      Export BPMN XML
+    </button>
 
     <!-- Optimize Button for selected connections -->
     {#if $bpmnStore.some(el => el.type === 'connection' && el.isSelected)}
@@ -1604,6 +1622,7 @@
     on:reset={() => bpmnStore.reset()}
     on:zoomIn={() => canvasInteractionManager.zoomIn()}
     on:zoomOut={() => canvasInteractionManager.zoomOut()}
+    on:export={handleExportBpmnXml}
   />
 
   <div

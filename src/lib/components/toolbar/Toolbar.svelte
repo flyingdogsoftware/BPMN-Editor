@@ -36,6 +36,11 @@
     dispatch('reset');
   }
 
+  // Export BPMN XML
+  function exportBpmnXml() {
+    dispatch('export');
+  }
+
   // Zoom functionality
   function zoomIn() {
     dispatch('zoomIn');
@@ -158,6 +163,11 @@
       <button on:click={zoomOut} class="zoom-button" title="Zoom Out">
         <span class="zoom-icon">-</span>
         <span>Zoom Out</span>
+      </button>
+      <!-- Export button -->
+      <button on:click={exportBpmnXml} class="export-button" title="Export BPMN XML">
+        <div class="tool-icon export-icon"></div>
+        <span>Export XML</span>
       </button>
       <!-- Reset button -->
       <button on:click={resetDiagram}>
@@ -295,5 +305,15 @@
 
   .selection-icon {
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M3,3 h18 v18 h-18 z' fill='none' stroke='black' stroke-width='1.5' stroke-dasharray='4,2'/%3E%3Cpath d='M7,9 h10 M7,12 h10 M7,15 h10' stroke='black' stroke-width='1.5'/%3E%3C/svg%3E");
+  }
+
+  .export-icon {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M19,9 L15,9 L15,3 L9,3 L9,9 L5,9 L12,16 L19,9 Z M5,18 L5,20 L19,20 L19,18 L5,18 Z' fill='none' stroke='black' stroke-width='1.5'/%3E%3C/svg%3E");
+  }
+
+  .export-button {
+    background-color: #e6f7ff;
+    border-color: #91d5ff;
+    color: #1890ff;
   }
 </style>
