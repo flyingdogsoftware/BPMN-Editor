@@ -170,18 +170,19 @@
         <span>Zoom Out</span>
       </button>
       <!-- Import button -->
-      <button on:click={importBpmnXml} class="import-button" title="Import BPMN XML">
+      <button on:click={importBpmnXml} class="tool-button" title="Import BPMN XML">
         <div class="tool-icon import-icon"></div>
         <span>Import</span>
       </button>
       <!-- Export button -->
-      <button on:click={exportBpmnXml} class="export-button" title="Export BPMN XML">
+      <button on:click={exportBpmnXml} class="tool-button" title="Export BPMN XML">
         <div class="tool-icon export-icon"></div>
-        <span>Export XML</span>
+        <span>Export</span>
       </button>
       <!-- Reset button -->
-      <button on:click={resetDiagram}>
-        Reset
+      <button on:click={resetDiagram} class="tool-button" title="Reset Diagram">
+        <div class="tool-icon reset-icon"></div>
+        <span>Reset</span>
       </button>
     </div>
   </div>
@@ -219,6 +220,7 @@
     display: flex;
     gap: 8px;
     flex-wrap: wrap;
+    justify-content: center;
   }
 
   button {
@@ -323,9 +325,9 @@
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M19,9 L15,9 L15,3 L9,3 L9,9 L5,9 L12,16 L19,9 Z M5,18 L5,20 L19,20 L19,18 L5,18 Z' fill='none' stroke='black' stroke-width='1.5'/%3E%3C/svg%3E");
   }
 
-  .import-button, .export-button {
-    background-color: #e6f7ff;
-    border-color: #91d5ff;
-    color: #1890ff;
+  /* Import and Export buttons now use the standard tool-button class */
+
+  .reset-icon {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M17.65,6.35 C16.2,4.9 14.21,4 12,4 C7.58,4 4.01,7.58 4.01,12 C4.01,16.42 7.58,20 12,20 C15.73,20 18.84,17.45 19.73,14 L17.65,14 C16.83,16.33 14.61,18 12,18 C8.69,18 6,15.31 6,12 C6,8.69 8.69,6 12,6 C13.66,6 15.14,6.69 16.22,7.78 L13,11 L20,11 L20,4 L17.65,6.35 Z' fill='none' stroke='black' stroke-width='1.5'/%3E%3C/svg%3E");
   }
 </style>
