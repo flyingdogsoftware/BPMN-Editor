@@ -161,12 +161,12 @@
         <span>Selection</span>
       </button>
       <!-- Zoom buttons -->
-      <button on:click={zoomIn} class="zoom-button" title="Zoom In">
-        <span class="zoom-icon">+</span>
+      <button on:click={zoomIn} class="tool-button" title="Zoom In">
+        <div class="tool-icon zoom-in-icon"></div>
         <span>Zoom In</span>
       </button>
-      <button on:click={zoomOut} class="zoom-button" title="Zoom Out">
-        <span class="zoom-icon">-</span>
+      <button on:click={zoomOut} class="tool-button" title="Zoom Out">
+        <div class="tool-icon zoom-out-icon"></div>
         <span>Zoom Out</span>
       </button>
       <!-- Import button -->
@@ -279,17 +279,7 @@
     border-color: #1890ff;
   }
 
-  .zoom-button {
-    display: flex;
-    align-items: center;
-    gap: 5px;
-    background-color: #f0f0f0;
-  }
-
-  .zoom-icon {
-    font-size: 16px;
-    font-weight: bold;
-  }
+  /* Zoom button styles are now using the standard tool-button class */
 
   .tool-button {
     display: flex;
@@ -315,6 +305,14 @@
 
   .selection-icon {
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M3,3 h18 v18 h-18 z' fill='none' stroke='black' stroke-width='1.5' stroke-dasharray='4,2'/%3E%3Cpath d='M7,9 h10 M7,12 h10 M7,15 h10' stroke='black' stroke-width='1.5'/%3E%3C/svg%3E");
+  }
+
+  .zoom-in-icon {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Ccircle cx='10' cy='10' r='7' fill='none' stroke='black' stroke-width='1.5'/%3E%3Cpath d='M15,15 L20,20' stroke='black' stroke-width='1.5'/%3E%3Cpath d='M7,10 h6 M10,7 v6' stroke='black' stroke-width='1.5'/%3E%3C/svg%3E");
+  }
+
+  .zoom-out-icon {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Ccircle cx='10' cy='10' r='7' fill='none' stroke='black' stroke-width='1.5'/%3E%3Cpath d='M15,15 L20,20' stroke='black' stroke-width='1.5'/%3E%3Cpath d='M7,10 h6' stroke='black' stroke-width='1.5'/%3E%3C/svg%3E");
   }
 
   .import-icon {
