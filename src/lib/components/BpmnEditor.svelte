@@ -165,6 +165,9 @@
   import ConnectionManager from './connections/ConnectionManager.svelte';
   import ElementContextMenu from './ElementContextMenu.svelte';
 
+  // Import keyboard shortcuts for Undo/Redo
+  import KeyboardShortcuts from './KeyboardShortcuts.svelte';
+
 
   // Listen for edit-label events from Connection components
   onMount(() => {
@@ -1518,6 +1521,8 @@
 </script>
 
 <div class="bpmn-editor">
+  <!-- Keyboard shortcuts for Undo/Redo -->
+  <KeyboardShortcuts />
   <div style="padding: 8px 16px;">
     <label for="bpmn-import-input" style="display: inline-block; margin-right: 8px;">
       <button type="button" on:click={() => document.getElementById('bpmn-import-input').click()}>

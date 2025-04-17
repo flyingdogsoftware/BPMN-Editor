@@ -2,6 +2,7 @@
   import { createEventDispatcher } from 'svelte';
   import ElementCreationDialog from './ElementCreationDialog.svelte';
   import { multiSelectionManager } from '../../services/MultiSelectionManager';
+  import UndoRedoControls from '../UndoRedoControls.svelte';
 
   const dispatch = createEventDispatcher();
   let showElementDialog = false;
@@ -137,6 +138,9 @@
   <div class="toolbar-section">
     <h3>Tools</h3>
     <div class="button-group">
+      <!-- Undo/Redo Controls -->
+      <UndoRedoControls />
+
       <!-- Selection button -->
       <button
         on:click={toggleSelectionMode}
