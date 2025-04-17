@@ -1547,37 +1547,6 @@
     on:change={handleImportBpmnXml}
   />
 
-  <!-- Test buttons and optimization controls -->
-  <div style="padding: 8px 16px;">
-    <button type="button" on:click={() => importTestPoolsFile()}>
-      Test Import Pools
-    </button>
-    <button type="button" on:click={() => importTestSwimlanesFile()} style="margin-left: 8px;">
-      Test Import Swimlanes
-    </button>
-
-    <!-- Optimize Button for selected connections -->
-    {#if $bpmnStore.some(el => el.type === 'connection' && el.isSelected)}
-      <button
-        class="optimize-button"
-        on:click={optimizeSelectedConnection}
-        style="margin-left: 8px;"
-      >
-        Optimize Connection
-      </button>
-    {/if}
-
-    <!-- Refresh Connections Button -->
-    <button
-      type="button"
-      on:click={refreshAllConnections}
-      style="margin-left: 8px;"
-    >
-      Refresh Connections
-    </button>
-  </div>
-
-  <!-- Optimization buttons removed -->
   <!-- Element Manager Component -->
   <ElementManagerComponent bind:this={elementManagerComponent} />
 
