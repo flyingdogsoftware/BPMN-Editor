@@ -78,8 +78,7 @@
     {
       name: 'Swimlanes',
       elements: [
-        { type: 'pool', subtype: 'horizontal', name: 'Pool' },
-        { type: 'lane', subtype: 'horizontal', name: 'Lane' }
+        { type: 'pool', subtype: 'horizontal', name: 'Pool' }
       ]
     }
   ];
