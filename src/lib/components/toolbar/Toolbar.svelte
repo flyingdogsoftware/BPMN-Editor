@@ -141,6 +141,15 @@
         <div class="element-icon gateway-icon"></div>
         <span>Gateway</span>
       </button>
+      <button
+        on:click={() => addCommonElement('pool', 'horizontal')}
+        class="element-button"
+        draggable="true"
+        on:dragstart={(e) => handleDragStart(e, {type: 'pool', subtype: 'horizontal'})}
+      >
+        <div class="element-icon pool-icon"></div>
+        <span>Pool</span>
+      </button>
       <button on:click={toggleElementDialog} class="more-button">
         More Elements...
       </button>
@@ -271,6 +280,10 @@
 
   .gateway-icon {
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpolygon points='12,2 22,12 12,22 2,12' fill='white' stroke='black' stroke-width='1.5'/%3E%3Cpath d='M7,12 L17,12 M12,7 L12,17' stroke='black' stroke-width='1.5'/%3E%3C/svg%3E");
+  }
+
+  .pool-icon {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect x='2' y='4' width='20' height='16' fill='white' stroke='black' stroke-width='1.5'/%3E%3Crect x='2' y='4' width='4' height='16' fill='white' stroke='black' stroke-width='1.5'/%3E%3Ctext x='4' y='12' font-size='8' transform='rotate(270, 4, 12)' text-anchor='middle'>Pool</text>%3C/svg%3E");
   }
 
   .more-button {
