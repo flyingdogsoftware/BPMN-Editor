@@ -1,10 +1,10 @@
 <script>
   import { createEventDispatcher } from 'svelte';
   import ElementCategory from './ElementCategory.svelte';
-  
+
   const dispatch = createEventDispatcher();
   let searchQuery = '';
-  
+
   // Element definitions with categories, names, and rendering info
   const elementCategories = [
     {
@@ -83,22 +83,22 @@
       ]
     }
   ];
-  
-  $: filteredCategories = searchQuery 
+
+  $: filteredCategories = searchQuery
     ? elementCategories.map(category => ({
         ...category,
-        elements: category.elements.filter(el => 
+        elements: category.elements.filter(el =>
           el.name.toLowerCase().includes(searchQuery.toLowerCase())
         )
       })).filter(category => category.elements.length > 0)
     : elementCategories;
-    
+
   function handleBackdropClick(event) {
     if (event.target === event.currentTarget) {
       dispatch('close');
     }
   }
-  
+
   function handleAdd(event) {
     dispatch('add', event.detail);
   }
@@ -117,9 +117,9 @@
     <div class="dialog-header">
       <h2>Create Element</h2>
       <div class="search-container">
-        <input 
-          type="text" 
-          placeholder="Search elements..." 
+        <input
+          type="text"
+          placeholder="Search elements..."
           bind:value={searchQuery}
           autofocus
         />
@@ -128,10 +128,10 @@
         {/if}
       </div>
     </div>
-    
+
     <div class="dialog-content">
       {#each filteredCategories as category}
-        <ElementCategory 
+        <ElementCategory
           name={category.name}
           elements={category.elements}
           on:add={handleAdd}
@@ -165,7 +165,7 @@
     align-items: center;
     z-index: 1000;
   }
-  
+
   .element-dialog {
     background: white;
     border-radius: 4px;
@@ -175,7 +175,7 @@
     flex-direction: column;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
   }
-  
+
   .dialog-header {
     padding: 16px;
     border-bottom: 1px solid #eee;
@@ -186,9 +186,11 @@
     font-size: 18px;
     color: #333;
   }
-  
+
   .search-container {
     position: relative;
+    width: 100%;
+    box-sizing: border-box;
   }
 
   input {
@@ -197,6 +199,7 @@
     border: 1px solid #ddd;
     border-radius: 4px;
     font-size: 14px;
+    box-sizing: border-box;
   }
 
   input:focus {
@@ -226,7 +229,7 @@
   .clear-search:hover {
     color: #666;
   }
-  
+
   .dialog-content {
     padding: 16px;
     overflow-y: auto;
