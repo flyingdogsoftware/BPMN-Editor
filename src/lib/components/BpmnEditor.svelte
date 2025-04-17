@@ -1538,27 +1538,22 @@
 <div class="bpmn-editor">
   <!-- Keyboard shortcuts for Undo/Redo -->
   <KeyboardShortcuts />
+  <!-- Hidden file input for import -->
+  <input
+    id="bpmn-import-input"
+    type="file"
+    accept=".bpmn,.xml"
+    style="display: none"
+    on:change={handleImportBpmnXml}
+  />
+
+  <!-- Test buttons and optimization controls -->
   <div style="padding: 8px 16px;">
-    <label for="bpmn-import-input" style="display: inline-block; margin-right: 8px;">
-      <button type="button" on:click={() => document.getElementById('bpmn-import-input').click()}>
-        Import BPMN XML
-      </button>
-    </label>
-    <input
-      id="bpmn-import-input"
-      type="file"
-      accept=".bpmn,.xml"
-      style="display: none"
-      on:change={handleImportBpmnXml}
-    />
-    <button type="button" on:click={() => importTestPoolsFile()} style="margin-left: 8px;">
+    <button type="button" on:click={() => importTestPoolsFile()}>
       Test Import Pools
     </button>
     <button type="button" on:click={() => importTestSwimlanesFile()} style="margin-left: 8px;">
       Test Import Swimlanes
-    </button>
-    <button type="button" on:click={handleExportBpmnXml} style="margin-left: 8px;">
-      Export BPMN XML
     </button>
 
     <!-- Optimize Button for selected connections -->
@@ -1622,6 +1617,7 @@
     on:reset={() => bpmnStore.reset()}
     on:zoomIn={() => canvasInteractionManager.zoomIn()}
     on:zoomOut={() => canvasInteractionManager.zoomOut()}
+    on:import={() => document.getElementById('bpmn-import-input').click()}
     on:export={handleExportBpmnXml}
   />
 
