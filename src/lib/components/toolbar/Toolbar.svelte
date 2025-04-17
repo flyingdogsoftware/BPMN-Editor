@@ -33,7 +33,10 @@
   // Connection Points and Add Condition functionality removed
 
   function resetDiagram() {
-    dispatch('reset');
+    // Sicherheitsabfrage vor dem Zurücksetzen des Diagramms
+    if (confirm('Are you sure you want to reset the diagram? All unsaved changes will be lost.')) {
+      dispatch('reset');
+    }
   }
 
   // Import BPMN XML
