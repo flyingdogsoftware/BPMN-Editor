@@ -1808,12 +1808,8 @@
             tabindex="0"
             aria-label="Draggable {element.type} element: {element.label}"
           >
-            {#if element.type === 'task'}
-              <TaskRenderer {element} isDragging={draggedElementId === element.id} isSelected={element.isSelected} />
-            {:else if element.type === 'event'}
-              <EventRenderer {element} isDragging={draggedElementId === element.id} isSelected={element.isSelected} />
-            {:else if element.type === 'gateway'}
-              <GatewayRenderer {element} isDragging={draggedElementId === element.id} isSelected={element.isSelected} />
+            {#if element.type === 'task' || element.type === 'event' || element.type === 'gateway' || element.type === 'subprocess'}
+              <ElementRenderer {element} isDragging={draggedElementId === element.id} isSelected={element.isSelected} />
             {:else if element.type === 'dataobject'}
               <!-- Data Object -->
               <path

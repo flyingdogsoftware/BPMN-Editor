@@ -2,6 +2,7 @@
   import TaskRenderer from './TaskRenderer.svelte';
   import EventRenderer from './EventRenderer.svelte';
   import GatewayRenderer from './GatewayRenderer.svelte';
+  import SubProcessRenderer from './SubProcessRenderer.svelte';
 
   // Props
   export let element;
@@ -34,6 +35,8 @@
   <EventRenderer {element} {isDragging} {isSelected} />
 {:else if element.type === 'gateway'}
   <GatewayRenderer {element} {isDragging} {isSelected} />
+{:else if element.type === 'subprocess'}
+  <SubProcessRenderer {element} {isDragging} {isSelected} />
 {:else}
   <!-- Fallback for other element types -->
   <rect
