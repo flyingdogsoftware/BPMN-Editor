@@ -6,7 +6,7 @@
  */
 
 import { XMLParser, XMLValidator } from 'fast-xml-parser';
-import type { BpmnElementUnion } from '$lib/models/bpmnElements';
+import type { BpmnElementUnion } from '../../models/bpmnElements';
 import { mapXmlToModel } from './xmlToModelMapper';
 
 // XML Parser options

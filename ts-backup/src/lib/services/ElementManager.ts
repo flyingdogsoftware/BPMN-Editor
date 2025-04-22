@@ -1,7 +1,10 @@
-import { bpmnStore } from '$lib/stores/bpmnStore';
-import type { BpmnElementUnion, Position } from '$lib/models/bpmnElements';
-import { isNode } from '$lib/models/bpmnElements';
-import { snapPositionToGrid, snapToGrid } from '$lib/utils/gridUtils';
+import { bpmnStore } from '../stores/bpmnStore';
+import type { BpmnElementUnion, Position, BpmnConnection } from '../models/bpmnElements';
+import { isNode } from '../models/bpmnElements';
+import { snapPositionToGrid, snapToGrid } from '../utils/gridUtils';
+import { removeNonCornerWaypoints } from '../utils/connectionRouting';
+import { get } from 'svelte/store';
+import { multiSelectionManager } from './MultiSelectionManager';
 import {
   createTask,
   createEvent,
@@ -12,7 +15,7 @@ import {
   createTextAnnotation,
   createPool,
   createLane
-} from '$lib/utils/elementFactory';
+} from '../utils/elementFactory';
 
 /**
  * ElementManager Service
@@ -21,6 +24,11 @@ import {
  * for the BPMN editor.
  */
 class ElementManager {
+  // Debounce timer for connection updates
+  private connectionUpdateTimer: number | null = null;
+
+  // Collection of connections that need to be updated
+  private pendingConnectionUpdates: Set<string> = new Set();
   /**
    * Add a new task element to the BPMN store
    * @param taskType The type of task
@@ -246,6 +254,9 @@ class ElementManager {
    * @param originalPositions The original positions of elements before dragging
    */
   handleElementDrag(elementId: string, dx: number, dy: number, originalPositions: Record<string, Position>): void {
+    console.log('DEBUG: handleElementDrag called with elementId:', elementId, 'dx:', dx, 'dy:', dy);
+    console.log('DEBUG: Original positions:', originalPositions);
+
     let element: BpmnElementUnion | undefined;
 
     // Get the element being dragged
@@ -254,59 +265,104 @@ class ElementManager {
     });
     unsubscribe();
 
-    if (!element) return;
+    console.log('DEBUG: Element being dragged:', element);
+
+    if (!element) {
+      console.log('DEBUG: Element not found, returning');
+      return;
+    }
 
     // Get the original position of the dragged element
     const originalPos = originalPositions[elementId];
-    if (!originalPos) return;
+    console.log('DEBUG: Original position for element:', originalPos);
+
+    if (!originalPos) {
+      console.log('DEBUG: No original position for element, returning');
+      return;
+    }
 
     // Calculate the new position based on the original position and the drag distance
     const newX = originalPos.x + dx;
     const newY = originalPos.y + dy;
+    console.log('DEBUG: New position calculated:', { newX, newY });
 
     // Update the element position in the store (without snapping during drag for smooth movement)
     bpmnStore.updateElement(elementId, { x: newX, y: newY });
+    console.log('DEBUG: Element position updated in store');
 
     // If this is a pool, also move all its lanes and contained elements
+    // BUT ONLY if we're directly dragging the pool itself (not elements inside it)
     if (element.type === 'pool' && element.lanes && element.lanes.length > 0) {
-      // Move all lanes in this pool
-      element.lanes.forEach(laneId => {
-        let lane: BpmnElementUnion | undefined;
-        const laneUnsubscribe = bpmnStore.subscribe(store => {
-          lane = store.find(el => el.id === laneId && el.type === 'lane');
-        });
-        laneUnsubscribe();
+      console.log('DEBUG: Element is a pool with lanes, handling pool-specific logic');
 
-        const laneOriginalPos = originalPositions[laneId];
+      // Check if we're in selection mode - if so, we don't want to move contained elements
+      // because the user might be trying to move elements within the pool
+      const inSelectionMode = multiSelectionManager.getSelectionMode();
 
-        if (lane && laneOriginalPos) {
-          // Move the lane based on its original position plus the drag distance
-          bpmnStore.updateElement(lane.id, {
-            x: laneOriginalPos.x + dx,
-            y: laneOriginalPos.y + dy
+      // Get the currently selected element IDs
+      const selectedIds = multiSelectionManager.getSelectedElementIds();
+
+      console.log('DEBUG: In selection mode:', inSelectionMode, 'Selected IDs:', selectedIds);
+
+      // Only move contained elements if we're not in selection mode or if the pool itself is selected
+      // (not elements inside it)
+      const shouldMoveContainedElements = !inSelectionMode ||
+        (selectedIds.includes(element.id) && selectedIds.length === 1);
+
+      console.log('DEBUG: Should move contained elements:', shouldMoveContainedElements);
+
+      if (shouldMoveContainedElements) {
+        // Move all lanes in this pool
+        element.lanes.forEach(laneId => {
+          let lane: BpmnElementUnion | undefined;
+          const laneUnsubscribe = bpmnStore.subscribe(store => {
+            lane = store.find(el => el.id === laneId && el.type === 'lane');
           });
-        }
-      });
+          laneUnsubscribe();
 
-      // Move all elements contained within the pool
-      let allElements: BpmnElementUnion[] = [];
-      const storeUnsubscribe = bpmnStore.subscribe(store => {
-        allElements = store;
-      });
-      storeUnsubscribe();
+          const laneOriginalPos = originalPositions[laneId];
+          console.log('DEBUG: Lane:', lane?.id, 'Original position:', laneOriginalPos);
 
-      allElements.forEach(el => {
-        if (el.type !== 'connection' && el.type !== 'pool' && el.type !== 'lane') {
-          const elOriginalPos = originalPositions[el.id];
-          if (elOriginalPos && this.isElementInsidePool(el, element!)) {
-            // Move the element based on its original position plus the drag distance
-            bpmnStore.updateElement(el.id, {
-              x: elOriginalPos.x + dx,
-              y: elOriginalPos.y + dy
+          if (lane && laneOriginalPos) {
+            // Move the lane based on its original position plus the drag distance
+            bpmnStore.updateElement(lane.id, {
+              x: laneOriginalPos.x + dx,
+              y: laneOriginalPos.y + dy
             });
+            console.log('DEBUG: Updated lane position');
           }
-        }
-      });
+        });
+
+        // Move all elements contained within the pool
+        let allElements: BpmnElementUnion[] = [];
+        const storeUnsubscribe = bpmnStore.subscribe(store => {
+          allElements = store;
+        });
+        storeUnsubscribe();
+
+        console.log('DEBUG: Checking for elements inside the pool');
+        let elementsInsidePoolCount = 0;
+
+        allElements.forEach(el => {
+          if (el.type !== 'connection' && el.type !== 'pool' && el.type !== 'lane') {
+            const elOriginalPos = originalPositions[el.id];
+            const isInside = this.isElementInsidePool(el, element!);
+            console.log('DEBUG: Element:', el.id, 'type:', el.type, 'is inside pool:', isInside, 'has original position:', !!elOriginalPos);
+
+            if (elOriginalPos && isInside) {
+              elementsInsidePoolCount++;
+              // Move the element based on its original position plus the drag distance
+              bpmnStore.updateElement(el.id, {
+                x: elOriginalPos.x + dx,
+                y: elOriginalPos.y + dy
+              });
+              console.log('DEBUG: Updated element position inside pool');
+            }
+          }
+        });
+
+        console.log('DEBUG: Total elements inside pool that were moved:', elementsInsidePoolCount);
+      }
     }
   }
 
@@ -334,45 +390,214 @@ class ElementManager {
       bpmnStore.updateElement(elementId, { x: snappedX, y: snappedY });
 
       // If this is a pool, also update its lanes
+      // BUT ONLY if we're directly dragging the pool itself (not elements inside it)
       if (element.type === 'pool' && element.lanes && element.lanes.length > 0) {
-        // Calculate the offset from snapping
-        const offsetX = snappedX - currentX;
-        const offsetY = snappedY - currentY;
+        // Check if we're in selection mode - if so, we don't want to move contained elements
+        // because the user might be trying to move elements within the pool
+        const inSelectionMode = multiSelectionManager.getSelectionMode();
 
-        // Update all lanes in this pool
-        element.lanes.forEach(laneId => {
-          let lane: BpmnElementUnion | undefined;
-          const laneUnsubscribe = bpmnStore.subscribe(store => {
-            lane = store.find(el => el.id === laneId && el.type === 'lane');
-          });
-          laneUnsubscribe();
+        // Get the currently selected element IDs
+        const selectedIds = multiSelectionManager.getSelectedElementIds();
 
-          if (lane && 'x' in lane && 'y' in lane) {
-            bpmnStore.updateElement(lane.id, {
-              x: lane.x + offsetX,
-              y: lane.y + offsetY
+        console.log('DEBUG: In selection mode:', inSelectionMode, 'Selected IDs:', selectedIds);
+
+        // Only move contained elements if we're not in selection mode or if the pool itself is selected
+        // (not elements inside it)
+        const shouldMoveContainedElements = !inSelectionMode ||
+          (selectedIds.includes(element.id) && selectedIds.length === 1);
+
+        console.log('DEBUG: Should move contained elements:', shouldMoveContainedElements);
+
+        if (shouldMoveContainedElements) {
+          // Calculate the offset from snapping
+          const offsetX = snappedX - currentX;
+          const offsetY = snappedY - currentY;
+
+          // Update all lanes in this pool
+          element.lanes.forEach(laneId => {
+            let lane: BpmnElementUnion | undefined;
+            const laneUnsubscribe = bpmnStore.subscribe(store => {
+              lane = store.find(el => el.id === laneId && el.type === 'lane');
             });
-          }
-        });
+            laneUnsubscribe();
 
-        // Update all elements contained within the pool
-        let allElements: BpmnElementUnion[] = [];
-        const storeUnsubscribe = bpmnStore.subscribe(store => {
-          allElements = store;
-        });
-        storeUnsubscribe();
-
-        allElements.forEach(el => {
-          if (el.type !== 'connection' && el.type !== 'pool' && el.type !== 'lane' && 'x' in el && 'y' in el) {
-            if (this.isElementInsidePool(el, element!)) {
-              bpmnStore.updateElement(el.id, {
-                x: el.x + offsetX,
-                y: el.y + offsetY
+            if (lane && 'x' in lane && 'y' in lane) {
+              bpmnStore.updateElement(lane.id, {
+                x: lane.x + offsetX,
+                y: lane.y + offsetY
               });
             }
+          });
+
+          // Update all elements contained within the pool
+          let allElements: BpmnElementUnion[] = [];
+          const storeUnsubscribe = bpmnStore.subscribe(store => {
+            allElements = store;
+          });
+          storeUnsubscribe();
+
+          // Collect all connections that need to be updated
+          const connectionsToUpdate = new Set<string>();
+
+          allElements.forEach(el => {
+            if (el.type !== 'connection' && el.type !== 'pool' && el.type !== 'lane' && 'x' in el && 'y' in el) {
+              if (this.isElementInsidePool(el, element!)) {
+                bpmnStore.updateElement(el.id, {
+                  x: el.x + offsetX,
+                  y: el.y + offsetY
+                });
+
+                // Add any connections connected to this element to the update list
+                allElements.forEach(conn => {
+                  if (conn.type === 'connection' && (conn.sourceId === el.id || conn.targetId === el.id)) {
+                    connectionsToUpdate.add(conn.id);
+                  }
+                });
+              }
+            }
+          });
+
+          // Schedule a batch update for all affected connections
+          if (connectionsToUpdate.size > 0) {
+            console.log(`Scheduling batch update for ${connectionsToUpdate.size} connections`);
+            this.scheduleBatchConnectionUpdate(connectionsToUpdate);
           }
-        });
+        }
+      } else {
+        // For non-pool elements, just optimize the directly connected connections
+        this.optimizeConnectedConnections(elementId);
       }
+    }
+  }
+
+  /**
+   * Schedule a batch update for multiple connections
+   * @param connectionIds Set of connection IDs to update
+   */
+  private scheduleBatchConnectionUpdate(connectionIds: Set<string>): void {
+    // Add all connection IDs to the pending updates set
+    connectionIds.forEach(id => this.pendingConnectionUpdates.add(id));
+
+    // Clear any existing timer
+    if (this.connectionUpdateTimer !== null) {
+      window.clearTimeout(this.connectionUpdateTimer);
+    }
+
+    // Set a new timer to process all pending updates
+    this.connectionUpdateTimer = window.setTimeout(() => {
+      console.log(`Processing batch update for ${this.pendingConnectionUpdates.size} connections`);
+      const startTime = performance.now();
+
+      // Process all pending updates
+      this.processPendingConnectionUpdates();
+
+      const endTime = performance.now();
+      console.log(`Batch connection update completed in ${endTime - startTime}ms`);
+
+      this.connectionUpdateTimer = null;
+    }, 200); // 200ms delay to batch updates
+  }
+
+  /**
+   * Process all pending connection updates
+   */
+  private processPendingConnectionUpdates(): void {
+    // Get all elements from the store
+    let allElements: BpmnElementUnion[] = [];
+    const unsubscribe = bpmnStore.subscribe(store => {
+      allElements = store;
+    });
+    unsubscribe();
+
+    // Process each pending connection
+    const pendingIds = Array.from(this.pendingConnectionUpdates);
+
+    // Clear the pending updates set
+    this.pendingConnectionUpdates.clear();
+
+    // Batch process connections in smaller chunks to avoid UI freezing
+    const chunkSize = 10;
+    for (let i = 0; i < pendingIds.length; i += chunkSize) {
+      const chunk = pendingIds.slice(i, i + chunkSize);
+
+      // Process this chunk immediately
+      this.processConnectionChunk(chunk, allElements);
+
+      // If there are more chunks, schedule them with a small delay
+      if (i + chunkSize < pendingIds.length) {
+        const nextChunk = pendingIds.slice(i + chunkSize, i + chunkSize * 2);
+        setTimeout(() => {
+          this.processConnectionChunk(nextChunk, allElements);
+        }, 10);
+      }
+    }
+  }
+
+  /**
+   * Process a chunk of connections
+   * @param connectionIds Array of connection IDs to process
+   * @param allElements All elements from the store
+   */
+  private processConnectionChunk(connectionIds: string[], allElements: BpmnElementUnion[]): void {
+    connectionIds.forEach(connectionId => {
+      const connection = allElements.find(el => el.id === connectionId && el.type === 'connection') as BpmnConnection | undefined;
+      if (!connection) return;
+
+      // Find source and target elements
+      const source = allElements.find(el => el.id === connection.sourceId);
+      const target = allElements.find(el => el.id === connection.targetId);
+
+      if (!source || !target) return;
+
+      // Calculate source and target centers
+      const sourceCenter = {
+        x: source.x + source.width / 2,
+        y: source.y + source.height / 2
+      };
+
+      const targetCenter = {
+        x: target.x + target.width / 2,
+        y: target.y + target.height / 2
+      };
+
+      // Make a deep copy of the waypoints
+      const waypoints = JSON.parse(JSON.stringify(connection.waypoints || []));
+
+      // Optimize the waypoints
+      const optimizedWaypoints = removeNonCornerWaypoints(sourceCenter, targetCenter, waypoints);
+
+      // Update the connection with optimized waypoints
+      bpmnStore.updateConnectionWaypoints(connection.id, optimizedWaypoints);
+    });
+  }
+
+  /**
+   * Optimize all connections connected to an element
+   * @param elementId The ID of the element
+   */
+  private optimizeConnectedConnections(elementId: string): void {
+    // Get all connections from the store
+    let connections: BpmnElementUnion[] = [];
+    let allElements: BpmnElementUnion[] = [];
+
+    const unsubscribe = bpmnStore.subscribe(store => {
+      connections = store.filter(el => el.type === 'connection' &&
+        (el.sourceId === elementId || el.targetId === elementId));
+      allElements = store;
+    });
+    unsubscribe();
+
+    // Create a set of connection IDs to update
+    const connectionIds = new Set<string>();
+    connections.forEach(connection => {
+      if (connection.type === 'connection') {
+        connectionIds.add(connection.id);
+      }
+    });
+
+    // Schedule a batch update
+    if (connectionIds.size > 0) {
+      this.scheduleBatchConnectionUpdate(connectionIds);
     }
   }
 
@@ -520,12 +745,23 @@ class ElementManager {
     const elementCenterX = element.x + element.width / 2;
     const elementCenterY = element.y + element.height / 2;
 
-    return (
+    const result = (
       elementCenterX >= pool.x &&
       elementCenterX <= pool.x + pool.width &&
       elementCenterY >= pool.y &&
       elementCenterY <= pool.y + pool.height
     );
+
+    console.log('DEBUG: isElementInsidePool check:', {
+      elementId: element.id,
+      elementType: element.type,
+      elementCenter: { x: elementCenterX, y: elementCenterY },
+      poolId: pool.id,
+      poolBounds: { x: pool.x, y: pool.y, width: pool.width, height: pool.height },
+      result: result
+    });
+
+    return result;
   }
 }
 

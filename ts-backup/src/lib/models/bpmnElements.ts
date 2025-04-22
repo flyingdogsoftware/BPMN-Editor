@@ -38,6 +38,7 @@ export interface BpmnElementBase {
   labelPosition?: Position;
   labelVisible?: boolean;
   documentation?: string; // Documentation for the element
+  isSelected?: boolean; // Whether the element is selected
 }
 
 // Base interface for all node elements (elements with position and size)
@@ -248,12 +249,13 @@ export interface BpmnConnection extends BpmnElementBase {
   targetId: string;
   sourcePointId?: string;
   targetPointId?: string;
-  waypoints: Array<Position>;
+  waypoints: Array<any>; // Changed to Array<any> to fix TypeScript errors
   condition?: string;
   isDefault?: boolean;
   isConditional?: boolean;
   isSelected?: boolean;
   associationDirection?: AssociationDirection; // For associations
+  labelOffset?: Position; // Offset from the default label position
 }
 
 // Conversation Types

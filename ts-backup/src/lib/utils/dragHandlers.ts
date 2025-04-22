@@ -1,5 +1,5 @@
-import type { BpmnElementUnion } from '$lib/models/bpmnElements';
-import { isNode } from '$lib/models/bpmnElements';
+import type { BpmnElementUnion } from '../models/bpmnElements';
+import { isNode } from '../models/bpmnElements';
 import { snapPositionToGrid } from './gridUtils';
 
 /**

@@ -5,8 +5,8 @@
  * objects into the internal BPMN model representation used by the editor.
  */
 
-import type { BpmnElementUnion, BpmnPool, BpmnLane, ConnectionPoint, Position } from '$lib/models/bpmnElements';
-import { calculateConnectionPoints } from '$lib/utils/connectionUtils';
+import type { BpmnElementUnion, BpmnPool, BpmnLane, ConnectionPoint, Position } from '../../models/bpmnElements';
+import { calculateConnectionPoints } from '../connectionUtils';
 
 /**
  * Process label text to handle XML entities and line breaks
@@ -688,7 +688,7 @@ export function mapXmlToModel(parsedXml: any): BpmnElementUnion[] {
           y: shape ? shape.y : 0,
           width: shape ? shape.width : 120,
           height: shape ? shape.height : 60,
-        } as import("$lib/models/bpmnElements").BpmnTask;
+        } as import("../../models/bpmnElements").BpmnTask;
         elements.push(mappedTask);
       }
     }
@@ -741,7 +741,7 @@ export function mapXmlToModel(parsedXml: any): BpmnElementUnion[] {
             y: shape ? shape.y : 0,
             width: shape ? shape.width : 36,
             height: shape ? shape.height : 36,
-          } as import("$lib/models/bpmnElements").BpmnEvent;
+          } as import("../../models/bpmnElements").BpmnEvent;
 
           console.log(`Created ${eventType} event with definition ${eventDefinition}:`, mappedEvent);
           elements.push(mappedEvent);
@@ -779,7 +779,7 @@ export function mapXmlToModel(parsedXml: any): BpmnElementUnion[] {
             y: shape ? shape.y : 0,
             width: shape ? shape.width : 50,
             height: shape ? shape.height : 50,
-          } as import("$lib/models/bpmnElements").BpmnGateway;
+          } as import("../../models/bpmnElements").BpmnGateway;
 
           console.log(`Created ${gatewayType} gateway:`, mappedGateway);
           elements.push(mappedGateway);
@@ -835,7 +835,7 @@ export function mapXmlToModel(parsedXml: any): BpmnElementUnion[] {
           targetPointId: '',
           waypoints: waypoints ? waypoints : [],
           label: processLabelText(flow['@_name']) || '',
-        } as import("$lib/models/bpmnElements").BpmnConnection;
+        } as import("../../models/bpmnElements").BpmnConnection;
 
         elements.push(mappedConnection);
         console.log(`Created connection ${mappedConnection.id} from ${sourceId} to ${targetId} with ${mappedConnection.waypoints.length} waypoints`);

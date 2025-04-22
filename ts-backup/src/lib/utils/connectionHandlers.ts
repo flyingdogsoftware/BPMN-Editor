@@ -1,4 +1,4 @@
-import type { BpmnElementUnion, ConnectionPoint, Position } from '$lib/models/bpmnElements';
+import type { BpmnElementUnion, ConnectionPoint, Position } from '../models/bpmnElements';
 import { calculateConnectionPoints } from './connectionUtils';
 
 /**
