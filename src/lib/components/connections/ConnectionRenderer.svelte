@@ -275,45 +275,129 @@
     };
   }).filter(Boolean);
 
-  // Determine connection styling based on type
+  // Helper function to check if a connection crosses pool boundaries
+  function isConnectionCrossingPoolBoundaries(connection) {
+    // Find source and target elements
+    const source = elements.find(el => el.id === connection.sourceId);
+    const target = elements.find(el => el.id === connection.targetId);
+
+    if (!source || !target) return false;
+
+    // If either source or target is a pool, the connection crosses pool boundaries
+    if (source.type === 'pool' || target.type === 'pool') {
+      return true;
+    }
+
+    // Find all pools
+    const pools = elements.filter(el => el.type === 'pool');
+    if (pools.length === 0) return false;
+
+    // Check if source and target are in different pools
+    let sourcePool = null;
+    let targetPool = null;
+
+    // Helper function to check if an element is inside a pool
+    function isElementInsidePool(element, pool) {
+      if (!element || !pool) return false;
+      if (element.type === 'connection') return false;
+
+      // Check if the element is fully contained within the pool boundaries
+      const elementX = element.x;
+      const elementY = element.y;
+      const elementWidth = element.width;
+      const elementHeight = element.height;
+      const poolX = pool.x;
+      const poolY = pool.y;
+      const poolWidth = pool.width;
+      const poolHeight = pool.height;
+
+      return elementX >= poolX &&
+             elementY >= poolY &&
+             elementX + elementWidth <= poolX + poolWidth &&
+             elementY + elementHeight <= poolY + poolHeight;
+    }
+
+    // Find which pool contains the source element
+    for (const pool of pools) {
+      if (isElementInsidePool(source, pool)) {
+        sourcePool = pool;
+        break;
+      }
+    }
+
+    // Find which pool contains the target element
+    for (const pool of pools) {
+      if (isElementInsidePool(target, pool)) {
+        targetPool = pool;
+        break;
+      }
+    }
+
+    // If source and target are in different pools, or one is in a pool and the other isn't,
+    // then the connection crosses pool boundaries
+    return (sourcePool && targetPool && sourcePool.id !== targetPool.id) ||
+           (sourcePool && !targetPool) ||
+           (!sourcePool && targetPool);
+  }
+
+  // Determine connection styling based on type and whether it crosses pool boundaries
   function getConnectionStyle(connection) {
+    // Check if the connection crosses pool boundaries
+    const crossesPoolBoundaries = isConnectionCrossingPoolBoundaries(connection);
+
+    // Debug logging for cross-pool connections
+    if (crossesPoolBoundaries) {
+      console.log('DEBUG: Connection crosses pool boundaries:', connection.id,
+                 'source:', connection.sourceId,
+                 'target:', connection.targetId);
+    }
+
+    // Base styles for each connection type
+    let style;
+
     switch (connection.connectionType) {
       case 'sequence':
-        return {
+        style = {
           stroke: '#333',
           strokeWidth: 2,
-          strokeDasharray: '',
+          strokeDasharray: crossesPoolBoundaries ? '5,5' : '',
           markerEnd: 'url(#sequenceFlowMarker)'
         };
+        break;
       case 'message':
-        return {
+        style = {
           stroke: '#3498db',
           strokeWidth: 2,
-          strokeDasharray: '5,5',
+          strokeDasharray: '5,5', // Message flows are always dashed
           markerEnd: 'url(#messageFlowMarker)'
         };
+        break;
       case 'association':
-        return {
+        style = {
           stroke: '#999',
           strokeWidth: 1.5,
-          strokeDasharray: '3,3',
+          strokeDasharray: '3,3', // Associations are always dashed
           markerEnd: 'url(#associationMarker)'
         };
+        break;
       case 'dataassociation':
-        return {
+        style = {
           stroke: '#999',
           strokeWidth: 1.5,
-          strokeDasharray: '2,2',
+          strokeDasharray: '2,2', // Data associations are always dashed
           markerEnd: 'url(#associationMarker)'
         };
+        break;
       default:
-        return {
+        style = {
           stroke: '#333',
           strokeWidth: 2,
-          strokeDasharray: '',
+          strokeDasharray: crossesPoolBoundaries ? '5,5' : '',
           markerEnd: 'url(#sequenceFlowMarker)'
         };
     }
+
+    return style;
   }
 
   // Handle connection click
