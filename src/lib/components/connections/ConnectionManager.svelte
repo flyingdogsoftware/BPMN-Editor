@@ -96,13 +96,28 @@
 
   // Find an element at a specific position
   function findElementAtPosition(x, y) {
-    return elements.find(element => {
+    // First, find all elements that contain the point
+    const matchingElements = elements.filter(element => {
       if (element.type === 'connection') return false;
 
       // Check if the point is inside the element
       return x >= element.x && x <= element.x + element.width &&
              y >= element.y && y <= element.y + element.height;
     });
+
+    if (matchingElements.length === 0) return null;
+
+    // If we have multiple matches, prioritize non-pool/lane elements
+    // This allows selecting elements inside pools rather than the pool itself
+    const nonPoolElements = matchingElements.filter(el => el.type !== 'pool' && el.type !== 'lane');
+
+    if (nonPoolElements.length > 0) {
+      // If there are non-pool elements, return the first one
+      return nonPoolElements[0];
+    }
+
+    // Otherwise, return the first matching element (which would be a pool or lane)
+    return matchingElements[0];
   }
 
   // Create a new connection between two elements
@@ -116,6 +131,10 @@
       (conn.sourceId === source.id && conn.targetId === target.id) ||
       (conn.sourceId === target.id && conn.targetId === source.id)
     );
+
+    // Check if the connection crosses pool boundaries
+    const crossesPoolBoundaries = checkIfConnectionCrossesPoolBoundaries(source, target);
+    console.log('Connection crosses pool boundaries:', crossesPoolBoundaries);
 
     if (!existingConnection) {
       // Calculate initial waypoints for better rendering
@@ -152,13 +171,17 @@
       }
 
       // Create a new connection with initial waypoints
+      // If the connection crosses pool boundaries, use a message flow by default
+      // Otherwise, use a sequence flow
+      const connectionType = crossesPoolBoundaries ? 'message' : 'sequence';
+
       const newConnection = {
         id: `connection-${Date.now()}`,
         type: 'connection',
         label: '',
         sourceId: source.id,
         targetId: target.id,
-        connectionType: 'sequence',
+        connectionType: connectionType,
         waypoints: initialWaypoints
       };
 
@@ -221,6 +244,67 @@
     }
 
     hideContextMenu();
+  }
+
+  // Helper function to check if a connection crosses pool boundaries
+  function checkIfConnectionCrossesPoolBoundaries(source, target) {
+    if (!source || !target) return false;
+
+    // If either source or target is a pool, the connection crosses pool boundaries
+    if (source.type === 'pool' || target.type === 'pool') {
+      return true;
+    }
+
+    // Find all pools
+    const pools = elements.filter(el => el.type === 'pool');
+    if (pools.length === 0) return false;
+
+    // Check if source and target are in different pools
+    let sourcePool = null;
+    let targetPool = null;
+
+    // Helper function to check if an element is inside a pool
+    function isElementInsidePool(element, pool) {
+      if (!element || !pool) return false;
+      if (element.type === 'connection') return false;
+
+      // Check if the element is fully contained within the pool boundaries
+      const elementX = element.x;
+      const elementY = element.y;
+      const elementWidth = element.width;
+      const elementHeight = element.height;
+      const poolX = pool.x;
+      const poolY = pool.y;
+      const poolWidth = pool.width;
+      const poolHeight = pool.height;
+
+      return elementX >= poolX &&
+             elementY >= poolY &&
+             elementX + elementWidth <= poolX + poolWidth &&
+             elementY + elementHeight <= poolY + poolHeight;
+    }
+
+    // Find which pool contains the source element
+    for (const pool of pools) {
+      if (isElementInsidePool(source, pool)) {
+        sourcePool = pool;
+        break;
+      }
+    }
+
+    // Find which pool contains the target element
+    for (const pool of pools) {
+      if (isElementInsidePool(target, pool)) {
+        targetPool = pool;
+        break;
+      }
+    }
+
+    // If source and target are in different pools, or one is in a pool and the other isn't,
+    // then the connection crosses pool boundaries
+    return (sourcePool && targetPool && sourcePool.id !== targetPool.id) ||
+           (sourcePool && !targetPool) ||
+           (!sourcePool && targetPool);
   }
 
   // Function to optimize a connection by removing redundant waypoints
