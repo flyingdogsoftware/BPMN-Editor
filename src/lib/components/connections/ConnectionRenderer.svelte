@@ -1213,7 +1213,16 @@
     class:selected={id === selectedConnectionId || connection.isSelected}
     on:click={(e) => handleConnectionClick(e, id)}
     on:dblclick={(e) => handleConnectionDoubleClick(e, connection)}
-    on:keydown={(e) => e.key === 'Enter' && handleConnectionClick(e, id)}
+    on:keydown={(e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        handleConnectionClick(e, id);
+      } else if (e.key === 'Delete' || e.key === 'Backspace') {
+        e.preventDefault();
+        console.log('Deleting connection from keydown event:', id);
+        bpmnStore.removeElement(id);
+      }
+    }}
     on:contextmenu={(e) => handleConnectionRightClick(e, connection)}
     role="button"
     tabindex="0"
