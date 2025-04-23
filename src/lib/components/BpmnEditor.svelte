@@ -25,7 +25,7 @@
   async function importTestPoolsFile() {
     try {
       // Fetch the test file
-      const response = await fetch('/test-pools.bpmn');
+      const response = await fetch('/static/test-pools.bpmn');
       if (!response.ok) {
         throw new Error(`Failed to fetch test file: ${response.statusText}`);
       }
@@ -59,7 +59,7 @@
   async function importTestSwimlanesFile() {
     try {
       // Fetch the test file
-      const response = await fetch('/test-swimlanes.bpmn');
+      const response = await fetch('/static/test-swimlanes.bpmn');
       if (!response.ok) {
         throw new Error(`Failed to fetch test file: ${response.statusText}`);
       }
@@ -86,6 +86,40 @@
     } catch (err) {
       console.error('Failed to import test swimlanes BPMN XML:', err);
       alert('Failed to import test swimlanes BPMN XML: ' + err.message);
+    }
+  }
+
+  // Function to import a test BPMN file with message flows
+  async function importTestMessageFlowFile() {
+    try {
+      // Fetch the test file
+      const response = await fetch('/static/test-message-flow.bpmn');
+      if (!response.ok) {
+        throw new Error(`Failed to fetch test file: ${response.statusText}`);
+      }
+
+      const xmlString = await response.text();
+      console.log('Importing test message flow BPMN XML...');
+      console.log('XML content:', xmlString);
+
+      const elements = importBpmnXml(xmlString);
+      console.log('Imported elements:', elements);
+
+      // Log pools and connections specifically
+      const pools = elements.filter(el => el.type === 'pool');
+      const connections = elements.filter(el => el.type === 'connection');
+      console.log('Imported pools:', JSON.stringify(pools, null, 2));
+      console.log('Imported connections:', JSON.stringify(connections, null, 2));
+
+      // Reset the store and add the imported elements
+      bpmnStore.reset();
+      elements.forEach(el => bpmnStore.addElement(el));
+
+      // Log the store after import
+      console.log('Store after import:', $bpmnStore);
+    } catch (err) {
+      console.error('Failed to import test message flow BPMN XML:', err);
+      alert('Failed to import test message flow BPMN XML: ' + err.message);
     }
   }
 

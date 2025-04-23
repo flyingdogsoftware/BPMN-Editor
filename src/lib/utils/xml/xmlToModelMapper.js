@@ -178,6 +178,40 @@ export function mapXmlToModel(parsedXml) {
             console.log(`Found ${participants.length} participants in this collaboration:`, JSON.stringify(participants, null, 2));
             // Add these participants to our collection
             allParticipants = allParticipants.concat(participants);
+
+            // Process message flows in the collaboration
+            if (collaboration['bpmn:messageFlow']) {
+                console.log('Found message flows in collaboration');
+                const messageFlows = toArray(collaboration['bpmn:messageFlow']);
+                console.log(`Found ${messageFlows.length} message flows:`, JSON.stringify(messageFlows, null, 2));
+
+                for (const flow of messageFlows) {
+                    // Get waypoints if available
+                    const waypoints = edgeMap[flow['@_id']];
+
+                    // Find source and target elements
+                    const sourceId = flow['@_sourceRef'];
+                    const targetId = flow['@_targetRef'];
+
+                    console.log(`Processing message flow ${flow['@_id']} from ${sourceId} to ${targetId}`);
+
+                    // Create the connection with message flow type
+                    const mappedConnection = {
+                        id: flow['@_id'],
+                        type: "connection",
+                        connectionType: "message",  // This is the key difference from sequence flows
+                        sourceId: sourceId,
+                        targetId: targetId,
+                        sourcePointId: '',
+                        targetPointId: '',
+                        waypoints: waypoints ? waypoints : [],
+                        label: processLabelText(flow['@_name']) || '',
+                    };
+
+                    elements.push(mappedConnection);
+                    console.log(`Created message flow connection ${mappedConnection.id} from ${sourceId} to ${targetId} with ${mappedConnection.waypoints?.length || 0} waypoints`);
+                }
+            }
         }
         // Use all participants from all collaborations
         const participants = allParticipants;
@@ -848,6 +882,120 @@ function validatePoolLaneRelationships(elements) {
     console.log('Pool-lane relationship validation complete');
 }
 /**
+ * Check if a connection crosses pool boundaries
+ * @param {Object} sourceElement The source element
+ * @param {Object} targetElement The target element
+ * @param {Array} elements All BPMN elements
+ * @returns {boolean} True if the connection crosses pool boundaries
+ */
+function connectionCrossesPoolBoundaries(sourceElement, targetElement, elements) {
+    // If either element is a pool, and the other is not the same pool, it crosses boundaries
+    if (sourceElement.type === 'pool' && targetElement.type === 'pool' && sourceElement.id !== targetElement.id) {
+        return true;
+    }
+
+    // Find the containing pool for each element
+    let sourcePool = null;
+    let targetPool = null;
+
+    // If the element is a pool, it's its own container
+    if (sourceElement.type === 'pool') {
+        sourcePool = sourceElement;
+    }
+    if (targetElement.type === 'pool') {
+        targetPool = targetElement;
+    }
+
+    // If the element is a lane, find its parent pool
+    if (sourceElement.type === 'lane' && sourceElement.parentRef) {
+        sourcePool = elements.find(el => el.id === sourceElement.parentRef && el.type === 'pool');
+    }
+    if (targetElement.type === 'lane' && targetElement.parentRef) {
+        targetPool = elements.find(el => el.id === targetElement.parentRef && el.type === 'pool');
+    }
+
+    // For other elements, check if they're inside a pool or lane
+    if (!sourcePool) {
+        // Check if source is inside a pool directly
+        const pools = elements.filter(el => el.type === 'pool');
+        for (const pool of pools) {
+            if (isElementInsidePool(sourceElement, pool)) {
+                sourcePool = pool;
+                break;
+            }
+        }
+
+        // If not found directly in a pool, check if it's in a lane
+        if (!sourcePool) {
+            const lanes = elements.filter(el => el.type === 'lane');
+            for (const lane of lanes) {
+                if (isElementInsidePool(sourceElement, lane)) {
+                    // Find the parent pool of this lane
+                    const parentPool = elements.find(el => el.id === lane.parentRef && el.type === 'pool');
+                    if (parentPool) {
+                        sourcePool = parentPool;
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    // Same for target element
+    if (!targetPool) {
+        // Check if target is inside a pool directly
+        const pools = elements.filter(el => el.type === 'pool');
+        for (const pool of pools) {
+            if (isElementInsidePool(targetElement, pool)) {
+                targetPool = pool;
+                break;
+            }
+        }
+
+        // If not found directly in a pool, check if it's in a lane
+        if (!targetPool) {
+            const lanes = elements.filter(el => el.type === 'lane');
+            for (const lane of lanes) {
+                if (isElementInsidePool(targetElement, lane)) {
+                    // Find the parent pool of this lane
+                    const parentPool = elements.find(el => el.id === lane.parentRef && el.type === 'pool');
+                    if (parentPool) {
+                        targetPool = parentPool;
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    // If both elements have pools and they're different, the connection crosses boundaries
+    return sourcePool && targetPool && sourcePool.id !== targetPool.id;
+}
+
+/**
+ * Helper function to check if an element is inside a pool
+ * @param {Object} element The element to check
+ * @param {Object} container The container (pool or lane) to check against
+ * @returns {boolean} True if the element is inside the container
+ */
+function isElementInsidePool(element, container) {
+    // Skip elements without position or size
+    if (!element || !container ||
+        element.x === undefined || element.y === undefined ||
+        element.width === undefined || element.height === undefined ||
+        container.x === undefined || container.y === undefined ||
+        container.width === undefined || container.height === undefined) {
+        return false;
+    }
+
+    // Check if the element is fully contained within the container boundaries
+    return element.x >= container.x &&
+           element.y >= container.y &&
+           element.x + element.width <= container.x + container.width &&
+           element.y + element.height <= container.y + container.height;
+}
+
+/**
  * Assign connection points to connections based on source and target elements
  * @param elements Array of BPMN elements
  */
@@ -860,6 +1008,12 @@ function assignConnectionPoints(elements) {
             const targetElement = elements.find(el => el.id === element.targetId);
             if (sourceElement && targetElement &&
                 sourceElement.type !== 'connection' && targetElement.type !== 'connection') {
+
+                // Check if this connection crosses pool boundaries and should be a message flow
+                if (element.connectionType === 'sequence' && connectionCrossesPoolBoundaries(sourceElement, targetElement, elements)) {
+                    console.log(`Connection ${element.id} crosses pool boundaries, changing to message flow`);
+                    element.connectionType = 'message';
+                }
                 // Calculate connection points for source and target
                 const sourcePoints = calculateConnectionPoints(sourceElement);
                 const targetPoints = calculateConnectionPoints(targetElement);
