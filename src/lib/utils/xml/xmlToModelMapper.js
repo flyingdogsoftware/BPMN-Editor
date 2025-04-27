@@ -6,15 +6,89 @@
  */
 import { calculateConnectionPoints } from '../connectionUtils';
 /**
+ * Automatically wrap text at word boundaries
+ * @param text The text to wrap
+ * @param maxCharsPerLine Maximum characters per line (default: 20)
+ * @returns Text with automatic line breaks
+ */
+function wrapLabelText(text, maxCharsPerLine = 20) {
+    if (!text) return '';
+
+    // If text already contains line breaks, don't modify it
+    if (text.includes('\n')) return text;
+
+    const words = text.split(' ');
+    const lines = [];
+    let currentLine = '';
+
+    for (const word of words) {
+        // If adding this word would exceed the max length
+        if (currentLine.length + word.length + 1 > maxCharsPerLine && currentLine.length > 0) {
+            // Push the current line and start a new one
+            lines.push(currentLine);
+            currentLine = word;
+        } else {
+            // Add the word to the current line
+            currentLine = currentLine.length === 0 ? word : currentLine + ' ' + word;
+        }
+    }
+
+    // Add the last line if it's not empty
+    if (currentLine.length > 0) {
+        lines.push(currentLine);
+    }
+
+    return lines.join('\n');
+}
+
+/**
  * Process label text to handle XML entities and line breaks
  * @param text The label text from XML
+ * @param elementType The type of element (for determining max chars per line)
+ * @param elementWidth The width of the element (if available)
  * @returns Processed label text with proper line breaks
  */
-function processLabelText(text) {
+function processLabelText(text, elementType = '', elementWidth = 0) {
     if (!text)
         return '';
+
     // Replace XML line break entity with actual line breaks
-    return text.replace(/&#10;/g, '\n');
+    const processedText = text.replace(/&#10;/g, '\n');
+
+    // If the text already has line breaks, don't add more
+    if (processedText.includes('\n')) return processedText;
+
+    // Determine max chars per line based on element type and width
+    let maxCharsPerLine = 20; // Default
+
+    if (elementWidth > 0) {
+        // Approximate characters per line based on element width
+        // Assuming average character width is about 8 pixels
+        maxCharsPerLine = Math.max(10, Math.floor(elementWidth / 8));
+    } else {
+        // If no width provided, use defaults based on element type
+        switch (elementType) {
+            case 'task':
+            case 'subprocess':
+                maxCharsPerLine = 20;
+                break;
+            case 'event':
+                maxCharsPerLine = 15;
+                break;
+            case 'gateway':
+                maxCharsPerLine = 15;
+                break;
+            case 'pool':
+            case 'lane':
+                maxCharsPerLine = 25;
+                break;
+            default:
+                maxCharsPerLine = 20;
+        }
+    }
+
+    // Apply automatic text wrapping
+    return wrapLabelText(processedText, maxCharsPerLine);
 }
 /**
  * Map parsed BPMN XML to the internal data model.
@@ -205,7 +279,7 @@ export function mapXmlToModel(parsedXml) {
                         sourcePointId: '',
                         targetPointId: '',
                         waypoints: waypoints ? waypoints : [],
-                        label: processLabelText(flow['@_name']) || '',
+                        label: processLabelText(flow['@_name'], 'connection') || '',
                     };
 
                     elements.push(mappedConnection);
@@ -323,7 +397,7 @@ export function mapXmlToModel(parsedXml) {
             const pool = {
                 id: poolId,
                 type: 'pool',
-                label: processLabelText(participant['@_name']) || 'Pool',
+                label: processLabelText(participant['@_name'], 'pool', poolWidth) || 'Pool',
                 x: poolX,
                 y: poolY,
                 width: poolWidth,
@@ -384,13 +458,14 @@ export function mapXmlToModel(parsedXml) {
                                     isHorizontal: true
                                 };
                                 // Now create the pool
+                                const width = shapeMap[participantId].width;
                                 const pool = {
                                     id: participantId,
                                     type: 'pool',
-                                    label: participant['@_name'] || 'Pool',
+                                    label: processLabelText(participant['@_name'], 'pool', width) || 'Pool',
                                     x: shapeMap[participantId].x,
                                     y: shapeMap[participantId].y,
-                                    width: shapeMap[participantId].width,
+                                    width: width,
                                     height: shapeMap[participantId].height,
                                     isHorizontal: true,
                                     lanes: [],
@@ -517,7 +592,7 @@ export function mapXmlToModel(parsedXml) {
                         const mappedLane = {
                             id: laneId,
                             type: 'lane',
-                            label: processLabelText(lane['@_name']) || 'Lane',
+                            label: processLabelText(lane['@_name'], 'lane', laneWidth) || 'Lane',
                             x: laneX,
                             y: laneY,
                             width: laneWidth,
@@ -616,14 +691,15 @@ export function mapXmlToModel(parsedXml) {
             for (const task of tasks) {
                 // Get graphical info if available
                 const shape = shapeMap[task['@_id']];
+                const width = shape ? shape.width : 120;
                 const mappedTask = {
                     id: task['@_id'],
                     type: "task",
                     taskType: "task",
-                    label: processLabelText(task['@_name']) || '',
+                    label: processLabelText(task['@_name'], 'task', width) || '',
                     x: shape ? shape.x : 0,
                     y: shape ? shape.y : 0,
-                    width: shape ? shape.width : 120,
+                    width: width,
                     height: shape ? shape.height : 60,
                 };
                 elements.push(mappedTask);
@@ -661,15 +737,16 @@ export function mapXmlToModel(parsedXml) {
                             break;
                         }
                     }
+                    const width = shape ? shape.width : 36;
                     const mappedEvent = {
                         id: event['@_id'],
                         type: "event",
                         eventType: eventType,
                         eventDefinition: eventDefinition,
-                        label: processLabelText(event['@_name']) || '',
+                        label: processLabelText(event['@_name'], 'event', width) || '',
                         x: shape ? shape.x : 0,
                         y: shape ? shape.y : 0,
-                        width: shape ? shape.width : 36,
+                        width: width,
                         height: shape ? shape.height : 36,
                     };
                     console.log(`Created ${eventType} event with definition ${eventDefinition}:`, mappedEvent);
@@ -694,14 +771,15 @@ export function mapXmlToModel(parsedXml) {
                 console.log(`Found ${gateways.length} ${gatewayType} gateways`);
                 for (const gateway of gateways) {
                     const shape = shapeMap[gateway['@_id']];
+                    const width = shape ? shape.width : 50;
                     const mappedGateway = {
                         id: gateway['@_id'],
                         type: "gateway",
                         gatewayType: gatewayType,
-                        label: processLabelText(gateway['@_name']) || '',
+                        label: processLabelText(gateway['@_name'], 'gateway', width) || '',
                         x: shape ? shape.x : 0,
                         y: shape ? shape.y : 0,
-                        width: shape ? shape.width : 50,
+                        width: width,
                         height: shape ? shape.height : 50,
                     };
                     console.log(`Created ${gatewayType} gateway:`, mappedGateway);
@@ -749,7 +827,7 @@ export function mapXmlToModel(parsedXml) {
                     sourcePointId: '',
                     targetPointId: '',
                     waypoints: waypoints ? waypoints : [],
-                    label: processLabelText(flow['@_name']) || '',
+                    label: processLabelText(flow['@_name'], 'connection') || '',
                 };
                 elements.push(mappedConnection);
                 console.log(`Created connection ${mappedConnection.id} from ${sourceId} to ${targetId} with ${mappedConnection.waypoints.length} waypoints`);
