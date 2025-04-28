@@ -5,6 +5,7 @@
   import { onMount } from 'svelte';
   import { importBpmnXml } from '../utils/xml/bpmnXmlParser';
   import { exportBpmnXml, downloadBpmnXml } from '../utils/xml/bpmnXmlExporter';
+  import { exportSvg } from '../utils/svgExporter';
   import { removeNonCornerWaypoints } from '../utils/connectionRouting';
 
   // Import Interaction Managers
@@ -134,6 +135,17 @@
     } catch (error) {
       console.error('Error exporting BPMN XML:', error);
       alert(`Failed to export BPMN XML: ${error.message}`);
+    }
+  }
+
+  // Export SVG handler
+  function handleExportSvg() {
+    try {
+      console.log('Exporting SVG...');
+      exportSvg('diagram.svg');
+    } catch (error) {
+      console.error('Error exporting SVG:', error);
+      alert(`Failed to export SVG: ${error.message}`);
     }
   }
 
@@ -1622,6 +1634,7 @@
     on:zoomOut={() => canvasInteractionManager.zoomOut()}
     on:import={() => document.getElementById('bpmn-import-input').click()}
     on:export={handleExportBpmnXml}
+    on:exportSvg={handleExportSvg}
   />
 
   <div

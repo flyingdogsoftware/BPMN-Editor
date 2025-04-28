@@ -49,6 +49,11 @@
     dispatch('export');
   }
 
+  // Export SVG
+  function exportSvg() {
+    dispatch('exportSvg');
+  }
+
   // Zoom functionality
   function zoomIn() {
     dispatch('zoomIn');
@@ -186,10 +191,15 @@
         <div class="tool-icon import-icon"></div>
         <span>Import</span>
       </button>
-      <!-- Export button -->
+      <!-- Export BPMN XML button -->
       <button on:click={exportBpmnXml} class="tool-button" title="Export BPMN XML">
         <div class="tool-icon export-icon"></div>
-        <span>Export</span>
+        <span>Export XML</span>
+      </button>
+      <!-- Export SVG button -->
+      <button on:click={exportSvg} class="tool-button" title="Export SVG">
+        <div class="tool-icon svg-icon"></div>
+        <span>Export SVG</span>
       </button>
       <!-- Reset button -->
       <button on:click={resetDiagram} class="tool-button" title="Reset Diagram">
@@ -339,6 +349,10 @@
 
   .export-icon {
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M19,9 L15,9 L15,3 L9,3 L9,9 L5,9 L12,16 L19,9 Z M5,18 L5,20 L19,20 L19,18 L5,18 Z' fill='none' stroke='black' stroke-width='1.5'/%3E%3C/svg%3E");
+  }
+
+  .svg-icon {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M5,4 h14 a2,2 0 0 1 2,2 v12 a2,2 0 0 1 -2,2 h-14 a2,2 0 0 1 -2,-2 v-12 a2,2 0 0 1 2,-2 z' fill='none' stroke='black' stroke-width='1.5'/%3E%3Cpath d='M7,7 l2,10 l3,-7 l3,7 l2,-10' fill='none' stroke='black' stroke-width='1.5'/%3E%3C/svg%3E");
   }
 
   /* Import and Export buttons now use the standard tool-button class */
