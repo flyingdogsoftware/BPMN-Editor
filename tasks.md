@@ -4,9 +4,6 @@
 
 ### Project Setup
 - [x] Initialize Svelte 4 with TypeScript
-- [ ] Configure ESLint and Prettier
-- [ ] Set up Jest/Vitest for testing
-- [ ] Set up Storybook for component documentation
 - [x] Create directory structure
 - [x] Remove TypeScript annotations for JavaScript compatibility
 
@@ -19,7 +16,7 @@
 
 ### State Management
 - [x] Create Svelte stores for editor state
-- [ ] Implement command system for undo/redo
+- [X] Implement command system for undo/redo
 - [x] Implement basic commands (add, remove, move)
 - [x] Implement selection mechanism
 - [ ] Write unit tests for state management
@@ -28,7 +25,7 @@
 
 ### SVG Base Components
 - [x] Implement canvas component with SVG
-- [ ] Add zoom and pan functionality
+- [x] Add zoom and pan functionality
 - [x] Implement grid with snapping functionality
 - [ ] Implement coordinate system transformations
 - [ ] Create minimap for navigation in large diagrams
@@ -47,15 +44,13 @@
   - [x] Define all gateway types (exclusive, inclusive, parallel, complex, event-based)
   - [x] Define data objects, data stores, and artifacts
   - [x] Define pools and lanes
-- [ ] Write tests for rendering components
 
 ### Interaction Components
-- [ ] Implement palette with drag & drop
-- [ ] Create context menu system
-- [ ] Implement properties panel
-- [ ] Create toolbar with actions (zoom, undo/redo, etc.)
-- [ ] Implement keyboard shortcut handler
-- [ ] Write tests for interaction components
+- [X] Implement palette with drag & drop
+- [X] Create context menu system
+- [X] Implement properties panel
+- [X] Create toolbar with actions (zoom, undo/redo, etc.)
+- [X] Implement keyboard shortcut handler
 
 ## Phase 3: Core Functionality
 
@@ -115,24 +110,16 @@
   - [x] Position labels automatically
   - [x] Allow manual label positioning
   - [x] Support condition expressions for sequence flows
+  - [x] Implement automatic line breaks for labels
 
-
-### Property Editing
-- [ ] Implement dynamic properties panel
-- [ ] Create element type-specific property editors
-- [ ] Implement validation for properties
-- [ ] Integrate property changes into undo/redo
-- [ ] Write tests for property editing
 
 ## Phase 4: Advanced Features
 
 ### Import/Export
-- [ ] Implement BPMN XML parser
-- [ ] Implement BPMN XML generator
+- [x] Implement BPMN XML parser
+- [x] Implement BPMN XML generator
 - [ ] Add SVG export functionality
-- [ ] Add PNG/PDF export functionality
 - [ ] Implement drag & drop import of BPMN files
-- [ ] Write tests for import/export functionality
 
 ### Validation
 - [ ] Define validation rules for BPMN syntax
@@ -157,13 +144,6 @@
 - [ ] Optimize rendering performance
 - [ ] Optimize memory usage
 - [ ] Conduct performance tests
-
-### Extensibility
-- [ ] Implement plugin system
-- [ ] Add theming support
-- [ ] Define API for external integration
-- [ ] Create documentation for plugin development
-- [ ] Implement example plugins
 
 ### Usability
 - [ ] Add tooltips and help texts
