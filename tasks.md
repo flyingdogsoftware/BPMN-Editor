@@ -118,7 +118,7 @@
 ### Import/Export
 - [x] Implement BPMN XML parser
 - [x] Implement BPMN XML generator
-- [ ] Add SVG export functionality
+- [X] Add SVG export functionality
 - [ ] Implement drag & drop import of BPMN files
 
 ### Validation

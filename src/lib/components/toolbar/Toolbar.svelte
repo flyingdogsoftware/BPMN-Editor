@@ -3,6 +3,7 @@
   import ElementCreationDialog from './ElementCreationDialog.svelte';
   import { multiSelectionManager } from '../../services/MultiSelectionManager';
   import UndoRedoControls from '../UndoRedoControls.svelte';
+  import FlyingDogLogo from './FlyingDogLogo.svelte';
 
   const dispatch = createEventDispatcher();
   let showElementDialog = false;
@@ -106,6 +107,9 @@
 </script>
 
 <div class="toolbar">
+  <!-- Flying Dog Logo -->
+  <FlyingDogLogo />
+
   <!-- Common elements -->
   <div class="toolbar-section">
     <h3>Common Elements</h3>
@@ -225,6 +229,7 @@
     display: flex;
     flex-wrap: wrap;
     gap: 20px;
+    position: relative; /* Added for absolute positioning of the flying dog logo */
   }
 
   .toolbar-section {

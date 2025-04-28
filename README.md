@@ -1,13 +1,13 @@
 # BPMN Editor
 
-A custom BPMN (Business Process Model and Notation) editor built with Svelte 4 and TypeScript.
+A custom BPMN (Business Process Model and Notation) editor
+
+Visit [Flying Dog](https://www.flyingdog.de) for more information.
 
 ## Features
 
 - Custom BPMN editor built from scratch
-- TypeScript support for type safety
-- Svelte 4 for reactive UI components
-- SvelteKit for routing and project structure
+- Svelte for reactive UI components
 - Support for BPMN elements (tasks, events, gateways)
 - Interactive canvas for diagram editing
 
@@ -37,19 +37,24 @@ You can preview the production build with `npm run preview`.
 ```
 src/
 ├── lib/
-│   ├── components/    # UI components
-│   │   └── BpmnEditor.svelte
-│   ├── stores/        # Svelte stores for state management
-│   │   └── bpmnStore.ts
-│   ├── types/         # TypeScript type definitions
-│   │   └── bpmn.ts
-│   └── index.ts       # Library exports
-├── routes/            # SvelteKit routes
-│   └── +page.svelte   # Main page
-├── styles/            # Global styles
-│   └── global.css
-├── app.d.ts           # TypeScript declarations
-└── app.html           # HTML template
+│   ├── components/            # UI components
+│   │   ├── connections/       # Connection-related components
+│   │   ├── renderers/         # Element rendering components
+│   │   ├── toolbar/           # Editor toolbar components
+│   │   └── BpmnEditor.svelte  # Main editor component
+│   ├── models/                # Data models
+│   ├── services/              # Service modules
+│   ├── stores/                # Svelte stores for state management
+│   ├── types/                 # Type definitions
+│   └── utils/                 # Utility functions
+│       └── xml/               # XML processing utilities
+├── routes/                    # SvelteKit routes
+│   ├── connection-test/       # Connection testing routes
+│   ├── test/                  # Test routes
+│   ├── test-connections/      # Connection test routes
+│   ├── test-export/           # Export testing routes
+│   └── test-import/           # Import testing routes
+└── styles/                    # Global styles
 ```
 
 > This project is a custom implementation of a BPMN editor without using bpmn-js or other existing libraries.
