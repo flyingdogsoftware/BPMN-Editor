@@ -1,10 +1,10 @@
 {
 	"name": "@fds-components-public/bpmn-editor",
 	"private": false,
-	"version": "1.0.1",
+	"version": "1.0.2",
 	"type": "module",
-	"description": "A custom BPMN (Business Process Model and Notation) editor built with SvelteKit",
-	"keywords": ["bpmn", "editor", "svelte", "sveltekit", "diagram", "workflow"],
+	"description": "A custom BPMN (Business Process Model and Notation) editor built with Svelte",
+	"keywords": ["bpmn", "editor", "svelte", "diagram", "workflow", "component"],
 	"license": "MIT",
 	"homepage": "https://github.com/flyingdogsoftware/BPMN-Editor#readme",
 	"repository": {
@@ -14,28 +14,29 @@
 	"bugs": {
 		"url": "https://github.com/flyingdogsoftware/BPMN-Editor/issues"
 	},
-	"main": "build/index.html",
+	"main": "dist/bpmn-editor.umd.js",
+	"module": "dist/bpmn-editor.es.js",
+	"exports": {
+		".": {
+			"import": "./dist/bpmn-editor.es.js",
+			"require": "./dist/bpmn-editor.umd.js"
+		},
+		"./dist/style.css": "./dist/style.css"
+	},
 	"files": [
-		"build/**/*",
+		"dist/**/*",
 		"README.md",
 		"package.json"
 	],
 	"scripts": {
-		"dev": "vite dev",
+		"dev": "vite",
 		"build": "vite build",
 		"preview": "vite preview",
 		"publish": "npm run build",
-		"start": "npx serve build -s -l 3000",
-		"start:python": "cd build && python3 -m http.server 3000",
-		"prepare": "svelte-kit sync || echo ''",
 		"prepublishOnly": "npm run build",
-		"check": "svelte-kit sync && svelte-check",
-		"check:watch": "svelte-kit sync && svelte-check --watch"
+		"check": "svelte-check"
 	},
 	"devDependencies": {
-		"@sveltejs/adapter-auto": "^2.0.0",
-		"@sveltejs/adapter-static": "^2.0.3",
-		"@sveltejs/kit": "^1.20.0",
 		"@sveltejs/vite-plugin-svelte": "^2.0.0",
 		"svelte": "^4.2.0",
 		"svelte-check": "^3.8.6",
@@ -43,5 +44,8 @@
 	},
 	"dependencies": {
 		"fast-xml-parser": "^5.2.0"
+	},
+	"peerDependencies": {
+		"svelte": "^4.0.0"
 	}
 }

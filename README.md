@@ -1,62 +1,109 @@
 # BPMN Editor
 
-A custom BPMN (Business Process Model and Notation) editor
+A custom BPMN (Business Process Model and Notation) editor built with Svelte
 
 Visit [Flying Dog](https://www.flyingdog.de) for more information.
 
 ## Features
 
 - Custom BPMN editor built from scratch
-- Svelte for reactive UI components
+- Pure Svelte component library
 - Support for BPMN elements (tasks, events, gateways)
 - Interactive canvas for diagram editing
+- Easy integration into any web application
+- No server dependencies - runs entirely client-side
+
+## Installation
+
+Install the package via npm:
+
+```bash
+npm install @fds-components-public/bpmn-editor
+```
+
+## Usage
+
+### As ES Module
+
+```javascript
+import BpmnEditor from '@fds-components-public/bpmn-editor';
+import '@fds-components-public/bpmn-editor/dist/style.css';
+
+const editor = new BpmnEditor({
+    target: document.getElementById('bpmn-editor')
+});
+```
+
+### As Script Tag
+
+```html
+<link rel="stylesheet" href="./node_modules/@fds-components-public/bpmn-editor/dist/style.css">
+<script src="./node_modules/@fds-components-public/bpmn-editor/dist/bpmn-editor.js"></script>
+
+<div id="bpmn-editor"></div>
+
+<script>
+    const editor = new BpmnEditor({
+        target: document.getElementById('bpmn-editor')
+    });
+</script>
+```
 
 ## Developing
 
-Once you've created a project and installed dependencies with `npm install` (or `pnpm install` or `yarn`), start a development server:
+Once you've cloned the project and installed dependencies with `npm install`, start the development server:
 
 ```bash
 npm run dev
-
-# or start the server and open the app in a new browser tab
-npm run dev -- --open
 ```
+
+This will start Vite dev server and open the demo page.
 
 ## Building
 
-To create a production version of your app:
+To create a production version of the library:
 
 ```bash
 npm run build
 ```
 
-You can preview the production build with `npm run preview`.
+This creates the distributable files in the `dist/` directory.
 
-## Running as Static Site (Client-Side Only)
+## Demo
 
-This project can run entirely on the client-side without needing Node.js in production:
+After building, you can view the demo:
 
-### Option 1: Using npm start (requires Node.js for serve package)
 ```bash
 npm run build
-npm run start
+npm run preview
 ```
 
-### Option 2: Using Python (no Node.js required)
-```bash
-npm run build
-npm run start:python
+Or open `demo.html` in your browser to see how to use the built library.
+
+## API
+
+The BPMN Editor exports the following:
+
+```javascript
+import BpmnEditor, {
+    bpmnStore,
+    importBpmnXml,
+    exportBpmnXml,
+    exportSvg
+} from '@fds-components-public/bpmn-editor';
+
+// Main component
+const editor = new BpmnEditor({ target: element });
+
+// Access to the store for programmatic control
+bpmnStore.addElement(element);
+bpmnStore.removeElement(id);
+
+// Import/Export utilities
+const elements = importBpmnXml(xmlString);
+const xml = exportBpmnXml(elements);
+const svg = exportSvg(elements);
 ```
-
-### Option 3: Using any web server
-After running `npm run build`, you can serve the `build/` directory with any web server:
-- Apache
-- Nginx
-- Python: `cd build && python3 -m http.server 3000`
-- PHP: `cd build && php -S localhost:3000`
-- Or simply open `build/index.html` in your browser
-
-The built files are completely static and don't require a Node.js server to run.
 
 ## Project Structure
 
@@ -74,8 +121,8 @@ src/
 │   ├── types/                 # Type definitions
 │   └── utils/                 # Utility functions
 │       └── xml/               # XML processing utilities
-├── routes/                    # SvelteKit routes
-│   ├── connection-test/       # Connection testing routes
+├── styles/                    # Global styles
+└── main.js                    # Library entry point
 │   ├── test/                  # Test routes
 │   ├── test-connections/      # Connection test routes
 │   ├── test-export/           # Export testing routes
