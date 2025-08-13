@@ -1,18 +1,40 @@
 {
-	"name": "bpmn-editor2",
-	"private": true,
-	"version": "0.0.1",
+	"name": "@fds-components-public/bpmn-editor",
+	"private": false,
+	"version": "1.0.1",
 	"type": "module",
+	"description": "A custom BPMN (Business Process Model and Notation) editor built with SvelteKit",
+	"keywords": ["bpmn", "editor", "svelte", "sveltekit", "diagram", "workflow"],
+	"license": "MIT",
+	"homepage": "https://github.com/flyingdogsoftware/BPMN-Editor#readme",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/flyingdogsoftware/BPMN-Editor.git"
+	},
+	"bugs": {
+		"url": "https://github.com/flyingdogsoftware/BPMN-Editor/issues"
+	},
+	"main": "build/index.html",
+	"files": [
+		"build/**/*",
+		"README.md",
+		"package.json"
+	],
 	"scripts": {
 		"dev": "vite dev",
 		"build": "vite build",
 		"preview": "vite preview",
+		"publish": "npm run build",
+		"start": "npx serve build -s -l 3000",
+		"start:python": "cd build && python3 -m http.server 3000",
 		"prepare": "svelte-kit sync || echo ''",
+		"prepublishOnly": "npm run build",
 		"check": "svelte-kit sync && svelte-check",
 		"check:watch": "svelte-kit sync && svelte-check --watch"
 	},
 	"devDependencies": {
 		"@sveltejs/adapter-auto": "^2.0.0",
+		"@sveltejs/adapter-static": "^2.0.3",
 		"@sveltejs/kit": "^1.20.0",
 		"@sveltejs/vite-plugin-svelte": "^2.0.0",
 		"svelte": "^4.2.0",
