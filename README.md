@@ -34,20 +34,22 @@ const editor = new BpmnEditor({
 });
 ```
 
-### As Script Tag
+### As Script Tag (No Dependencies Required)
 
 ```html
 <link rel="stylesheet" href="./node_modules/@fds-components-public/bpmn-editor/dist/style.css">
-<script src="./node_modules/@fds-components-public/bpmn-editor/dist/bpmn-editor.js"></script>
+<script src="./node_modules/@fds-components-public/bpmn-editor/dist/bpmn-editor.umd.js"></script>
 
 <div id="bpmn-editor"></div>
 
 <script>
-    const editor = new BpmnEditor({
+    const editor = new BpmnEditor.default({
         target: document.getElementById('bpmn-editor')
     });
 </script>
 ```
+
+**Note**: The UMD build includes Svelte bundled, so no external dependencies are required.
 
 ## Developing
 
@@ -71,14 +73,29 @@ This creates the distributable files in the `dist/` directory.
 
 ## Demo
 
-After building, you can view the demo:
+### Quick Start (Production Build)
+
+To run the editor from the built files:
 
 ```bash
 npm run build
-npm run preview
+npm run start
 ```
 
-Or open `demo.html` in your browser to see how to use the built library.
+This will serve the `dist/index.html` file at `http://localhost:3000` which loads the BPMN editor using the production bundle.
+
+### Development
+
+For development with hot reload:
+
+```bash
+npm run dev
+```
+
+### Other Demo Options
+
+- Open `demo.html` in your browser to see how to use the built library
+- Open `simple.html` for a minimal example
 
 ## API
 

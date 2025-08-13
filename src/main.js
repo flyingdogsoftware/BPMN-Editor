@@ -2,9 +2,8 @@
 import BpmnEditor from './lib/components/BpmnEditor.svelte';
 import './styles/global.css';
 
-// Export the main component as default and named export
+// Export the main component as default
 export default BpmnEditor;
-export { BpmnEditor };
 
 // Export stores and utilities that might be useful for external consumers
 export { bpmnStore } from './lib/stores/bpmnStore';

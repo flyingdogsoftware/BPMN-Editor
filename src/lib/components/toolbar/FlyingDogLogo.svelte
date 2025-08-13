@@ -11,7 +11,7 @@
   title="Visit Flying Dog Website"
   aria-label="Visit Flying Dog Website"
 >
-  <img src="/src/dogs/flyingdog.svg" alt="Flying Dog Logo" />
+  <img src="/images/flyingdog.svg" alt="Flying Dog Logo" />
 </button>
 
 <style>
