@@ -1,7 +1,7 @@
 {
 	"name": "@fds-components-public/bpmn-editor",
 	"private": false,
-	"version": "1.0.3",
+	"version": "1.0.4",
 	"type": "module",
 	"description": "A custom BPMN (Business Process Model and Notation) editor built with Svelte",
 	"keywords": ["bpmn", "editor", "svelte", "diagram", "workflow", "component"],
