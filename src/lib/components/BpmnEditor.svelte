@@ -124,6 +124,40 @@
     }
   }
 
+  // Function to import the fortbildungsanmeldung BPMN file on startup
+  async function importFortbildungsanmeldungFile() {
+    try {
+      // Fetch the fortbildungsanmeldung file
+      const response = await fetch('/static/fortbildungsanmeldung.bpmn');
+      if (!response.ok) {
+        throw new Error(`Failed to fetch fortbildungsanmeldung file: ${response.statusText}`);
+      }
+
+      const xmlString = await response.text();
+      console.log('Importing fortbildungsanmeldung BPMN XML...');
+      console.log('XML content:', xmlString);
+
+      const elements = importBpmnXml(xmlString);
+      console.log('Imported elements:', elements);
+
+      // Log pools and lanes specifically
+      const pools = elements.filter(el => el.type === 'pool');
+      const lanes = elements.filter(el => el.type === 'lane');
+      console.log('Imported pools:', JSON.stringify(pools, null, 2));
+      console.log('Imported lanes:', JSON.stringify(lanes, null, 2));
+
+      // Reset the store and add the imported elements
+      bpmnStore.reset();
+      elements.forEach(el => bpmnStore.addElement(el));
+
+      // Log the store after import
+      console.log('Store after import:', $bpmnStore);
+    } catch (err) {
+      console.error('Failed to import fortbildungsanmeldung BPMN XML:', err);
+      console.log('Note: This is expected on startup if the file is not found');
+    }
+  }
+
   // Export BPMN XML handler
   function handleExportBpmnXml() {
     try {
@@ -307,8 +341,11 @@
       // Initialize the CanvasInteractionManager
       canvasInteractionManager.initializeCanvas();
 
-      // Center the viewport on the diagram elements
-      centerViewportOnElements();
+      // Note: Automatic loading of fortbildungsanmeldung.bpmn removed per user request
+      // importFortbildungsanmeldungFile().then(() => {
+      //   // Center the viewport on the diagram elements after loading
+      //   centerViewportOnElements();
+      // });
 
       return () => {
         canvasInteractionManager.cleanup();

@@ -683,28 +683,42 @@ export function mapXmlToModel(parsedXml) {
         ? definitions['bpmn:process']
         : [definitions['bpmn:process']].filter(Boolean);
     for (const process of processes) {
-        // Map tasks
-        if (process['bpmn:task']) {
-            const tasks = Array.isArray(process['bpmn:task'])
-                ? process['bpmn:task']
-                : [process['bpmn:task']];
-            for (const task of tasks) {
-                // Get graphical info if available
-                const shape = shapeMap[task['@_id']];
-                const width = shape ? shape.width : 120;
-                const mappedTask = {
-                    id: task['@_id'],
-                    type: "task",
-                    taskType: "task",
-                    label: processLabelText(task['@_name'], 'task', width) || '',
-                    x: shape ? shape.x : 0,
-                    y: shape ? shape.y : 0,
-                    width: width,
-                    height: shape ? shape.height : 60,
-                };
-                elements.push(mappedTask);
+        // Map all task types
+        // Helper function to map tasks of a specific type
+        function mapTasks(taskType, taskXmlKey) {
+            if (process[taskXmlKey]) {
+                const tasks = Array.isArray(process[taskXmlKey])
+                    ? process[taskXmlKey]
+                    : [process[taskXmlKey]];
+                console.log(`Found ${tasks.length} ${taskType} tasks`);
+                for (const task of tasks) {
+                    // Get graphical info if available
+                    const shape = shapeMap[task['@_id']];
+                    const width = shape ? shape.width : 120;
+                    const mappedTask = {
+                        id: task['@_id'],
+                        type: "task",
+                        taskType: taskType,
+                        label: processLabelText(task['@_name'], 'task', width) || '',
+                        x: shape ? shape.x : 0,
+                        y: shape ? shape.y : 0,
+                        width: width,
+                        height: shape ? shape.height : 60,
+                    };
+                    elements.push(mappedTask);
+                }
             }
         }
+
+        // Map all task types
+        mapTasks('task', 'bpmn:task');
+        mapTasks('user', 'bpmn:userTask');
+        mapTasks('service', 'bpmn:serviceTask');
+        mapTasks('send', 'bpmn:sendTask');
+        mapTasks('receive', 'bpmn:receiveTask');
+        mapTasks('manual', 'bpmn:manualTask');
+        mapTasks('business-rule', 'bpmn:businessRuleTask');
+        mapTasks('script', 'bpmn:scriptTask');
         // Map all event types
         // Helper function to map events of a specific type
         function mapEvents(eventType, eventXmlKey, defaultDefinition = 'none') {
