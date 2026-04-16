@@ -423,6 +423,10 @@
   let elementManagerComponent;
   let connectionManagerComponent;
 
+  function clearConnectionEditMode() {
+    connectionManagerComponent?.clearConnectionSelection?.();
+  }
+
   // Function to force a refresh of a connection's rendering
   function forceConnectionRefresh(connectionId) {
     console.log('DEBUG: Forcing refresh of connection', connectionId);
@@ -556,6 +560,63 @@
     bpmnStore.addElement(defaultLane);
   }
 
+  function getPoolLanes(pool) {
+    if (!pool?.lanes?.length) return [];
+
+    return pool.lanes
+      .map(laneId => $bpmnStore.find(el => el.id === laneId && el.type === 'lane'))
+      .filter(Boolean);
+  }
+
+  function layoutPoolLanes(pool, nextPoolBounds, { preserveCurrentRatios = true, lanes = null } = {}) {
+    const orderedLanes = lanes || getPoolLanes(pool);
+    if (!orderedLanes.length) return;
+
+    const isHorizontal = pool.isHorizontal !== false;
+    const totalCurrentSize = orderedLanes.reduce(
+      (sum, lane) => sum + (isHorizontal ? lane.height : lane.width),
+      0
+    );
+
+    const sizeRatios = preserveCurrentRatios && totalCurrentSize > 0
+      ? orderedLanes.map(lane => (isHorizontal ? lane.height : lane.width) / totalCurrentSize)
+      : orderedLanes.map(() => 1 / orderedLanes.length);
+
+    let currentOffset = isHorizontal ? nextPoolBounds.y : nextPoolBounds.x;
+    const poolEnd = isHorizontal
+      ? nextPoolBounds.y + nextPoolBounds.height
+      : nextPoolBounds.x + nextPoolBounds.width;
+    const availableCrossSize = isHorizontal
+      ? nextPoolBounds.width - 30
+      : nextPoolBounds.height - 30;
+    const newPrimarySize = isHorizontal ? nextPoolBounds.height : nextPoolBounds.width;
+
+    orderedLanes.forEach((lane, index) => {
+      const laneSize = index === orderedLanes.length - 1
+        ? poolEnd - currentOffset
+        : newPrimarySize * sizeRatios[index];
+
+      const normalizedLaneSize = Math.max(0, laneSize);
+
+      bpmnStore.updateElement(lane.id, isHorizontal
+        ? {
+          x: nextPoolBounds.x + 30,
+          y: currentOffset,
+          width: availableCrossSize,
+          height: normalizedLaneSize,
+          heightPercentage: newPrimarySize > 0 ? (normalizedLaneSize / newPrimarySize) * 100 : 0
+        }
+        : {
+          x: currentOffset,
+          y: nextPoolBounds.y + 30,
+          width: normalizedLaneSize,
+          height: availableCrossSize
+        });
+
+      currentOffset += normalizedLaneSize;
+    });
+  }
+
   // Add a new lane to an existing pool
   function addLane(poolId, label = 'Lane') {
     // Find the pool
@@ -563,48 +624,37 @@
     if (!pool) return;
 
     // Find existing lanes in this pool
-    const existingLanes = $bpmnStore.filter(el =>
-      el.type === 'lane' &&
-      pool.lanes && pool.lanes.includes(el.id)
-    );
-
-    // Calculate the height for each lane (including the new one)
-    const laneCount = existingLanes.length + 1;
-    const laneHeight = pool.height / laneCount;
+    const existingLanes = getPoolLanes(pool);
+    const nextLaneIds = [...(pool.lanes || []), `lane-${Date.now()}`];
+    const newLaneId = nextLaneIds[nextLaneIds.length - 1];
 
     // Create a new lane
     const newLane = {
-      id: `lane-${Date.now()}`,
+      id: newLaneId,
       type: 'lane',
       label: label,
       x: pool.x + 30, // Account for pool label area
-      y: pool.y, // Will be set correctly below
+      y: pool.y,
       width: pool.width - 30, // Pool width minus label area
-      height: laneHeight,
+      height: pool.isHorizontal ? pool.height : pool.height - 30,
       isHorizontal: pool.isHorizontal,
       parentRef: pool.id,
       flowNodeRefs: []
     };
-
-    // Update existing lanes to adjust their heights and positions
-    existingLanes.forEach((lane, index) => {
-      bpmnStore.updateElement(lane.id, {
-        height: laneHeight,
-        // Adjust y positions to stack lanes vertically
-        y: pool.y + (index * laneHeight)
-      });
-    });
-
-    // Position the new lane at the bottom
-    newLane.y = pool.y + (existingLanes.length * laneHeight);
 
     // Add the new lane to the store
     bpmnStore.addElement(newLane);
 
     // Update the pool to include the new lane
     bpmnStore.updateElement(pool.id, {
-      lanes: [...(pool.lanes || []), newLane.id]
+      lanes: nextLaneIds
     });
+
+    layoutPoolLanes(
+      { ...pool, lanes: nextLaneIds },
+      pool,
+      { preserveCurrentRatios: false, lanes: [...existingLanes, newLane] }
+    );
   }
 
   // Right-click handlers removed
@@ -612,6 +662,10 @@
   // Start dragging an element - delegated to ElementInteractionManager
   function handleMouseDown(event, element) {
     console.log('DEBUG: handleMouseDown called for element:', element.id, 'type:', element.type);
+
+    if (event.button === 0) {
+      clearConnectionEditMode();
+    }
 
     // Check if element is inside a pool
     if (element.type !== 'pool' && element.type !== 'lane') {
@@ -1045,35 +1099,12 @@
 
     // If this is a pool, also update its lanes
     if (element.type === 'pool' && element.lanes && element.lanes.length > 0) {
-      // Update all lanes in this pool
-      element.lanes.forEach(laneId => {
-        const lane = $bpmnStore.find(el => el.id === laneId && el.type === 'lane');
-        if (lane) {
-          // Update lane width and height based on pool's new dimensions
-          bpmnStore.updateElement(lane.id, {
-            width: newWidth - 30, // Pool width minus label area
-            height: newHeight / element.lanes.length // Divide height equally among lanes
-          });
-        }
-      });
-
-      // Reposition lanes vertically if needed
-      let currentY = element.y;
-      element.lanes.forEach((laneId) => {
-        const lane = $bpmnStore.find(el => el.id === laneId && el.type === 'lane');
-        if (lane) {
-          // Use heightPercentage if available, otherwise divide equally
-          const heightPercentage = lane.type === 'lane' && lane.heightPercentage ? lane.heightPercentage : (100 / element.lanes.length);
-          const laneHeight = (newHeight * heightPercentage) / 100;
-
-          bpmnStore.updateElement(lane.id, {
-            y: currentY,
-            height: laneHeight
-          });
-
-          // Update currentY for the next lane
-          currentY += laneHeight;
-        }
+      layoutPoolLanes(element, {
+        ...element,
+        width: newWidth,
+        height: newHeight,
+        x: newX,
+        y: newY
       });
     }
     // If this is a lane, handle lane resizing
@@ -1300,17 +1331,12 @@
 
     // If this is a pool, also update its lanes
     if (element.type === 'pool' && element.lanes && element.lanes.length > 0) {
-      // Update all lanes in this pool
-      const laneHeight = finalHeight / element.lanes.length;
-      element.lanes.forEach((laneId, index) => {
-        const lane = $bpmnStore.find(el => el.id === laneId && el.type === 'lane');
-        if (lane) {
-          bpmnStore.updateElement(lane.id, {
-            width: finalWidth - 30, // Pool width minus label area
-            height: laneHeight,
-            y: element.y + (index * laneHeight)
-          });
-        }
+      layoutPoolLanes(element, {
+        ...element,
+        width: finalWidth,
+        height: finalHeight,
+        x: finalX,
+        y: finalY
       });
     }
 
@@ -1444,6 +1470,8 @@
         console.log('BPMN-EDITOR-CANVAS-DOWN: Not left mouse button, returning');
         return;
       }
+
+      clearConnectionEditMode();
 
       event.preventDefault();
 

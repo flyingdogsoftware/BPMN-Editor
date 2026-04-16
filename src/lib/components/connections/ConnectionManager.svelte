@@ -29,6 +29,20 @@
   // Get all elements that are not connections
   $: elements = $bpmnStore.filter(el => el.type !== 'connection');
 
+  export function clearConnectionSelection() {
+    if (!selectedConnectionId && !connections.some(conn => conn.isSelected)) {
+      return;
+    }
+
+    connections.forEach(conn => {
+      if (conn.isSelected) {
+        bpmnStore.updateElement(conn.id, { isSelected: false });
+      }
+    });
+
+    selectedConnectionId = null;
+  }
+
   // Handle connection selection
   function handleConnectionSelect(connectionId) {
     console.log('ConnectionManager: handleConnectionSelect called with', connectionId);
@@ -36,14 +50,9 @@
 
     // Toggle selection
     if (connectionId === selectedConnectionId) {
-      selectedConnectionId = null;
+      clearConnectionSelection();
     } else {
-      // Deselect any previously selected connection in the store
-      connections.forEach(conn => {
-        if (conn.isSelected) {
-          bpmnStore.updateElement(conn.id, { isSelected: false });
-        }
-      });
+      clearConnectionSelection();
 
       // Select the new connection
       selectedConnectionId = connectionId;
@@ -221,6 +230,23 @@
     contextMenuConnection = null;
   }
 
+  function handleWindowClick(event) {
+    hideContextMenu();
+
+    if (isCreatingConnection) {
+      return;
+    }
+
+    const clickPath = typeof event.composedPath === 'function' ? event.composedPath() : [];
+    const clickedConnection = clickPath.some(node =>
+      node?.classList?.contains?.('connection')
+    );
+
+    if (!clickedConnection) {
+      clearConnectionSelection();
+    }
+  }
+
   // Handle context menu actions
   function handleContextMenuAction(action) {
     if (!contextMenuConnection) return;
@@ -365,7 +391,7 @@
     if (isBrowser) {
       window.addEventListener('mousemove', handleMouseMove);
       window.addEventListener('mouseup', handleMouseUp);
-      window.addEventListener('click', hideContextMenu);
+      window.addEventListener('click', handleWindowClick);
     }
   });
 
@@ -373,7 +399,7 @@
     if (isBrowser) {
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
-      window.removeEventListener('click', hideContextMenu);
+      window.removeEventListener('click', handleWindowClick);
     }
   });
 </script>
