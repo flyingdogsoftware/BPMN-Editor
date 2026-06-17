@@ -1,10 +1,17 @@
 {
 	"name": "@fds-components-public/bpmn-editor",
 	"private": false,
-	"version": "1.0.11",
+	"version": "1.0.12",
 	"type": "module",
 	"description": "A custom BPMN (Business Process Model and Notation) editor built with Svelte",
-	"keywords": ["bpmn", "editor", "svelte", "diagram", "workflow", "component"],
+	"keywords": [
+		"bpmn",
+		"editor",
+		"svelte",
+		"diagram",
+		"workflow",
+		"component"
+	],
 	"license": "MIT",
 	"homepage": "https://github.com/flyingdogsoftware/BPMN-Editor#readme",
 	"repository": {
@@ -46,5 +53,8 @@
 	},
 	"dependencies": {
 		"fast-xml-parser": "^5.3.4"
+	},
+	"overrides": {
+		"esbuild": "0.28.1"
 	}
 }

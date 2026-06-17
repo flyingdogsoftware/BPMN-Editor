@@ -20,6 +20,7 @@ export default defineConfig(({ command }) => {
 		// Only use lib config for production builds
 		...(isProduction && {
 			build: {
+					target: 'es2020',
 				lib: {
 					entry: resolve(__dirname, 'src/main.js'),
 					name: 'BpmnEditor',
