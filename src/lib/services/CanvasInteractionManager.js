@@ -1,3 +1,8 @@
+/** Zoomgrenzen. 10 % statt frueher 20 %: ein Diagramm mit mehreren Pools
+ *  passt bei 20 % nicht auf den Schirm. */
+export const MIN_ZOOM = 0.1;
+export const MAX_ZOOM = 1.0;
+
 import { writable, derived } from 'svelte/store';
 /**
  * CanvasInteractionManager
@@ -277,6 +282,73 @@ export class CanvasInteractionManager {
         return viewport;
     }
     /**
+     * Passt Zoom und Verschiebung so an, dass alle Elemente sichtbar sind.
+     *
+     * Das frueher vorhandene centerViewportOnElements verschiebt nur und
+     * aendert den Zoom nie - ein Diagramm, das breiter ist als das Fenster,
+     * konnte damit grundsaetzlich nicht vollstaendig sichtbar werden.
+     *
+     * Die Darstellung ist translate(x, y) scale(z) mit Ursprung oben links:
+     * ein Diagrammpunkt p erscheint bei viewport + p * zoom.
+     *
+     * @param {Array<object>} elements
+     * @param {{ width?: number, height?: number, padding?: number }} [options]
+     * @returns {boolean} false, wenn nichts einzupassen war
+     */
+    fitToElements(elements, options = {}) {
+        const nodes = (elements || []).filter(el => el
+            && el.type !== 'connection'
+            && Number.isFinite(el.x) && Number.isFinite(el.y)
+            && Number.isFinite(el.width) && Number.isFinite(el.height));
+        if (!nodes.length) {
+            this.viewportStore.update(v => ({ ...v, x: 0, y: 0, zoomLevel: MAX_ZOOM }));
+            return false;
+        }
+
+        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+        for (const el of nodes) {
+            minX = Math.min(minX, el.x);
+            minY = Math.min(minY, el.y);
+            maxX = Math.max(maxX, el.x + el.width);
+            maxY = Math.max(maxY, el.y + el.height);
+        }
+        // Beschriftungen von Ereignissen stehen ausserhalb der Form.
+        const labelSlack = 40;
+        minX -= labelSlack; minY -= labelSlack;
+        maxX += labelSlack; maxY += labelSlack;
+
+        const padding = options.padding ?? 24;
+        let width = options.width;
+        let height = options.height;
+        if (!width || !height) {
+            const container = typeof document !== 'undefined'
+                ? document.getElementById('canvas-container') : null;
+            if (container) {
+                const rect = container.getBoundingClientRect();
+                width = width || rect.width;
+                height = height || rect.height;
+            }
+        }
+        width = width || (typeof window !== 'undefined' ? window.innerWidth : 0);
+        height = height || (typeof window !== 'undefined' ? window.innerHeight : 0);
+        // Ohne messbaren Ausschnitt (verborgener Tab, noch nicht ausgelegt)
+        // wird nichts veraendert - ein Zoom aus einer Nullbreite gerechnet
+        // waere Unsinn.
+        if (!(width > 1) || !(height > 1)) return false;
+
+        const usableW = Math.max(1, width - 2 * padding);
+        const usableH = Math.max(1, height - 2 * padding);
+        const boxW = Math.max(1, maxX - minX);
+        const boxH = Math.max(1, maxY - minY);
+
+        const zoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, Math.min(usableW / boxW, usableH / boxH)));
+        const x = padding - minX * zoom + (usableW - boxW * zoom) / 2;
+        const y = padding - minY * zoom + (usableH - boxH * zoom) / 2;
+
+        this.viewportStore.update(v => ({ ...v, x, y, zoomLevel: zoom }));
+        return true;
+    }
+    /**
      * Bereinigt Event-Listener
      */
     cleanup() {
@@ -291,12 +363,11 @@ export class CanvasInteractionManager {
     zoomOut(step = 0.1) {
         this.viewportStore.update(viewport => {
             // Berechne neuen Zoom-Level, aber nicht unter 0.2 (20%)
-            const newZoomLevel = Math.max(0.2, viewport.zoomLevel - step);
+            const newZoomLevel = Math.max(MIN_ZOOM, viewport.zoomLevel - step);
             // Nur Werte kleiner als 1.0 (100%) erlauben
-            if (newZoomLevel > 1.0) {
-                return viewport; // Keine Änderung, wenn über 100%
+            if (newZoomLevel > MAX_ZOOM) {
+                return viewport; // Keine Aenderung ueber 100 %
             }
-            console.log('DEBUG: Zooming out to', newZoomLevel);
             return {
                 ...viewport,
                 zoomLevel: newZoomLevel
@@ -312,14 +383,12 @@ export class CanvasInteractionManager {
             // Berechne neuen Zoom-Level
             const newZoomLevel = viewport.zoomLevel + step;
             // Nur Werte kleiner oder gleich 1.0 (100%) erlauben
-            if (newZoomLevel > 1.0) {
-                // Setze auf genau 1.0, wenn wir darüber gehen würden
+            if (newZoomLevel > MAX_ZOOM) {
                 return {
                     ...viewport,
-                    zoomLevel: 1.0
+                    zoomLevel: MAX_ZOOM
                 };
             }
-            console.log('DEBUG: Zooming in to', newZoomLevel);
             return {
                 ...viewport,
                 zoomLevel: newZoomLevel
@@ -332,7 +401,7 @@ export class CanvasInteractionManager {
      */
     setZoomLevel(zoomLevel) {
         // Begrenze den Zoom-Level auf den Bereich [0.2, 1.0]
-        const newZoomLevel = Math.min(1.0, Math.max(0.2, zoomLevel));
+        const newZoomLevel = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, zoomLevel));
         this.viewportStore.update(viewport => ({
             ...viewport,
             zoomLevel: newZoomLevel

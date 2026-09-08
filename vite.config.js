@@ -7,6 +7,10 @@ export default defineConfig(({ command }) => {
 	const isProduction = command === 'build';
 
 	return {
+		// static/ ist im Bau das Wurzelverzeichnis der Auslieferung
+		// (siehe copy-assets). Damit im Entwicklungsserver dieselben Pfade
+		// gelten, wird es auch dort als oeffentliches Verzeichnis gefuehrt.
+		publicDir: 'static',
 		plugins: [
 			svelte(),
 			{

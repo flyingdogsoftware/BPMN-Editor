@@ -222,8 +222,6 @@
   // Calculate the transform string including zoom
   $: transformString = `translate(${viewportX}px, ${viewportY}px) scale(${zoomLevel})`;
 
-  // Debug: Log viewport changes
-  $: console.log('DEBUG: Canvas component - viewport changed:', { viewportX, viewportY, zoomLevel });
 </script>
 
 <!-- Using role="presentation" to indicate this is a non-interactive element for visual presentation -->
