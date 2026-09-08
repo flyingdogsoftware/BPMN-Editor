@@ -40,8 +40,14 @@ function escapeXml(text) {
     .replace(/'/g, '&apos;');
 }
 
-/** Text fuer ein Attribut: erst Umbrueche, dann maskieren. */
-const attrText = (text) => escapeXml(processTextForXml(text));
+/**
+ * Text fuer ein Attribut.
+ *
+ * Reihenfolge ist entscheidend: erst maskieren, dann den Zeilenumbruch als
+ * Entitaet setzen. Andersherum maskiert escapeXml das & der eben gesetzten
+ * Entitaet gleich wieder mit, und im Attribut steht sichtbar "&#10;".
+ */
+const attrText = (text) => processTextForXml(escapeXml(text));
 
 let idCounter = 0;
 function generateId(prefix = 'id_') {
@@ -109,6 +115,98 @@ function activityTag(element) {
 const isActivity = (el) => el.type === 'task' || el.type === 'subprocess';
 const isFlowNode = (el) => isActivity(el) || el.type === 'event' || el.type === 'gateway';
 
+/**
+ * Daten und Artefakte.
+ *
+ * Nach dem Schema stehen Artefakte im Prozess NACH den Flusselementen, und
+ * eine Assoziation ist ein Artefakt, kein Sequenzfluss. Fruehere Fassungen
+ * schrieben sie als <bpmn:sequenceFlow> - das ist inhaltlich falsch und
+ * verwandelt eine Anmerkung in einen Kontrollfluss.
+ */
+const DATA_TYPES = new Set(['dataobject', 'datastore']);
+const ARTIFACT_TYPES = new Set(['textannotation', 'group']);
+const isDataElement = (el) => DATA_TYPES.has(el.type);
+const isArtifact = (el) => ARTIFACT_TYPES.has(el.type);
+const isDrawable = (el) => isFlowNode(el) || isDataElement(el) || isArtifact(el);
+
+/** Id des dataObject, auf das eine Referenz zeigt. */
+const dataObjectRefOf = (element) => element.dataObjectRef || `${element.id}_dataObject`;
+
+/**
+ * Datenelement schreiben.
+ *
+ * Gezeichnet wird immer die REFERENZ. Die Eigenschaft isCollection sitzt nach
+ * dem Schema aber am dataObject, nicht an der Referenz - deshalb werden beide
+ * geschrieben, damit die Datei in sich geschlossen und schemakonform ist.
+ * Ein dataStore ist ein Wurzelelement und steht ausserhalb des Prozesses.
+ */
+function dataElementXml(element, depth) {
+  const ind = '  '.repeat(depth);
+
+  if (element.type === 'datastore') {
+    let xml = `${ind}<bpmn:dataStoreReference id="${escapeXml(element.id)}"`;
+    if (element.label) xml += ` name="${attrText(element.label)}"`;
+    if (element.dataStoreRef) xml += ` dataStoreRef="${escapeXml(element.dataStoreRef)}"`;
+    if (!element.documentation) return `${xml}/>\n`;
+    xml += '>\n';
+    xml += documentationXml(element, `${ind}  `);
+    xml += `${ind}</bpmn:dataStoreReference>\n`;
+    return xml;
+  }
+
+  const ref = dataObjectRefOf(element);
+  let xml = `${ind}<bpmn:dataObject id="${escapeXml(ref)}"`;
+  if (element.label) xml += ` name="${attrText(element.label)}"`;
+  if (element.isCollection) xml += ' isCollection="true"';
+  xml += '/>\n';
+
+  xml += `${ind}<bpmn:dataObjectReference id="${escapeXml(element.id)}"`;
+  if (element.label) xml += ` name="${attrText(element.label)}"`;
+  xml += ` dataObjectRef="${escapeXml(ref)}"`;
+  if (!element.documentation) return `${xml}/>\n`;
+  xml += '>\n';
+  xml += documentationXml(element, `${ind}  `);
+  xml += `${ind}</bpmn:dataObjectReference>\n`;
+  return xml;
+}
+
+/** Wurzelelemente fuer die Datenspeicher, auf die Referenzen zeigen. */
+function createDataStoreRootElements(elements) {
+  const seen = new Map();
+  for (const el of elements) {
+    if (el.type !== 'datastore' || !el.dataStoreRef) continue;
+    if (!seen.has(el.dataStoreRef)) seen.set(el.dataStoreRef, el.label || el.dataStoreRef);
+  }
+  let xml = '';
+  for (const [id, name] of seen) {
+    xml += `  <bpmn:dataStore id="${escapeXml(id)}" name="${attrText(name)}"/>\n`;
+  }
+  return xml;
+}
+
+/** Textanmerkung oder Gruppe. */
+function artifactXml(element, depth) {
+  const ind = '  '.repeat(depth);
+  if (element.type === 'group') {
+    // Ein Gruppenname haengt in BPMN an einer categoryValue; ohne Namen
+    // braucht die Gruppe keine.
+    return `${ind}<bpmn:group id="${escapeXml(element.id)}"/>\n`;
+  }
+  const text = element.text || element.label || '';
+  let xml = `${ind}<bpmn:textAnnotation id="${escapeXml(element.id)}">\n`;
+  xml += `${ind}  <bpmn:text>${escapeXml(text)}</bpmn:text>\n`;
+  xml += `${ind}</bpmn:textAnnotation>\n`;
+  return xml;
+}
+
+/** Assoziation zwischen einem Element und einer Anmerkung. */
+function associationXml(connection, depth) {
+  const ind = '  '.repeat(depth);
+  return `${ind}<bpmn:association id="${escapeXml(connection.id)}"` +
+         ` sourceRef="${escapeXml(connection.sourceId)}"` +
+         ` targetRef="${escapeXml(connection.targetId)}"/>\n`;
+}
+
 /* ------------------------------------------------------------------------ */
 /* Zuordnung der Elemente zu Pools und Unterprozessen                         */
 /* ------------------------------------------------------------------------ */
@@ -141,7 +239,9 @@ function assignNodesToPools(elements, pools, lanes) {
     for (const ref of lane.flowNodeRefs || []) laneByNodeRef.set(String(ref), lane);
   }
 
-  const nodes = elements.filter(isFlowNode);
+  // Auch Datenobjekte und Anmerkungen liegen in einem Pool, nicht nur
+  // Flussknoten - sonst landen sie im Sammelprozess.
+  const nodes = elements.filter(isDrawable);
   for (const node of nodes) {
     // 1. Ausdrueckliche Zuordnung durch die Lane
     const lane = laneByNodeRef.get(String(node.id));
@@ -332,13 +432,26 @@ function createXmlHeader(definitionsId) {
  * Datei in sich geschlossen ist.
  */
 function createReferencedRootElements(elements) {
-  const needed = new Map(); // tag -> Set<id>
+  const needed = new Map(); // Elementname -> Map<id, name>
+  const add = (tag, id, name) => {
+    if (!tag || !id) return;
+    if (!needed.has(tag)) needed.set(tag, new Map());
+    const entries = needed.get(tag);
+    // Ein echter Name gewinnt gegen einen, der nur aus der Id abgeleitet ist.
+    const existing = entries.get(id);
+    const better = name || (existing && existing !== id ? existing : undefined) || id;
+    entries.set(id, better);
+  };
   for (const el of elements) {
-    if (el.type !== 'event' || !el.eventDefinitionRef) continue;
-    const spec = EVENT_DEFINITION_TAG[el.eventDefinition];
-    if (!spec || !spec.root) continue;
-    if (!needed.has(spec.root)) needed.set(spec.root, new Map());
-    needed.get(spec.root).set(el.eventDefinitionRef, el.eventDefinitionName || el.eventDefinitionRef);
+    if (el.type === 'event' && el.eventDefinitionRef) {
+      const spec = EVENT_DEFINITION_TAG[el.eventDefinition];
+      if (spec && spec.root) add(spec.root, el.eventDefinitionRef, el.eventDefinitionName);
+    }
+    // Ein Nachrichtenfluss darf auf dieselbe Nachricht verweisen wie das
+    // Ereignis, das sie faengt - deshalb dieselbe Sammlung.
+    if (el.type === 'connection' && el.messageRef) {
+      add('bpmn:message', el.messageRef, el.messageName);
+    }
   }
   let xml = '';
   for (const [tag, entries] of needed) {
@@ -359,7 +472,9 @@ function createCollaborationSection(collaborationId, pools, messageFlows, elemen
     if (!known.has(String(flow.sourceId)) || !known.has(String(flow.targetId))) continue;
     xml += `    <bpmn:messageFlow id="${escapeXml(flow.id)}"`;
     if (flow.label) xml += ` name="${attrText(flow.label)}"`;
-    xml += ` sourceRef="${escapeXml(flow.sourceId)}" targetRef="${escapeXml(flow.targetId)}"/>\n`;
+    xml += ` sourceRef="${escapeXml(flow.sourceId)}" targetRef="${escapeXml(flow.targetId)}"`;
+    if (flow.messageRef) xml += ` messageRef="${escapeXml(flow.messageRef)}"`;
+    xml += '/>\n';
   }
   xml += '  </bpmn:collaboration>\n';
   return xml;
@@ -369,7 +484,10 @@ function createCollaborationSection(collaborationId, pools, messageFlows, elemen
  * Ein Prozess mit seinen Lanes und Flusselementen.
  * @param {object} args
  */
-function createProcessSection({ processId, lanes, nodes, flows, childrenByParent, flowsByParent }) {
+function createProcessSection({
+  processId, lanes, nodes, flows, childrenByParent, flowsByParent,
+  dataElements = [], artifacts = [], associations = [],
+}) {
   let xml = `  <bpmn:process id="${escapeXml(processId)}" isExecutable="false">\n`;
 
   if (lanes.length) {
@@ -384,8 +502,12 @@ function createProcessSection({ processId, lanes, nodes, flows, childrenByParent
     xml += '    </bpmn:laneSet>\n';
   }
 
+  // Reihenfolge nach Schema: erst alle Flusselemente, dann die Artefakte.
   for (const node of nodes) xml += flowNodeXml(node, { flows, childrenByParent, flowsByParent }, 2);
+  for (const data of dataElements) xml += dataElementXml(data, 2);
   for (const flow of flows) xml += sequenceFlowXml(flow, 2);
+  for (const artifact of artifacts) xml += artifactXml(artifact, 2);
+  for (const assoc of associations) xml += associationXml(assoc, 2);
 
   xml += '  </bpmn:process>\n';
   return xml;
@@ -460,8 +582,13 @@ export function exportBpmnXml(elements) {
   const lanes = all.filter((el) => el.type === 'lane');
   const connections = all.filter((el) => el.type === 'connection');
   const messageFlows = connections.filter((c) => c.connectionType === 'message');
-  const sequenceFlows = connections.filter((c) => c.connectionType !== 'message');
+  const associations = connections.filter((c) => c.connectionType === 'association');
+  const sequenceFlows = connections.filter(
+    (c) => c.connectionType !== 'message' && c.connectionType !== 'association'
+  );
   const nodes = all.filter(isFlowNode);
+  const dataElements = all.filter(isDataElement);
+  const artifacts = all.filter(isArtifact);
   const byId = new Map(all.map((e) => [String(e.id), e]));
 
   // Kinder von Unterprozessen: werden dort verschachtelt, nicht oben.
@@ -496,6 +623,7 @@ export function exportBpmnXml(elements) {
   const definitionsId = `Definitions_${generateId()}`;
   let xml = createXmlHeader(definitionsId);
   xml += createReferencedRootElements(all);
+  xml += createDataStoreRootElements(all);
 
   let planeElementId;
 
@@ -504,17 +632,29 @@ export function exportBpmnXml(elements) {
     planeElementId = collaborationId;
     xml += createCollaborationSection(collaborationId, pools, messageFlows, all);
 
+    // Zugeordnet wird alles Zeichenbare, nicht nur die Flussknoten:
+    // ein Datenobjekt oder eine Anmerkung liegt genauso in einem Pool.
     const owner = assignNodesToPools(all, pools, lanes);
-    const unassigned = [];
+
+    const takenNodes = new Set();
+    const takenFlows = new Set();
 
     for (const pool of pools) {
-      const poolNodes = nodes.filter(
-        (n) => owner.get(n.id) === pool.id && !nestedIds.has(String(n.id))
-      );
-      const poolNodeIds = new Set(nodes.filter((n) => owner.get(n.id) === pool.id).map((n) => String(n.id)));
+      const inPool = (el) => owner.get(el.id) === pool.id;
+      const poolMemberIds = new Set(all.filter(isDrawable).filter(inPool).map((e) => String(e.id)));
+      const poolNodes = nodes.filter((n) => inPool(n) && !nestedIds.has(String(n.id)));
       const poolFlows = topLevelFlows.filter(
-        (f) => poolNodeIds.has(String(f.sourceId)) && poolNodeIds.has(String(f.targetId))
+        (f) => poolMemberIds.has(String(f.sourceId)) && poolMemberIds.has(String(f.targetId))
       );
+      const poolAssociations = associations.filter(
+        (a) => poolMemberIds.has(String(a.sourceId)) && poolMemberIds.has(String(a.targetId))
+      );
+      poolNodes.forEach((n) => takenNodes.add(String(n.id)));
+      dataElements.filter(inPool).forEach((n) => takenNodes.add(String(n.id)));
+      artifacts.filter(inPool).forEach((n) => takenNodes.add(String(n.id)));
+      poolFlows.forEach((f) => takenFlows.add(String(f.id)));
+      poolAssociations.forEach((a) => takenFlows.add(String(a.id)));
+
       xml += createProcessSection({
         processId: processIdOf(pool),
         lanes: lanes.filter((l) => l.parentRef === pool.id),
@@ -522,30 +662,34 @@ export function exportBpmnXml(elements) {
         flows: poolFlows,
         childrenByParent,
         flowsByParent,
+        dataElements: dataElements.filter(inPool),
+        artifacts: artifacts.filter(inPool),
+        associations: poolAssociations,
       });
     }
 
     // Alles, was in keinem Pool liegt, bekommt einen eigenen Prozess -
     // verlieren ist keine Option.
-    for (const node of nodes) {
-      if (!owner.get(node.id) && !nestedIds.has(String(node.id))) unassigned.push(node);
-    }
-    const assignedFlowIds = new Set();
-    for (const pool of pools) {
-      const poolNodeIds = new Set(nodes.filter((n) => owner.get(n.id) === pool.id).map((n) => String(n.id)));
-      for (const f of topLevelFlows) {
-        if (poolNodeIds.has(String(f.sourceId)) && poolNodeIds.has(String(f.targetId))) assignedFlowIds.add(f.id);
-      }
-    }
-    const leftoverFlows = topLevelFlows.filter((f) => !assignedFlowIds.has(f.id));
-    if (unassigned.length || leftoverFlows.length) {
+    const leftoverNodes = nodes.filter(
+      (n) => !takenNodes.has(String(n.id)) && !nestedIds.has(String(n.id))
+    );
+    const leftoverData = dataElements.filter((n) => !takenNodes.has(String(n.id)));
+    const leftoverArtifacts = artifacts.filter((n) => !takenNodes.has(String(n.id)));
+    const leftoverFlows = topLevelFlows.filter((f) => !takenFlows.has(String(f.id)));
+    const leftoverAssociations = associations.filter((a) => !takenFlows.has(String(a.id)));
+
+    if (leftoverNodes.length || leftoverData.length || leftoverArtifacts.length
+        || leftoverFlows.length || leftoverAssociations.length) {
       xml += createProcessSection({
         processId: `Process_Ohne_Pool_${generateId()}`,
         lanes: [],
-        nodes: unassigned,
+        nodes: leftoverNodes,
         flows: leftoverFlows,
         childrenByParent,
         flowsByParent,
+        dataElements: leftoverData,
+        artifacts: leftoverArtifacts,
+        associations: leftoverAssociations,
       });
     }
   } else {
@@ -558,6 +702,9 @@ export function exportBpmnXml(elements) {
       flows: topLevelFlows,
       childrenByParent,
       flowsByParent,
+      dataElements,
+      artifacts,
+      associations,
     });
   }
 

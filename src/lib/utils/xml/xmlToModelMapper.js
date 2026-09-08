@@ -58,6 +58,23 @@ const GATEWAY_TYPES = {
   eventBasedGateway: 'event-based',
 };
 
+/**
+ * Daten und Artefakte.
+ *
+ * Wichtig: gezeichnet wird die REFERENZ (dataObjectReference), nicht die Daten
+ * selbst (dataObject). Wir bilden beides ab, verwerfen aber alles ohne eigenes
+ * BPMNShape - ein dataObject ohne Darstellung ist eine Datendefinition, kein
+ * Kaestchen im Diagramm.
+ */
+const ARTIFACT_TYPES = {
+  dataObject: 'dataobject',
+  dataObjectReference: 'dataobject',
+  dataStore: 'datastore',
+  dataStoreReference: 'datastore',
+  textAnnotation: 'textannotation',
+  group: 'group',
+};
+
 /** Elemente, die selbst wieder Flusselemente enthalten koennen. */
 const FLOW_CONTAINERS = new Set(['subProcess', 'transaction', 'adHocSubProcess']);
 
@@ -263,8 +280,9 @@ function collectFlowElements(container, ctx, sink) {
     const isEvent = Object.prototype.hasOwnProperty.call(EVENT_TYPES, local);
     const isGateway = Object.prototype.hasOwnProperty.call(GATEWAY_TYPES, local);
     const isEdge = Object.prototype.hasOwnProperty.call(EDGE_TYPES, local);
+    const isArtifact = Object.prototype.hasOwnProperty.call(ARTIFACT_TYPES, local);
 
-    if (isActivity || isEvent || isGateway) {
+    if (isActivity || isEvent || isGateway || isArtifact) {
       for (const node of arr(value)) {
         if (!node || typeof node !== 'object') continue;
         sink.nodes.push({ local, node, ctx });
@@ -275,6 +293,7 @@ function collectFlowElements(container, ctx, sink) {
             containerId: id,
             depth: ctx.depth + 1,
             rootNames: ctx.rootNames,
+            dataDefs: ctx.dataDefs,
           }, sink);
         }
       }
@@ -444,9 +463,16 @@ export function mapXmlToModel(parsedXml, report = NULL_REPORT) {
   /* ---- 3. Flussknoten ---------------------------------------------------- */
 
   const rootNames = collectRootDefinitionNames(definitions);
+  const dataDefs = collectDataDefinitions(definitions);
   const sink = { nodes: [], edges: [] };
+  // dataStore steht nach BPMN auf definitions-Ebene, nicht im Prozess.
+  for (const store of arr(definitions['bpmn:dataStore'])) {
+    if (store && typeof store === 'object') {
+      sink.nodes.push({ local: 'dataStore', node: store, ctx: { processId: undefined, containerId: undefined, depth: 0, rootNames, dataDefs } });
+    }
+  }
   for (const process of processes) {
-    collectFlowElements(process, { processId: attr(process, 'id'), containerId: undefined, depth: 0, rootNames }, sink);
+    collectFlowElements(process, { processId: attr(process, 'id'), containerId: undefined, depth: 0, rootNames, dataDefs }, sink);
   }
   for (const collaboration of collaborations) {
     // Nachrichtenfluesse liegen in der Kollaboration, nicht im Prozess.
@@ -475,6 +501,11 @@ export function mapXmlToModel(parsedXml, report = NULL_REPORT) {
     }
 
     const shape = shapes.get(id);
+    if (!shape && Object.prototype.hasOwnProperty.call(ARTIFACT_TYPES, local)) {
+      // Datendefinition ohne Darstellung - gehoert nicht auf diese Ebene.
+      report.debug(`"${id}" (<${local}>) hat keine Darstellung und wird nicht gezeichnet.`);
+      continue;
+    }
     if (!shape && hasAnyDi && ctx.depth > 0) {
       // Kein Shape und in einem Unterprozess: das Element gehoert zu einer
       // zugeklappten Darstellung und ist auf dieser Ebene nicht sichtbar.
@@ -549,6 +580,12 @@ export function mapXmlToModel(parsedXml, report = NULL_REPORT) {
     };
     if (condition !== undefined && condition !== '') connection.condition = condition;
     if (di && di.labelBounds) connection.labelBounds = di.labelBounds;
+    const msgRef = attr(edge, 'messageRef');
+    if (msgRef) {
+      connection.messageRef = msgRef;
+      const msgName = rootNames.get(msgRef);
+      if (msgName) connection.messageName = msgName;
+    }
     const doc = documentationOf(edge);
     if (doc) connection.documentation = doc;
 
@@ -618,6 +655,34 @@ function eventDefinitionOf(node) {
     return out;
   }
   return { kind: 'none', ref: undefined, timer: undefined };
+}
+
+/**
+ * Eigenschaften der dataObject- und dataStore-Definitionen je Id.
+ *
+ * Die Referenz traegt die Darstellung, die Definition die Eigenschaften:
+ * isCollection steht nach dem Schema am dataObject, nicht an der Referenz.
+ */
+function collectDataDefinitions(root, into = new Map()) {
+  if (!root || typeof root !== 'object') return into;
+  for (const [key, value] of Object.entries(root)) {
+    if (key.startsWith('@_') || key === '#text') continue;
+    const local = localName(key);
+    for (const item of arr(value)) {
+      if (!item || typeof item !== 'object') continue;
+      if (local === 'dataObject' || local === 'dataStore') {
+        const id = attr(item, 'id');
+        if (id) {
+          into.set(id, {
+            name: attr(item, 'name'),
+            isCollection: bool(attr(item, 'isCollection'), false),
+          });
+        }
+      }
+      collectDataDefinitions(item, into);
+    }
+  }
+  return into;
 }
 
 /** Namen der Wurzelelemente (message, signal, error, escalation) je Id. */
@@ -710,6 +775,52 @@ function mapFlowNode(local, node, shape, ctx, fallbackSlot, report) {
       if (refName) el.eventDefinitionName = refName;
     }
     if (evDef.timer) el.timerDefinition = evDef.timer;
+    const doc = documentationOf(node);
+    if (doc) el.documentation = doc;
+    if (ctx.containerId) el.containerRef = ctx.containerId;
+    return el;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(ARTIFACT_TYPES, local)) {
+    // Ohne eigene Darstellung nicht zeichnen - siehe ARTIFACT_TYPES.
+    if (!shape) return null;
+    const type = ARTIFACT_TYPES[local];
+    const el = {
+      id,
+      type,
+      label: processLabelText(name, type, shape.width) || '',
+      x: shape.x,
+      y: shape.y,
+      width: shape.width,
+      height: shape.height,
+    };
+    if (type === 'dataobject') {
+      el.isInput = false;
+      el.isOutput = false;
+      const ref = attr(node, 'dataObjectRef');
+      if (ref) el.dataObjectRef = ref;
+      const def = ref && ctx.dataDefs ? ctx.dataDefs.get(ref) : undefined;
+      el.isCollection = def ? def.isCollection : bool(attr(node, 'isCollection'), false);
+      if (!el.label && def && def.name) {
+        el.label = processLabelText(def.name, type, shape.width) || '';
+      }
+    }
+    if (type === 'datastore') {
+      el.isCollection = false;
+      const ref = attr(node, 'dataStoreRef');
+      if (ref) el.dataStoreRef = ref;
+      const def = ref && ctx.dataDefs ? ctx.dataDefs.get(ref) : undefined;
+      if (!el.label && def && def.name) {
+        el.label = processLabelText(def.name, type, shape.width) || '';
+      }
+    }
+    if (type === 'textannotation') {
+      const text = textOf(arr(node['bpmn:text'])[0]);
+      el.text = text !== undefined ? text : (name || '');
+      // Die Anmerkung zeigt ihren Text, nicht das name-Attribut.
+      if (!el.label) el.label = el.text;
+    }
+    if (shape.labelBounds) el.labelBounds = shape.labelBounds;
     const doc = documentationOf(node);
     if (doc) el.documentation = doc;
     if (ctx.containerId) el.containerRef = ctx.containerId;

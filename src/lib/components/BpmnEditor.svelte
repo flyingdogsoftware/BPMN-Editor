@@ -1780,168 +1780,19 @@
             tabindex="0"
             aria-label="Draggable {element.type} element: {element.label}"
           >
-            {#if element.type === 'task' || element.type === 'event' || element.type === 'gateway' || element.type === 'subprocess'}
-              <ElementRenderer {element} isDragging={draggedElementId === element.id} isSelected={element.isSelected} />
-            {:else if element.type === 'dataobject'}
-              <!-- Data Object -->
-              <path
-                d={`M${element.x + 5},${element.y}
-                    h${element.width - 10}
-                    l5,5 v${element.height - 10}
-                    h-${element.width} v-${element.height - 5} z
-                    M${element.x + element.width},${element.y + 5}
-                    v-5 h-5 z`}
-                fill="white"
-                stroke="black"
-                stroke-width="1"
-                class="element-shape"
-              />
-
-              <!-- Data Object Type Markers -->
-              {#if element.isInput}
-                <!-- Data Input Marker (arrow pointing into the data object) -->
-                <path
-                  d={`M${element.x + element.width/2 - 10},${element.y - 10}
-                      h20 m-10,10 l-10,-10 l10,-10`}
-                  fill="none"
-                  stroke="black"
-                  stroke-width="1"
-                />
-              {:else if element.isOutput}
-                <!-- Data Output Marker (arrow pointing out of the data object) -->
-                <path
-                  d={`M${element.x + element.width/2 - 10},${element.y - 10}
-                      h20 m-10,10 l10,-10 l-10,-10`}
-                  fill="none"
-                  stroke="black"
-                  stroke-width="1"
-                />
-              {/if}
-
-              <!-- Collection Marker (three lines) -->
-              {#if element.isCollection}
-                <path
-                  d={`M${element.x + element.width/2 - 5},${element.y + element.height + 3}
-                      h10 m-10,3 h10 m-10,3 h10`}
-                  stroke="black"
-                  stroke-width="1"
-                />
-              {/if}
-
-              <!-- Data Object Label -->
-              <text
-                x={element.x + element.width/2}
-                y={element.y + element.height + 20}
-                text-anchor="middle"
-                pointer-events="none"
-              >
-                {element.label}
-              </text>
-
-            {:else if element.type === 'datastore'}
-              <!-- Data Store (cylinder) -->
-              <path
-                d={`M${element.x},${element.y + 10}
-                    a${element.width/2},10 0 0,0 ${element.width},0
-                    v${element.height - 20}
-                    a${element.width/2},10 0 0,1 -${element.width},0 z`}
-                fill="white"
-                stroke="black"
-                stroke-width="1"
-                class="element-shape"
-              />
-              <ellipse
-                cx={element.x + element.width/2}
-                cy={element.y + 10}
-                rx={element.width/2}
-                ry="10"
-                fill="white"
-                stroke="black"
-                stroke-width="1"
-              />
-
-              <!-- Collection Marker (three lines) -->
-              {#if element.isCollection}
-                <path
-                  d={`M${element.x + element.width/2 - 5},${element.y + element.height + 3}
-                      h10 m-10,3 h10 m-10,3 h10`}
-                  stroke="black"
-                  stroke-width="1"
-                />
-              {/if}
-
-              <!-- Data Store Label -->
-              <text
-                x={element.x + element.width/2}
-                y={element.y + element.height + 20 - (element.label && element.label.includes('\n') ? (element.label.split('\n').length - 1) * 8 : 0)}
-                text-anchor="middle"
-                pointer-events="none"
-                font-size="12px"
-              >
-                {#each (element.label || '').split('\n') as line, i}
-                  <tspan x={element.x + element.width/2} dy={i === 0 ? 0 : 16}>{line}</tspan>
-                {/each}
-              </text>
-
-            {:else if element.type === 'textannotation'}
-              <!-- Text Annotation -->
-              <rect
-                x={element.x}
-                y={element.y}
-                width={element.width}
-                height={element.height}
-                fill="white"
-                stroke="black"
-                stroke-width="1"
-                stroke-dasharray="5,3"
-                class="element-shape"
-              />
-              <path
-                d={`M${element.x},${element.y} l-10,10 v${element.height - 20} l10,10`}
-                fill="none"
-                stroke="black"
-                stroke-width="1"
-                stroke-dasharray="5,3"
-              />
-
-              <!-- Text Annotation Content -->
-              <text
-                x={element.x + 5}
-                y={element.y + 20 - (element.text && element.text.includes('\n') ? (element.text.split('\n').length - 1) * 8 : 0)}
-                pointer-events="none"
-                font-size="12px"
-              >
-                {#each (element.text || '').split('\n') as line, i}
-                  <tspan x={element.x + 5} dy={i === 0 ? 0 : 16}>{line}</tspan>
-                {/each}
-              </text>
-
-            {:else if element.type === 'group'}
-              <!-- Group -->
-              <rect
-                x={element.x}
-                y={element.y}
-                width={element.width}
-                height={element.height}
-                fill="none"
-                stroke="black"
-                stroke-width="1"
-                stroke-dasharray="8,4"
-                class="element-shape"
-              />
-
-              <!-- Group Label -->
-              <text
-                x={element.x + 5}
-                y={element.y - 5}
-                pointer-events="none"
-                font-size="12px"
-              >
-                {element.label}
-              </text>
-
-
-            {/if}
+            <!--
+              Alle Knotentypen gehen durch den ElementRenderer. Frueher
+              zeichnete dieses Template Datenobjekte, Datenspeicher,
+              Anmerkungen und Gruppen zusaetzlich selbst - seit es dafuer
+              einen Renderer gibt, kam jede Anmerkung doppelt heraus, und
+              die Fassung hier malte um sie einen geschlossenen Rahmen
+              statt der offenen Klammer.
+            -->
+            <ElementRenderer
+              {element}
+              isDragging={draggedElementId === element.id}
+              isSelected={element.isSelected}
+            />
 
             <!-- Connection points will be implemented in the new ConnectionManager component -->
           </g>

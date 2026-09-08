@@ -43,13 +43,22 @@ function digest(el) {
       targetId: String(el.targetId),
       waypoints: (el.waypoints || []).length,
       label: el.label || '',
+      condition: el.condition || '',
+      messageRef: el.messageRef || '',
+      messageName: el.messageName || '',
     };
   }
   return {
     ...base,
     subtype: el.taskType || el.eventType || el.gatewayType || el.subProcessType || '',
     eventDefinition: el.eventDefinition || '',
+    eventDefinitionRef: el.eventDefinitionRef || '',
+    eventDefinitionName: el.eventDefinitionName || '',
+    timerDefinition: el.timerDefinition ? `${el.timerDefinition.type}:${el.timerDefinition.value}` : '',
     attachedToRef: el.attachedToRef || '',
+    cancelActivity: el.cancelActivity === undefined ? '' : String(el.cancelActivity),
+    calledElement: el.calledElement || '',
+    documentation: (el.documentation || '').length,
     x: el.x, y: el.y, width: el.width, height: el.height,
     label: el.label || '',
   };

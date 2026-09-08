@@ -213,7 +213,8 @@ function checkFile(file, importBpmnXml) {
   for (const [id, meta] of truth.edges) {
     const el = byId.get(id);
     if (!el) continue;
-    const want = meta.localName === 'messageFlow' ? 'message' : 'sequence';
+    const want = meta.localName === 'messageFlow' ? 'message'
+      : meta.localName === 'association' ? 'association' : 'sequence';
     if (el.connectionType !== want) {
       wrongKind.push(`${id}: ist "${el.connectionType}", erwartet "${want}"`);
     }

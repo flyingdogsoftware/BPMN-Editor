@@ -3,6 +3,7 @@
   import EventRenderer from './EventRenderer.svelte';
   import GatewayRenderer from './GatewayRenderer.svelte';
   import SubProcessRenderer from './SubProcessRenderer.svelte';
+  import ArtifactRenderer from './ArtifactRenderer.svelte';
 
   // Props
   export let element;
@@ -37,8 +38,11 @@
   <GatewayRenderer {element} {isDragging} {isSelected} />
 {:else if element.type === 'subprocess'}
   <SubProcessRenderer {element} {isDragging} {isSelected} />
+{:else if element.type === 'dataobject' || element.type === 'datastore'
+       || element.type === 'textannotation' || element.type === 'group'}
+  <ArtifactRenderer {element} {isDragging} {isSelected} />
 {:else}
-  <!-- Fallback for other element types -->
+  <!-- Ersatzdarstellung fuer noch nicht abgedeckte Typen -->
   <rect
     x={element.x}
     y={element.y}

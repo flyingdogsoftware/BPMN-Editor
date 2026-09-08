@@ -1,0 +1,91 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Daten und Artefakte: Datenobjekt, Sammlung, Datenspeicher, Textanmerkung,
+  Gruppe und die Assoziation, die die Anmerkung an eine Aufgabe bindet.
+
+  Diese vier Typen bietet die Werkzeugleiste des Editors seit jeher an; bis zur
+  Ergaenzung des ArtifactRenderer wurden sie als weisses Rechteck mit dem
+  Typnamen darin gezeichnet, und beim Export gingen sie verloren.
+-->
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+             xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+             xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+             id="Definitions_Artefakte"
+             targetNamespace="http://example.org/bpmn/test">
+
+  <dataStore id="Store_Register" name="Register" isUnlimited="false"/>
+
+  <process id="Process_Artefakte" isExecutable="false">
+    <startEvent id="Start_1" name="Eingang">
+      <outgoing>Flow_1</outgoing>
+    </startEvent>
+
+    <sequenceFlow id="Flow_1" sourceRef="Start_1" targetRef="Task_1"/>
+
+    <userTask id="Task_1" name="Unterlagen pruefen">
+      <incoming>Flow_1</incoming>
+      <outgoing>Flow_2</outgoing>
+    </userTask>
+
+    <sequenceFlow id="Flow_2" sourceRef="Task_1" targetRef="End_1"/>
+
+    <endEvent id="End_1" name="Geprueft">
+      <incoming>Flow_2</incoming>
+    </endEvent>
+
+    <dataObject id="Data_Antrag" name="Antrag"/>
+    <dataObjectReference id="DataRef_Antrag" name="Antrag" dataObjectRef="Data_Antrag"/>
+    <dataObject id="Data_Anlagen" name="Anlagen" isCollection="true"/>
+    <dataObjectReference id="DataRef_Anlagen" name="Anlagen" dataObjectRef="Data_Anlagen"/>
+    <dataStoreReference id="StoreRef_Register" name="Register" dataStoreRef="Store_Register"/>
+
+    <textAnnotation id="Note_1">
+      <text>Vier-Augen-Prinzip beachten</text>
+    </textAnnotation>
+    <association id="Assoc_1" sourceRef="Task_1" targetRef="Note_1"/>
+
+    <group id="Group_1"/>
+  </process>
+
+  <bpmndi:BPMNDiagram id="Diagram_1">
+    <bpmndi:BPMNPlane id="Plane_1" bpmnElement="Process_Artefakte">
+      <bpmndi:BPMNShape id="Shape_Group_1" bpmnElement="Group_1">
+        <dc:Bounds x="120" y="60" width="420" height="200"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Start_1" bpmnElement="Start_1">
+        <dc:Bounds x="160" y="140" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Task_1" bpmnElement="Task_1">
+        <dc:Bounds x="260" y="118" width="120" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_End_1" bpmnElement="End_1">
+        <dc:Bounds x="450" y="140" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_DataRef_Antrag" bpmnElement="DataRef_Antrag">
+        <dc:Bounds x="240" y="300" width="36" height="50"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_DataRef_Anlagen" bpmnElement="DataRef_Anlagen">
+        <dc:Bounds x="320" y="300" width="36" height="50"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_StoreRef_Register" bpmnElement="StoreRef_Register">
+        <dc:Bounds x="410" y="300" width="50" height="50"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Note_1" bpmnElement="Note_1">
+        <dc:Bounds x="580" y="100" width="160" height="60"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Edge_Flow_1" bpmnElement="Flow_1">
+        <di:waypoint x="196" y="158"/>
+        <di:waypoint x="260" y="158"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_2" bpmnElement="Flow_2">
+        <di:waypoint x="380" y="158"/>
+        <di:waypoint x="450" y="158"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Assoc_1" bpmnElement="Assoc_1">
+        <di:waypoint x="380" y="140"/>
+        <di:waypoint x="580" y="130"/>
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</definitions>

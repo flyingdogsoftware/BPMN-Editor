@@ -24,7 +24,17 @@ export default defineConfig(({ command }) => {
 		// Only use lib config for production builds
 		...(isProduction && {
 			build: {
-					target: 'es2020',
+				target: 'es2020',
+				rollupOptions: {
+					output: {
+						// Die Bibliothek hat einen Default-Export (die Komponente) und
+						// benannte Exporte (Stores, Import, Export). Rollup weist darauf
+						// hin, dass UMD-Nutzer dann BpmnEditor.default schreiben muessen -
+						// genau so macht es simple.html bereits. Die Angabe macht das
+						// ausdruecklich und beendet die Warnung bei jedem Bau.
+						exports: 'named'
+					}
+				},
 				lib: {
 					entry: resolve(__dirname, 'src/main.js'),
 					name: 'BpmnEditor',
