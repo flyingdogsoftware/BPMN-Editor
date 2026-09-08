@@ -42,7 +42,11 @@
 		"start": "npx serve dist -s -l 3000",
 		"publish": "npm run build",
 		"prepublishOnly": "npm run build",
-		"check": "svelte-check"
+		"check": "svelte-check",
+		"test": "node test/headless/runImport.mjs && node test/headless/runRoundTrip.mjs && node test/headless/runSchema.mjs",
+		"test:import": "node test/headless/runImport.mjs",
+		"test:roundtrip": "node test/headless/runRoundTrip.mjs",
+		"test:schema": "node test/headless/runSchema.mjs"
 	},
 	"devDependencies": {
 		"@sveltejs/vite-plugin-svelte": "^2.0.0",

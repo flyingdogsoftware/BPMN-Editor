@@ -1,0 +1,535 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" expressionLanguage="http://www.w3.org/1999/XPath" typeLanguage="http://www.w3.org/2001/XMLSchema" targetNamespace="http://example.org/bpmn/test" id="D001" name="Vorgang anlegen" exporter="Testfixture" exporterVersion="1.0">
+  <message id="D063" name="Antrag pruefen"/>
+  <message id="D032" name="Freigabe erteilen"/>
+  <message id="D051" name="Unterlagen ergaenzen"/>
+  <message id="D025" name="Stellungnahme einholen"/>
+  <message id="D033" name="Entscheidung treffen"/>
+  <message id="D012" name="Ergebnis erfassen"/>
+  <error id="D034" name="Abschluss" errorCode="system_close"/>
+  <collaboration id="D007" name="Weiterleiten">
+    <documentation>Beispieltext zur Beschreibung dieses Elements.</documentation>
+    <participant id="D040" name="Zurueckgeben" processRef="D004"/>
+    <participant id="D081" name="Erinnerung" processRef="D003"/>
+    <participant id="D071" name="Frist abgelaufen" processRef="D010"/>
+    <participant id="D052" name="Naechste Stufe?" processRef="D002"/>
+    <messageFlow id="D082" name="Beteiligung A" sourceRef="D140" targetRef="D134" messageRef="D063"/>
+    <messageFlow id="D053" name="Beteiligung B" sourceRef="D135" targetRef="D086" messageRef="D032"/>
+    <messageFlow id="D072" name="Beteiligung C" sourceRef="D133" targetRef="D130" messageRef="D051"/>
+    <messageFlow id="D041" name="Bereich 1" sourceRef="D131" targetRef="D076" messageRef="D025"/>
+    <messageFlow id="D054" name="Bereich 2" sourceRef="D114" targetRef="D112" messageRef="D033"/>
+    <messageFlow id="D026" name="Bereich 3" sourceRef="D113" targetRef="D057" messageRef="D012"/>
+  </collaboration>
+  <process id="D004" name="Bereich 4" isExecutable="false" processType="None">
+    <documentation>Beispieltext zur Beschreibung dieses Elements.</documentation>
+    <laneSet id="D083">
+      <lane id="D084" name="Rolle A">
+        <flowNodeRef>D074</flowNodeRef>
+        <flowNodeRef>D085</flowNodeRef>
+        <flowNodeRef>D101</flowNodeRef>
+        <flowNodeRef>D094</flowNodeRef>
+        <flowNodeRef>D035</flowNodeRef>
+        <flowNodeRef>D056</flowNodeRef>
+      </lane>
+      <lane id="D137" name="Rolle B">
+        <flowNodeRef>D139</flowNodeRef>
+        <flowNodeRef>D145</flowNodeRef>
+        <flowNodeRef>D110</flowNodeRef>
+        <flowNodeRef>D055</flowNodeRef>
+      </lane>
+      <lane id="D073" name="Rolle C">
+        <flowNodeRef>D075</flowNodeRef>
+        <flowNodeRef>D095</flowNodeRef>
+        <flowNodeRef>D087</flowNodeRef>
+        <flowNodeRef>D140</flowNodeRef>
+        <flowNodeRef>D133</flowNodeRef>
+        <flowNodeRef>D114</flowNodeRef>
+        <flowNodeRef>D077</flowNodeRef>
+        <flowNodeRef>D065</flowNodeRef>
+        <flowNodeRef>D042</flowNodeRef>
+      </lane>
+      <lane id="D100" name="System">
+        <flowNodeRef>D102</flowNodeRef>
+        <flowNodeRef>D115</flowNodeRef>
+        <flowNodeRef>D066</flowNodeRef>
+        <flowNodeRef>D013</flowNodeRef>
+      </lane>
+      <lane id="D138" name="Vorgang anlegen">
+        <flowNodeRef>D141</flowNodeRef>
+        <flowNodeRef>D146</flowNodeRef>
+        <flowNodeRef>D058</flowNodeRef>
+      </lane>
+      <lane id="D109" name="Antrag pruefen">
+        <flowNodeRef>D088</flowNodeRef>
+      </lane>
+    </laneSet>
+    <startEvent id="D074" name="Freigabe erteilen">
+      <documentation>Beispieltext zur Beschreibung dieses Elements.</documentation>
+      <outgoing>D116</outgoing>
+    </startEvent>
+    <userTask id="D085" name="Unterlagen ergaenzen">
+      <documentation>Beispieltext zur Beschreibung dieses Elements.</documentation>
+      <incoming>D116</incoming>
+      <outgoing>D060</outgoing>
+    </userTask>
+    <boundaryEvent id="D027" name="Stellungnahme einholen" attachedToRef="D085" cancelActivity="true">
+      <documentation>Beispieltext zur Beschreibung dieses Elements.</documentation>
+      <outgoing>D014</outgoing>
+      <timerEventDefinition>
+        <timeDuration xsi:type="tFormalExpression">P180D</timeDuration>
+      </timerEventDefinition>
+    </boundaryEvent>
+    <exclusiveGateway id="D101" name="Entscheidung treffen" default="D097" gatewayDirection="Diverging">
+      <documentation>Beispieltext zur Beschreibung dieses Elements.</documentation>
+      <incoming>D060</incoming>
+      <outgoing>D096</outgoing>
+      <outgoing>D097</outgoing>
+    </exclusiveGateway>
+    <userTask id="D139" name="Ergebnis erfassen">
+      <documentation>Beispieltext zur Beschreibung dieses Elements.</documentation>
+      <incoming>D097</incoming>
+      <incoming>D021</incoming>
+      <incoming>D005</incoming>
+      <outgoing>D117</outgoing>
+    </userTask>
+    <boundaryEvent id="D064" name="Abschluss" attachedToRef="D139" cancelActivity="false">
+      <documentation>Beispieltext zur Beschreibung dieses Elements.</documentation>
+      <outgoing>D044</outgoing>
+      <timerEventDefinition>
+        <timeDuration xsi:type="tFormalExpression">P3D</timeDuration>
+      </timerEventDefinition>
+    </boundaryEvent>
+    <endEvent id="D055" name="Weiterleiten">
+      <documentation>Beispieltext zur Beschreibung dieses Elements.</documentation>
+      <incoming>D044</incoming>
+    </endEvent>
+    <exclusiveGateway id="D145" name="Zurueckgeben" default="D089" gatewayDirection="Diverging">
+      <documentation>Beispieltext zur Beschreibung dieses Elements.</documentation>
+      <incoming>D117</incoming>
+      <outgoing>D078</outgoing>
+      <outgoing>D089</outgoing>
+    </exclusiveGateway>
+    <exclusiveGateway id="D110" name="Erinnerung" default="D015" gatewayDirection="Diverging">
+      <documentation>Beispieltext zur Beschreibung dieses Elements.</documentation>
+      <incoming>D089</incoming>
+      <outgoing>D021</outgoing>
+      <outgoing>D015</outgoing>
+    </exclusiveGateway>
+    <userTask id="D035" name="Frist abgelaufen">
+      <documentation>Beispieltext zur Beschreibung dieses Elements.</documentation>
+      <incoming>D078</incoming>
+      <incoming>D008</incoming>
+      <incoming>D028</incoming>
+      <outgoing>D016</outgoing>
+    </userTask>
+    <exclusiveGateway id="D056" name="Naechste Stufe?" default="D005" gatewayDirection="Diverging">
+      <documentation>Beispieltext zur Beschreibung dieses Elements.</documentation>
+      <incoming>D016</incoming>
+      <outgoing>D045</outgoing>
+      <outgoing>D005</outgoing>
+    </exclusiveGateway>
+    <endEvent id="D094" name="Beteiligung A">
+      <documentation>Beispieltext zur Beschreibung dieses Elements.</documentation>
+      <incoming>D096</incoming>
+      <incoming>D014</incoming>
+      <incoming>D045</incoming>
+    </endEvent>
+    <userTask id="D075" name="Beteiligung B">
+      <documentation>Beispieltext zur Beschreibung dieses Elements.</documentation>
+      <incoming>D015</incoming>
+      <incoming>D079</incoming>
+      <incoming>D069</incoming>
+      <incoming>D047</incoming>
+      <outgoing>D046</outgoing>
+    </userTask>
+    <boundaryEvent id="D086" name="Beteiligung C" attachedToRef="D075" cancelActivity="false">
+      <documentation>Beispieltext zur Beschreibung dieses Elements.</documentation>
+      <outgoing>D068</outgoing>
+      <messageEventDefinition messageRef="D032"/>
+    </boundaryEvent>
+    <boundaryEvent id="D076" name="Bereich 1" attachedToRef="D075" cancelActivity="false">
+      <documentation>Beispieltext zur Beschreibung dieses Elements.</documentation>
+      <outgoing>D061</outgoing>
+      <messageEventDefinition messageRef="D025"/>
+    </boundaryEvent>
+    <boundaryEvent id="D057" name="Bereich 2" attachedToRef="D075" cancelActivity="false">
+      <documentation>Beispieltext zur Beschreibung dieses Elements.</documentation>
+      <outgoing>D036</outgoing>
+      <messageEventDefinition messageRef="D012"/>
+    </boundaryEvent>
+    <exclusiveGateway id="D095" name="Bereich 3" default="D017" gatewayDirection="Diverging">
+      <documentation>Beispieltext zur Beschreibung dieses Elements.</documentation>
+      <incoming>D046</incoming>
+      <outgoing>D098</outgoing>
+      <outgoing>D090</outgoing>
+      <outgoing>D070</outgoing>
+      <outgoing>D008</outgoing>
+      <outgoing>D017</outgoing>
+    </exclusiveGateway>
+    <callActivity id="D140" name="Bereich 4" calledElement="D003">
+      <documentation>Beispieltext zur Beschreibung dieses Elements.</documentation>
+      <incoming>D098</incoming>
+      <outgoing>D079</outgoing>
+    </callActivity>
+    <endEvent id="D077" name="Rolle A">
+      <documentation>Beispieltext zur Beschreibung dieses Elements.</documentation>
+      <incoming>D068</incoming>
+    </endEvent>
+    <callActivity id="D133" name="Rolle B" calledElement="D010">
+      <documentation>Beispieltext zur Beschreibung dieses Elements.</documentation>
+      <incoming>D090</incoming>
+      <outgoing>D069</outgoing>
+    </callActivity>
+    <endEvent id="D065" name="Rolle C">
+      <documentation>Beispieltext zur Beschreibung dieses Elements.</documentation>
+      <incoming>D061</incoming>
+    </endEvent>
+    <callActivity id="D114" name="System" calledElement="D002">
+      <documentation>Beispieltext zur Beschreibung dieses Elements.</documentation>
+      <incoming>D070</incoming>
+      <outgoing>D047</outgoing>
+    </callActivity>
+    <endEvent id="D042" name="Vorgang anlegen">
+      <documentation>Beispieltext zur Beschreibung dieses Elements.</documentation>
+      <incoming>D036</incoming>
+    </endEvent>
+    <exclusiveGateway id="D087" name="Antrag pruefen" default="D091" gatewayDirection="Diverging">
+      <documentation>Beispieltext zur Beschreibung dieses Elements.</documentation>
+      <incoming>D017</incoming>
+      <outgoing>D048</outgoing>
+      <outgoing>D091</outgoing>
+    </exclusiveGateway>
+    <userTask id="D102" name="Freigabe erteilen">
+      <documentation>Beispieltext zur Beschreibung dieses Elements.</documentation>
+      <incoming>D048</incoming>
+      <incoming>D022</incoming>
+      <outgoing>D080</outgoing>
+    </userTask>
+    <boundaryEvent id="D020" name="Unterlagen ergaenzen" attachedToRef="D102" cancelActivity="false">
+      <documentation>Beispieltext zur Beschreibung dieses Elements.</documentation>
+      <outgoing>D009</outgoing>
+      <timerEventDefinition>
+        <timeDuration xsi:type="tFormalExpression">P3D</timeDuration>
+      </timerEventDefinition>
+    </boundaryEvent>
+    <endEvent id="D013" name="Stellungnahme einholen">
+      <documentation>Beispieltext zur Beschreibung dieses Elements.</documentation>
+      <incoming>D009</incoming>
+    </endEvent>
+    <exclusiveGateway id="D115" name="Entscheidung treffen" default="D037" gatewayDirection="Diverging">
+      <documentation>Beispieltext zur Beschreibung dieses Elements.</documentation>
+      <incoming>D080</incoming>
+      <outgoing>D028</outgoing>
+      <outgoing>D049</outgoing>
+      <outgoing>D037</outgoing>
+    </exclusiveGateway>
+    <exclusiveGateway id="D066" name="Ergebnis erfassen" default="D038" gatewayDirection="Diverging">
+      <documentation>Beispieltext zur Beschreibung dieses Elements.</documentation>
+      <incoming>D037</incoming>
+      <outgoing>D022</outgoing>
+      <outgoing>D038</outgoing>
+    </exclusiveGateway>
+    <userTask id="D141" name="Abschluss">
+      <documentation>Beispieltext zur Beschreibung dieses Elements.</documentation>
+      <incoming>D091</incoming>
+      <incoming>D049</incoming>
+      <incoming>D038</incoming>
+      <incoming>D099</incoming>
+      <outgoing>D118</outgoing>
+    </userTask>
+    <exclusiveGateway id="D146" name="Weiterleiten" default="D092" gatewayDirection="Diverging">
+      <documentation>Beispieltext zur Beschreibung dieses Elements.</documentation>
+      <incoming>D118</incoming>
+      <outgoing>D099</outgoing>
+      <outgoing>D092</outgoing>
+    </exclusiveGateway>
+    <endEvent id="D058" name="Zurueckgeben">
+      <documentation>Beispieltext zur Beschreibung dieses Elements.</documentation>
+      <incoming>D092</incoming>
+    </endEvent>
+    <subProcess id="D088" name="Erinnerung" triggeredByEvent="true">
+      <documentation>Beispieltext zur Beschreibung dieses Elements.</documentation>
+      <startEvent id="D043" name="Frist abgelaufen" isInterrupting="true">
+        <outgoing>D059</outgoing>
+        <errorEventDefinition errorRef="D034"/>
+      </startEvent>
+      <sequenceFlow id="D059" sourceRef="D043" targetRef="D067"/>
+      <endEvent id="D067" name="Naechste Stufe?">
+        <incoming>D059</incoming>
+      </endEvent>
+    </subProcess>
+    <sequenceFlow id="D116" sourceRef="D074" targetRef="D085">
+    </sequenceFlow>
+    <sequenceFlow id="D060" sourceRef="D085" targetRef="D101">
+    </sequenceFlow>
+    <sequenceFlow id="D096" name="Beteiligung A" sourceRef="D101" targetRef="D094">
+      <documentation>Beispieltext zur Beschreibung dieses Elements.</documentation>
+      <conditionExpression xsi:type="tFormalExpression">Bedingung erfuellt</conditionExpression>
+    </sequenceFlow>
+    <sequenceFlow id="D097" name="Beteiligung B" sourceRef="D101" targetRef="D139">
+      <documentation>Beispieltext zur Beschreibung dieses Elements.</documentation>
+    </sequenceFlow>
+    <sequenceFlow id="D014" name="Beteiligung C" sourceRef="D027" targetRef="D094">
+    </sequenceFlow>
+    <sequenceFlow id="D117" sourceRef="D139" targetRef="D145">
+    </sequenceFlow>
+    <sequenceFlow id="D078" name="Bereich 1" sourceRef="D145" targetRef="D035">
+      <documentation>Beispieltext zur Beschreibung dieses Elements.</documentation>
+      <conditionExpression xsi:type="tFormalExpression">Bedingung erfuellt</conditionExpression>
+    </sequenceFlow>
+    <sequenceFlow id="D089" name="Bereich 2" sourceRef="D145" targetRef="D110">
+      <documentation>Beispieltext zur Beschreibung dieses Elements.</documentation>
+    </sequenceFlow>
+    <sequenceFlow id="D044" sourceRef="D064" targetRef="D055">
+    </sequenceFlow>
+    <sequenceFlow id="D021" name="Bereich 3" sourceRef="D110" targetRef="D139">
+      <documentation>Beispieltext zur Beschreibung dieses Elements.</documentation>
+      <conditionExpression xsi:type="tFormalExpression">Bedingung erfuellt</conditionExpression>
+    </sequenceFlow>
+    <sequenceFlow id="D015" name="Bereich 4" sourceRef="D110" targetRef="D075">
+      <documentation>Beispieltext zur Beschreibung dieses Elements.</documentation>
+    </sequenceFlow>
+    <sequenceFlow id="D016" sourceRef="D035" targetRef="D056">
+    </sequenceFlow>
+    <sequenceFlow id="D045" name="Rolle A" sourceRef="D056" targetRef="D094">
+      <conditionExpression xsi:type="tFormalExpression">Bedingung erfuellt</conditionExpression>
+    </sequenceFlow>
+    <sequenceFlow id="D005" name="Rolle B" sourceRef="D056" targetRef="D139">
+      <documentation>Beispieltext zur Beschreibung dieses Elements.</documentation>
+    </sequenceFlow>
+    <sequenceFlow id="D046" sourceRef="D075" targetRef="D095">
+    </sequenceFlow>
+    <sequenceFlow id="D098" name="Rolle C" sourceRef="D095" targetRef="D140">
+      <documentation>Beispieltext zur Beschreibung dieses Elements.</documentation>
+      <conditionExpression xsi:type="tFormalExpression">Bedingung erfuellt</conditionExpression>
+    </sequenceFlow>
+    <sequenceFlow id="D079" name="System" sourceRef="D140" targetRef="D075">
+      <documentation>Beispieltext zur Beschreibung dieses Elements.</documentation>
+    </sequenceFlow>
+    <sequenceFlow id="D068" sourceRef="D086" targetRef="D077">
+    </sequenceFlow>
+    <sequenceFlow id="D090" name="Vorgang anlegen" sourceRef="D095" targetRef="D133">
+      <documentation>Beispieltext zur Beschreibung dieses Elements.</documentation>
+      <conditionExpression xsi:type="tFormalExpression">Bedingung erfuellt</conditionExpression>
+    </sequenceFlow>
+    <sequenceFlow id="D069" name="Antrag pruefen" sourceRef="D133" targetRef="D075">
+      <documentation>Beispieltext zur Beschreibung dieses Elements.</documentation>
+    </sequenceFlow>
+    <sequenceFlow id="D061" sourceRef="D076" targetRef="D065">
+    </sequenceFlow>
+    <sequenceFlow id="D070" name="Freigabe erteilen" sourceRef="D095" targetRef="D114">
+      <documentation>Beispieltext zur Beschreibung dieses Elements.</documentation>
+      <conditionExpression xsi:type="tFormalExpression">Bedingung erfuellt</conditionExpression>
+    </sequenceFlow>
+    <sequenceFlow id="D047" name="Unterlagen ergaenzen" sourceRef="D114" targetRef="D075">
+      <documentation>Beispieltext zur Beschreibung dieses Elements.</documentation>
+    </sequenceFlow>
+    <sequenceFlow id="D036" sourceRef="D057" targetRef="D042">
+    </sequenceFlow>
+    <sequenceFlow id="D008" name="Stellungnahme einholen" sourceRef="D095" targetRef="D035">
+      <conditionExpression xsi:type="tFormalExpression">Bedingung erfuellt</conditionExpression>
+    </sequenceFlow>
+    <sequenceFlow id="D017" name="Entscheidung treffen" sourceRef="D095" targetRef="D087">
+      <documentation>Beispieltext zur Beschreibung dieses Elements.</documentation>
+    </sequenceFlow>
+    <sequenceFlow id="D048" name="Ergebnis erfassen" sourceRef="D087" targetRef="D102">
+      <documentation>Beispieltext zur Beschreibung dieses Elements.</documentation>
+      <conditionExpression xsi:type="tFormalExpression">Bedingung erfuellt</conditionExpression>
+    </sequenceFlow>
+    <sequenceFlow id="D091" name="Abschluss" sourceRef="D087" targetRef="D141">
+      <documentation>Beispieltext zur Beschreibung dieses Elements.</documentation>
+    </sequenceFlow>
+    <sequenceFlow id="D080" sourceRef="D102" targetRef="D115">
+    </sequenceFlow>
+    <sequenceFlow id="D028" name="Weiterleiten" sourceRef="D115" targetRef="D035">
+      <conditionExpression xsi:type="tFormalExpression">Bedingung erfuellt</conditionExpression>
+    </sequenceFlow>
+    <sequenceFlow id="D049" name="Zurueckgeben" sourceRef="D115" targetRef="D141">
+      <documentation>Beispieltext zur Beschreibung dieses Elements.</documentation>
+      <conditionExpression xsi:type="tFormalExpression">Bedingung erfuellt</conditionExpression>
+    </sequenceFlow>
+    <sequenceFlow id="D037" name="Erinnerung" sourceRef="D115" targetRef="D066">
+      <documentation>Beispieltext zur Beschreibung dieses Elements.</documentation>
+    </sequenceFlow>
+    <sequenceFlow id="D009" sourceRef="D020" targetRef="D013">
+    </sequenceFlow>
+    <sequenceFlow id="D022" name="Frist abgelaufen" sourceRef="D066" targetRef="D102">
+      <documentation>Beispieltext zur Beschreibung dieses Elements.</documentation>
+      <conditionExpression xsi:type="tFormalExpression">Bedingung erfuellt</conditionExpression>
+    </sequenceFlow>
+    <sequenceFlow id="D038" name="Naechste Stufe?" sourceRef="D066" targetRef="D141">
+      <documentation>Beispieltext zur Beschreibung dieses Elements.</documentation>
+    </sequenceFlow>
+    <sequenceFlow id="D118" sourceRef="D141" targetRef="D146">
+    </sequenceFlow>
+    <sequenceFlow id="D099" name="Beteiligung A" sourceRef="D146" targetRef="D141">
+      <documentation>Beispieltext zur Beschreibung dieses Elements.</documentation>
+      <conditionExpression xsi:type="tFormalExpression">Bedingung erfuellt</conditionExpression>
+    </sequenceFlow>
+    <sequenceFlow id="D092" name="Beteiligung B" sourceRef="D146" targetRef="D058">
+      <documentation>Beispieltext zur Beschreibung dieses Elements.</documentation>
+    </sequenceFlow>
+  </process>
+  <process id="D003" name="Beteiligung C" isExecutable="false" processType="None">
+    <documentation>Beispieltext zur Beschreibung dieses Elements.</documentation>
+    <startEvent id="D134" name="Bereich 1">
+      <documentation>Beispieltext zur Beschreibung dieses Elements.</documentation>
+      <outgoing>D125</outgoing>
+      <messageEventDefinition messageRef="D063"/>
+    </startEvent>
+    <sequenceFlow id="D125" name="Bereich 2" sourceRef="D134" targetRef="D142">
+    </sequenceFlow>
+    <userTask id="D142" name="Bereich 3">
+      <documentation>Beispieltext zur Beschreibung dieses Elements.</documentation>
+      <incoming>D125</incoming>
+      <outgoing>D126</outgoing>
+    </userTask>
+    <sequenceFlow id="D126" name="Bereich 4" sourceRef="D142" targetRef="D111">
+      <documentation>Beispieltext zur Beschreibung dieses Elements.</documentation>
+    </sequenceFlow>
+    <exclusiveGateway id="D111" name="Rolle A" default="D129" gatewayDirection="Diverging">
+      <documentation>Beispieltext zur Beschreibung dieses Elements.</documentation>
+      <incoming>D126</incoming>
+      <outgoing>D127</outgoing>
+      <outgoing>D129</outgoing>
+    </exclusiveGateway>
+    <sequenceFlow id="D127" name="Rolle B" sourceRef="D111" targetRef="D135">
+      <conditionExpression xsi:type="tFormalExpression">Bedingung erfuellt</conditionExpression>
+    </sequenceFlow>
+    <intermediateThrowEvent id="D135" name="Rolle C">
+      <documentation>Beispieltext zur Beschreibung dieses Elements.</documentation>
+      <incoming>D127</incoming>
+      <outgoing>D128</outgoing>
+      <messageEventDefinition messageRef="D032"/>
+    </intermediateThrowEvent>
+    <sequenceFlow id="D128" sourceRef="D135" targetRef="D144">
+    </sequenceFlow>
+    <sequenceFlow id="D129" name="System" sourceRef="D111" targetRef="D144">
+      <documentation>Beispieltext zur Beschreibung dieses Elements.</documentation>
+    </sequenceFlow>
+    <endEvent id="D144" name="Vorgang anlegen">
+      <documentation>Beispieltext zur Beschreibung dieses Elements.</documentation>
+      <incoming>D128</incoming>
+      <incoming>D129</incoming>
+    </endEvent>
+    <subProcess id="D062" name="Antrag pruefen" triggeredByEvent="true">
+      <documentation>Beispieltext zur Beschreibung dieses Elements.</documentation>
+      <startEvent id="D023" name="Freigabe erteilen" isInterrupting="true">
+        <outgoing>D029</outgoing>
+        <errorEventDefinition errorRef="D034"/>
+      </startEvent>
+      <sequenceFlow id="D029" sourceRef="D023" targetRef="D039"/>
+      <endEvent id="D039" name="Unterlagen ergaenzen">
+        <incoming>D029</incoming>
+      </endEvent>
+    </subProcess>
+  </process>
+  <process id="D010" name="Stellungnahme einholen" isExecutable="false" processType="None">
+    <documentation>Beispieltext zur Beschreibung dieses Elements.</documentation>
+    <startEvent id="D130" name="Entscheidung treffen">
+      <documentation>Beispieltext zur Beschreibung dieses Elements.</documentation>
+      <outgoing>D119</outgoing>
+      <messageEventDefinition messageRef="D051"/>
+    </startEvent>
+    <sequenceFlow id="D119" name="Ergebnis erfassen" sourceRef="D130" targetRef="D136">
+    </sequenceFlow>
+    <userTask id="D136" name="Abschluss">
+      <documentation>Beispieltext zur Beschreibung dieses Elements.</documentation>
+      <incoming>D119</incoming>
+      <outgoing>D120</outgoing>
+    </userTask>
+    <sequenceFlow id="D120" name="Weiterleiten" sourceRef="D136" targetRef="D103">
+      <documentation>Beispieltext zur Beschreibung dieses Elements.</documentation>
+    </sequenceFlow>
+    <exclusiveGateway id="D103" name="Zurueckgeben" default="D123" gatewayDirection="Diverging">
+      <documentation>Beispieltext zur Beschreibung dieses Elements.</documentation>
+      <incoming>D120</incoming>
+      <outgoing>D121</outgoing>
+      <outgoing>D123</outgoing>
+    </exclusiveGateway>
+    <sequenceFlow id="D121" name="Erinnerung" sourceRef="D103" targetRef="D131">
+      <conditionExpression xsi:type="tFormalExpression">Bedingung erfuellt</conditionExpression>
+    </sequenceFlow>
+    <intermediateThrowEvent id="D131" name="Frist abgelaufen">
+      <documentation>Beispieltext zur Beschreibung dieses Elements.</documentation>
+      <incoming>D121</incoming>
+      <outgoing>D122</outgoing>
+      <messageEventDefinition messageRef="D025"/>
+    </intermediateThrowEvent>
+    <sequenceFlow id="D122" sourceRef="D131" targetRef="D143">
+    </sequenceFlow>
+    <sequenceFlow id="D123" name="Naechste Stufe?" sourceRef="D103" targetRef="D143">
+      <documentation>Beispieltext zur Beschreibung dieses Elements.</documentation>
+    </sequenceFlow>
+    <endEvent id="D143" name="Beteiligung A">
+      <documentation>Beispieltext zur Beschreibung dieses Elements.</documentation>
+      <incoming>D122</incoming>
+      <incoming>D123</incoming>
+    </endEvent>
+    <subProcess id="D050" name="Beteiligung B" triggeredByEvent="true">
+      <documentation>Beispieltext zur Beschreibung dieses Elements.</documentation>
+      <startEvent id="D018" name="Beteiligung C" isInterrupting="true">
+        <outgoing>D024</outgoing>
+        <errorEventDefinition errorRef="D034"/>
+      </startEvent>
+      <sequenceFlow id="D024" sourceRef="D018" targetRef="D030"/>
+      <endEvent id="D030" name="Bereich 1">
+        <incoming>D024</incoming>
+      </endEvent>
+    </subProcess>
+  </process>
+  <process id="D002" name="Bereich 2" isExecutable="false" processType="None">
+    <documentation>Beispieltext zur Beschreibung dieses Elements.</documentation>
+    <startEvent id="D112" name="Bereich 3">
+      <documentation>Beispieltext zur Beschreibung dieses Elements.</documentation>
+      <outgoing>D104</outgoing>
+      <messageEventDefinition messageRef="D033"/>
+    </startEvent>
+    <sequenceFlow id="D104" name="Bereich 4" sourceRef="D112" targetRef="D124">
+    </sequenceFlow>
+    <userTask id="D124" name="Rolle A">
+      <documentation>Beispieltext zur Beschreibung dieses Elements.</documentation>
+      <incoming>D104</incoming>
+      <outgoing>D105</outgoing>
+    </userTask>
+    <sequenceFlow id="D105" name="Rolle B" sourceRef="D124" targetRef="D093">
+      <documentation>Beispieltext zur Beschreibung dieses Elements.</documentation>
+    </sequenceFlow>
+    <exclusiveGateway id="D093" name="Rolle C" default="D108" gatewayDirection="Diverging">
+      <documentation>Beispieltext zur Beschreibung dieses Elements.</documentation>
+      <incoming>D105</incoming>
+      <outgoing>D106</outgoing>
+      <outgoing>D108</outgoing>
+    </exclusiveGateway>
+    <sequenceFlow id="D106" name="System" sourceRef="D093" targetRef="D113">
+      <conditionExpression xsi:type="tFormalExpression">Bedingung erfuellt</conditionExpression>
+    </sequenceFlow>
+    <intermediateThrowEvent id="D113" name="Vorgang anlegen">
+      <documentation>Beispieltext zur Beschreibung dieses Elements.</documentation>
+      <incoming>D106</incoming>
+      <outgoing>D107</outgoing>
+      <messageEventDefinition messageRef="D012"/>
+    </intermediateThrowEvent>
+    <sequenceFlow id="D107" sourceRef="D113" targetRef="D132">
+    </sequenceFlow>
+    <sequenceFlow id="D108" name="Antrag pruefen" sourceRef="D093" targetRef="D132">
+      <documentation>Beispieltext zur Beschreibung dieses Elements.</documentation>
+    </sequenceFlow>
+    <endEvent id="D132" name="Freigabe erteilen">
+      <documentation>Beispieltext zur Beschreibung dieses Elements.</documentation>
+      <incoming>D107</incoming>
+      <incoming>D108</incoming>
+    </endEvent>
+    <subProcess id="D031" name="Unterlagen ergaenzen" triggeredByEvent="true">
+      <documentation>Beispieltext zur Beschreibung dieses Elements.</documentation>
+      <startEvent id="D006" name="Stellungnahme einholen" isInterrupting="true">
+        <outgoing>D011</outgoing>
+        <errorEventDefinition errorRef="D034"/>
+      </startEvent>
+      <sequenceFlow id="D011" sourceRef="D006" targetRef="D019"/>
+      <endEvent id="D019" name="Entscheidung treffen">
+        <incoming>D011</incoming>
+      </endEvent>
+    </subProcess>
+  </process>
+</definitions>

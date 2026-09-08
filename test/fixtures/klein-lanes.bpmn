@@ -1,0 +1,249 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" expressionLanguage="http://www.w3.org/1999/XPath" typeLanguage="http://www.w3.org/2001/XMLSchema" targetNamespace="http://example.org/bpmn/test" id="E001" name="Vorgang anlegen" exporter="Testfixture" exporterVersion="1.0">
+  <collaboration id="E018" name="Antrag pruefen">
+    <participant id="E027" name="Freigabe erteilen" processRef="E042"/>
+  </collaboration>
+  <process id="E042" name="Unterlagen ergaenzen" isExecutable="false" processType="None">
+    <documentation>Beispieltext zur Beschreibung dieses Elements.</documentation>
+    <laneSet id="E043">
+      <lane id="E014" name="Stellungnahme einholen">
+        <flowNodeRef>E059</flowNodeRef>
+        <flowNodeRef>E015</flowNodeRef>
+      </lane>
+      <lane id="E044" name="Entscheidung treffen">
+        <flowNodeRef>E046</flowNodeRef>
+      </lane>
+      <lane id="E012" name="Ergebnis erfassen">
+        <flowNodeRef>E013</flowNodeRef>
+        <flowNodeRef>E010</flowNodeRef>
+        <flowNodeRef>E016</flowNodeRef>
+      </lane>
+      <lane id="E023" name="Abschluss">
+        <flowNodeRef>E024</flowNodeRef>
+        <flowNodeRef>E041</flowNodeRef>
+      </lane>
+      <lane id="E045" name="Weiterleiten">
+        <flowNodeRef>E047</flowNodeRef>
+        <flowNodeRef>E060</flowNodeRef>
+      </lane>
+    </laneSet>
+    <startEvent id="E059" name="Zurueckgeben">
+      <documentation>Beispieltext zur Beschreibung dieses Elements.</documentation>
+      <outgoing>E050</outgoing>
+    </startEvent>
+    <userTask id="E015" name="Erinnerung">
+      <documentation>Beispieltext zur Beschreibung dieses Elements.</documentation>
+      <incoming>E050</incoming>
+      <incoming>E049</incoming>
+      <outgoing>E051</outgoing>
+    </userTask>
+    <userTask id="E046" name="Frist abgelaufen">
+      <documentation>Beispieltext zur Beschreibung dieses Elements.</documentation>
+      <incoming>E051</incoming>
+      <outgoing>E052</outgoing>
+    </userTask>
+    <userTask id="E013" name="Naechste Stufe?" default="E053">
+      <documentation>Beispieltext zur Beschreibung dieses Elements.</documentation>
+      <incoming>E052</incoming>
+      <outgoing>E053</outgoing>
+      <outgoing>E049</outgoing>
+    </userTask>
+    <subProcess id="E010" name="Beteiligung A">
+      <documentation>Beispieltext zur Beschreibung dieses Elements.</documentation>
+      <incoming>E053</incoming>
+      <outgoing>E054</outgoing>
+    </subProcess>
+    <exclusiveGateway id="E016" name="Beteiligung B" default="E056" gatewayDirection="Diverging">
+      <documentation>Beispieltext zur Beschreibung dieses Elements.</documentation>
+      <incoming>E054</incoming>
+      <outgoing>E055</outgoing>
+      <outgoing>E056</outgoing>
+    </exclusiveGateway>
+    <userTask id="E024" name="Beteiligung C">
+      <documentation>Beispieltext zur Beschreibung dieses Elements.</documentation>
+      <incoming>E055</incoming>
+      <outgoing>E057</outgoing>
+    </userTask>
+    <exclusiveGateway id="E041" gatewayDirection="Converging">
+      <incoming>E057</incoming>
+      <outgoing>E058</outgoing>
+    </exclusiveGateway>
+    <userTask id="E047" name="Bereich 1">
+      <documentation>Beispieltext zur Beschreibung dieses Elements.</documentation>
+      <incoming>E056</incoming>
+      <incoming>E058</incoming>
+      <outgoing>E048</outgoing>
+    </userTask>
+    <endEvent id="E060" name="Bereich 2">
+      <documentation>Beispieltext zur Beschreibung dieses Elements.</documentation>
+      <incoming>E048</incoming>
+    </endEvent>
+    <sequenceFlow id="E050" sourceRef="E059" targetRef="E015">
+    </sequenceFlow>
+    <sequenceFlow id="E051" name="Bereich 3" sourceRef="E015" targetRef="E046">
+      <documentation>Beispieltext zur Beschreibung dieses Elements.</documentation>
+    </sequenceFlow>
+    <sequenceFlow id="E052" name="Bereich 4" sourceRef="E046" targetRef="E013">
+      <documentation>Beispieltext zur Beschreibung dieses Elements.</documentation>
+    </sequenceFlow>
+    <sequenceFlow id="E053" name="Rolle A" sourceRef="E013" targetRef="E010">
+    </sequenceFlow>
+    <sequenceFlow id="E054" name="Rolle B" sourceRef="E010" targetRef="E016">
+    </sequenceFlow>
+    <sequenceFlow id="E055" name="Rolle C" sourceRef="E016" targetRef="E024">
+      <conditionExpression xsi:type="tFormalExpression">Bedingung erfuellt</conditionExpression>
+    </sequenceFlow>
+    <sequenceFlow id="E056" name="System" sourceRef="E016" targetRef="E047">
+      <documentation>Beispieltext zur Beschreibung dieses Elements.</documentation>
+    </sequenceFlow>
+    <sequenceFlow id="E057" sourceRef="E024" targetRef="E041">
+    </sequenceFlow>
+    <sequenceFlow id="E058" name="Vorgang anlegen" sourceRef="E041" targetRef="E047">
+    </sequenceFlow>
+    <sequenceFlow id="E048" name="Antrag pruefen" sourceRef="E047" targetRef="E060">
+    </sequenceFlow>
+    <sequenceFlow id="E049" name="Freigabe erteilen" sourceRef="E013" targetRef="E015">
+      <documentation>Beispieltext zur Beschreibung dieses Elements.</documentation>
+      <conditionExpression xsi:type="tFormalExpression">Bedingung erfuellt</conditionExpression>
+    </sequenceFlow>
+  </process>
+  <bpmndi:BPMNDiagram id="E028" name="Unterlagen ergaenzen">
+    <bpmndi:BPMNPlane id="E039" bpmnElement="E018">
+      <bpmndi:BPMNShape id="E011" bpmnElement="E027" isHorizontal="true">
+        <dc:Bounds x="160" y="80" width="1810" height="700"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="E005" bpmnElement="E014" isHorizontal="true">
+        <dc:Bounds x="190" y="80" width="1780" height="140"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="E019" bpmnElement="E044" isHorizontal="true">
+        <dc:Bounds x="190" y="220" width="1780" height="140"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="E003" bpmnElement="E012" isHorizontal="true">
+        <dc:Bounds x="190" y="360" width="1780" height="140"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="E008" bpmnElement="E023" isHorizontal="true">
+        <dc:Bounds x="190" y="500" width="1780" height="140"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="E020" bpmnElement="E045" isHorizontal="true">
+        <dc:Bounds x="190" y="640" width="1780" height="140"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="E029" bpmnElement="E059">
+        <dc:Bounds x="292" y="145" width="36" height="36"/>
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="235" y="187" width="150" height="34"/>
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="E006" bpmnElement="E015">
+        <dc:Bounds x="445" y="123" width="110" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="E021" bpmnElement="E046">
+        <dc:Bounds x="635" y="263" width="110" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="E004" bpmnElement="E013">
+        <dc:Bounds x="825" y="403" width="110" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="E002" bpmnElement="E010" isExpanded="true">
+        <dc:Bounds x="985" y="390" width="150" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="E007" bpmnElement="E016" isMarkerVisible="true">
+        <dc:Bounds x="1235" y="418" width="50" height="50"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="E009" bpmnElement="E024">
+        <dc:Bounds x="1395" y="543" width="110" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="E017" bpmnElement="E041" isMarkerVisible="true">
+        <dc:Bounds x="1615" y="558" width="50" height="50"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="E022" bpmnElement="E047">
+        <dc:Bounds x="1585" y="683" width="110" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="E040" bpmnElement="E060">
+        <dc:Bounds x="1812" y="705" width="36" height="36"/>
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1755" y="747" width="150" height="34"/>
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="E030" bpmnElement="E050">
+        <di:waypoint x="328" y="163"/>
+        <di:waypoint x="445" y="163"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="E031" bpmnElement="E051">
+        <di:waypoint x="500" y="203"/>
+        <di:waypoint x="500" y="303"/>
+        <di:waypoint x="635" y="303"/>
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="502" y="269" width="130" height="30"/>
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="E032" bpmnElement="E052">
+        <di:waypoint x="690" y="343"/>
+        <di:waypoint x="690" y="443"/>
+        <di:waypoint x="825" y="443"/>
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="692" y="409" width="130" height="30"/>
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="E033" bpmnElement="E053">
+        <di:waypoint x="935" y="443"/>
+        <di:waypoint x="960" y="443"/>
+        <di:waypoint x="960" y="430"/>
+        <di:waypoint x="985" y="430"/>
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="882" y="409" width="130" height="30"/>
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="E034" bpmnElement="E054">
+        <di:waypoint x="1135" y="430"/>
+        <di:waypoint x="1185" y="430"/>
+        <di:waypoint x="1185" y="443"/>
+        <di:waypoint x="1235" y="443"/>
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1095" y="396" width="130" height="30"/>
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="E035" bpmnElement="E055">
+        <di:waypoint x="1260" y="468"/>
+        <di:waypoint x="1260" y="583"/>
+        <di:waypoint x="1395" y="583"/>
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1262" y="549" width="130" height="30"/>
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="E036" bpmnElement="E056">
+        <di:waypoint x="1260" y="468"/>
+        <di:waypoint x="1260" y="723"/>
+        <di:waypoint x="1585" y="723"/>
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1358" y="689" width="130" height="30"/>
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="E037" bpmnElement="E057">
+        <di:waypoint x="1505" y="583"/>
+        <di:waypoint x="1615" y="583"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="E038" bpmnElement="E058">
+        <di:waypoint x="1640" y="608"/>
+        <di:waypoint x="1640" y="683"/>
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1648" y="630" width="130" height="30"/>
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="E025" bpmnElement="E048">
+        <di:waypoint x="1695" y="723"/>
+        <di:waypoint x="1812" y="723"/>
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1688" y="689" width="130" height="30"/>
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="E026" bpmnElement="E049">
+        <di:waypoint x="880" y="483"/>
+        <di:waypoint x="880" y="482"/>
+        <di:waypoint x="500" y="482"/>
+        <di:waypoint x="500" y="203"/>
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="625" y="448" width="130" height="30"/>
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</definitions>
