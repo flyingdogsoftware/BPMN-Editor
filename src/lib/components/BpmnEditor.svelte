@@ -3,7 +3,14 @@
   import { snapPositionToGrid, snapToGrid } from '../utils/gridUtils';
   // Removed old connection utils import
   import { onMount } from 'svelte';
-  import { importBpmnXml } from '../utils/xml/bpmnXmlParser';
+  import { importBpmnDiagram } from '../utils/xml/bpmnXmlParser';
+  import NotificationCenter from './NotificationCenter.svelte';
+  import {
+    notifySuccess,
+    notifyWarning,
+    notifyError,
+    notifyImportResult,
+  } from '../stores/notificationStore';
   import { exportBpmnXml, downloadBpmnXml } from '../utils/xml/bpmnXmlExporter';
   import { exportSvg } from '../utils/svgExporter';
   import { removeNonCornerWaypoints } from '../utils/connectionRouting';
@@ -22,224 +29,73 @@
   // Import ElementManagerComponent
   import ElementManagerComponent from './ElementManagerComp.svelte';
 
-  // Function to import a test BPMN file with pools and lanes
-  async function importTestPoolsFile() {
-    try {
-      // Fetch the test file
-      const response = await fetch('/static/test-pools.bpmn');
-      if (!response.ok) {
-        throw new Error(`Failed to fetch test file: ${response.statusText}`);
-      }
-
-      const xmlString = await response.text();
-      console.log('Importing test BPMN XML...');
-      console.log('XML content:', xmlString);
-
-      const elements = importBpmnXml(xmlString);
-      console.log('Imported elements:', elements);
-
-      // Log pools and lanes specifically
-      const pools = elements.filter(el => el.type === 'pool');
-      const lanes = elements.filter(el => el.type === 'lane');
-      console.log('Imported pools:', JSON.stringify(pools, null, 2));
-      console.log('Imported lanes:', JSON.stringify(lanes, null, 2));
-
-      // Reset the store and add the imported elements
-      bpmnStore.reset();
-      elements.forEach(el => bpmnStore.addElement(el));
-
-      // Log the store after import
-      console.log('Store after import:', $bpmnStore);
-    } catch (err) {
-      console.error('Failed to import test BPMN XML:', err);
-      alert('Failed to import test BPMN XML: ' + err.message);
-    }
-  }
-
-  // Function to import a test BPMN file with swimlanes
-  async function importTestSwimlanesFile() {
-    try {
-      // Fetch the test file
-      const response = await fetch('/static/test-swimlanes.bpmn');
-      if (!response.ok) {
-        throw new Error(`Failed to fetch test file: ${response.statusText}`);
-      }
-
-      const xmlString = await response.text();
-      console.log('Importing test swimlanes BPMN XML...');
-      console.log('XML content:', xmlString);
-
-      const elements = importBpmnXml(xmlString);
-      console.log('Imported elements:', elements);
-
-      // Log pools and lanes specifically
-      const pools = elements.filter(el => el.type === 'pool');
-      const lanes = elements.filter(el => el.type === 'lane');
-      console.log('Imported pools:', JSON.stringify(pools, null, 2));
-      console.log('Imported lanes:', JSON.stringify(lanes, null, 2));
-
-      // Reset the store and add the imported elements
-      bpmnStore.reset();
-      elements.forEach(el => bpmnStore.addElement(el));
-
-      // Log the store after import
-      console.log('Store after import:', $bpmnStore);
-    } catch (err) {
-      console.error('Failed to import test swimlanes BPMN XML:', err);
-      alert('Failed to import test swimlanes BPMN XML: ' + err.message);
-    }
-  }
-
-  // Function to import a test BPMN file with message flows
-  async function importTestMessageFlowFile() {
-    try {
-      // Fetch the test file
-      const response = await fetch('/static/test-message-flow.bpmn');
-      if (!response.ok) {
-        throw new Error(`Failed to fetch test file: ${response.statusText}`);
-      }
-
-      const xmlString = await response.text();
-      console.log('Importing test message flow BPMN XML...');
-      console.log('XML content:', xmlString);
-
-      const elements = importBpmnXml(xmlString);
-      console.log('Imported elements:', elements);
-
-      // Log pools and connections specifically
-      const pools = elements.filter(el => el.type === 'pool');
-      const connections = elements.filter(el => el.type === 'connection');
-      console.log('Imported pools:', JSON.stringify(pools, null, 2));
-      console.log('Imported connections:', JSON.stringify(connections, null, 2));
-
-      // Reset the store and add the imported elements
-      bpmnStore.reset();
-      elements.forEach(el => bpmnStore.addElement(el));
-
-      // Log the store after import
-      console.log('Store after import:', $bpmnStore);
-    } catch (err) {
-      console.error('Failed to import test message flow BPMN XML:', err);
-      alert('Failed to import test message flow BPMN XML: ' + err.message);
-    }
-  }
-
-  // Function to import the fortbildungsanmeldung BPMN file on startup
-  async function importFortbildungsanmeldungFile() {
-    try {
-      // Fetch the fortbildungsanmeldung file
-      const response = await fetch('/static/fortbildungsanmeldung.bpmn');
-      if (!response.ok) {
-        throw new Error(`Failed to fetch fortbildungsanmeldung file: ${response.statusText}`);
-      }
-
-      const xmlString = await response.text();
-      console.log('Importing fortbildungsanmeldung BPMN XML...');
-      console.log('XML content:', xmlString);
-
-      const elements = importBpmnXml(xmlString);
-      console.log('Imported elements:', elements);
-
-      // Log pools and lanes specifically
-      const pools = elements.filter(el => el.type === 'pool');
-      const lanes = elements.filter(el => el.type === 'lane');
-      console.log('Imported pools:', JSON.stringify(pools, null, 2));
-      console.log('Imported lanes:', JSON.stringify(lanes, null, 2));
-
-      // Reset the store and add the imported elements
-      bpmnStore.reset();
-      elements.forEach(el => bpmnStore.addElement(el));
-
-      // Log the store after import
-      console.log('Store after import:', $bpmnStore);
-    } catch (err) {
-      console.error('Failed to import fortbildungsanmeldung BPMN XML:', err);
-      console.log('Note: This is expected on startup if the file is not found');
-    }
-  }
-
   // Export BPMN XML handler
   function handleExportBpmnXml() {
     try {
-      console.log('Exporting BPMN XML...');
       const elements = $bpmnStore;
+      if (!elements.length) {
+        notifyWarning('Nichts zu exportieren', 'Das Diagramm ist leer.');
+        return;
+      }
       const xml = exportBpmnXml(elements);
-      console.log('Exported XML:', xml);
       downloadBpmnXml(xml, 'diagram.bpmn');
+      notifySuccess(`${elements.length} Elemente als BPMN 2.0 gespeichert`);
     } catch (error) {
-      console.error('Error exporting BPMN XML:', error);
-      alert(`Failed to export BPMN XML: ${error.message}`);
+      notifyError('Export fehlgeschlagen', error.message);
+      console.error('Export fehlgeschlagen:', error);
     }
   }
 
   // Export SVG handler
   function handleExportSvg() {
     try {
-      console.log('Exporting SVG...');
       exportSvg('diagram.svg');
+      notifySuccess('Diagramm als SVG gespeichert');
     } catch (error) {
-      console.error('Error exporting SVG:', error);
-      alert(`Failed to export SVG: ${error.message}`);
+      notifyError('SVG-Export fehlgeschlagen', error.message);
+      console.error('SVG-Export fehlgeschlagen:', error);
+    }
+  }
+
+  /**
+   * Eine BPMN-Datei in den Editor laden.
+   *
+   * Fehler und Hinweise gehen in die Meldungsflaeche, nicht in ein
+   * window.alert: eine blockierende Dialogbox haelt jeden automatisierten
+   * Lauf an und laesst sich nicht lesen, wenn niemand davorsitzt.
+   */
+  function loadBpmnXml(xmlString, sourceName = '') {
+    try {
+      const result = importBpmnDiagram(xmlString);
+      bpmnStore.reset();
+      result.elements.forEach((el) => bpmnStore.addElement(el));
+      // Nach dem Laden das ganze Diagramm zeigen, nicht die linke obere Ecke.
+      // setTimeout statt requestAnimationFrame: in einem verborgenen Tab wird
+      // rAF ausgesetzt, das Einpassen liefe dann nie.
+      if (isBrowser) setTimeout(() => fitDiagramToView(), 0);
+      notifyImportResult(result, sourceName);
+      return true;
+    } catch (err) {
+      notifyError(
+        sourceName ? `${sourceName} konnte nicht geladen werden` : 'Import fehlgeschlagen',
+        err.message
+      );
+      console.error('Import fehlgeschlagen:', err);
+      return false;
     }
   }
 
   // Import BPMN XML handler
-  async function handleImportBpmnXml(event) {
+  function handleImportBpmnXml(event) {
     const file = event.target.files && event.target.files[0];
     if (!file) return;
     const reader = new FileReader();
-    reader.onload = (e) => {
-      try {
-        const xmlString = e.target.result;
-        console.log('Importing BPMN XML...');
-        console.log('XML content:', xmlString);
-        const elements = importBpmnXml(xmlString);
-        console.log('Imported elements:', elements);
-
-        // Log pools and lanes specifically
-        const pools = elements.filter(el => el.type === 'pool');
-        const lanes = elements.filter(el => el.type === 'lane');
-        console.log('Imported pools:', JSON.stringify(pools, null, 2));
-        console.log('Imported lanes:', JSON.stringify(lanes, null, 2));
-
-        // Validate pool-lane relationships
-        pools.forEach(pool => {
-          console.log(`Validating pool ${pool.id} (${pool.label})`);
-          console.log(`  - Pool has ${pool.lanes?.length || 0} lanes:`, pool.lanes);
-
-          // Check if all referenced lanes exist
-          if (pool.lanes && pool.lanes.length > 0) {
-            pool.lanes.forEach(laneId => {
-              const lane = lanes.find(l => l.id === laneId);
-              if (lane) {
-                console.log(`  - Found lane ${laneId} (${lane.label})`);
-                // Verify lane references back to this pool
-                if (lane.parentRef !== pool.id) {
-                  console.warn(`  - Lane ${laneId} has incorrect parentRef: ${lane.parentRef}, should be ${pool.id}`);
-                }
-              } else {
-                console.error(`  - Lane ${laneId} referenced by pool ${pool.id} not found in imported elements!`);
-              }
-            });
-          }
-        });
-
-        // Log connections specifically
-        const connections = elements.filter(el => el.type === 'connection');
-        console.log('Imported connections:', connections);
-
-        bpmnStore.reset();
-        elements.forEach(el => bpmnStore.addElement(el));
-
-        // Log the store after import
-        console.log('Store after import:', $bpmnStore);
-      } catch (err) {
-        console.error('Failed to import BPMN XML:', err);
-        alert('Failed to import BPMN XML: ' + err.message);
-      }
+    reader.onload = (e) => loadBpmnXml(e.target.result, file.name);
+    reader.onerror = () => {
+      notifyError(`${file.name} konnte nicht gelesen werden`, String(reader.error || 'Unbekannter Fehler'));
     };
     reader.readAsText(file);
-    // Reset the input so the same file can be selected again
+    // Zuruecksetzen, damit dieselbe Datei erneut gewaehlt werden kann
     event.target.value = '';
   }
   // Removed old connection components imports
@@ -319,15 +175,15 @@
   $: zoomLevel = viewport.zoomLevel || 1.0; // Default to 1.0 if not set
   $: isDraggingCanvas = canvasInteractionManager.getIsDraggingCanvas();
 
-  // Log viewport dimensions for debugging
-  $: console.log('DEBUG: BpmnEditor - Current viewport dimensions:', { canvasWidth, canvasHeight, viewportX, viewportY, zoomLevel, isDragging: isDraggingCanvas });
 
   // Update canvas size based on elements
   $: canvasInteractionManager.updateCanvasSizeBasedOnElements($bpmnStore);
 
-  // Function to position the viewport for optimal element visibility
-  function centerViewportOnElements() {
-    canvasInteractionManager.centerViewportOnElements($bpmnStore);
+  // Zoom und Verschiebung so setzen, dass das ganze Diagramm sichtbar ist
+  function fitDiagramToView() {
+    const changed = canvasInteractionManager.fitToElements($bpmnStore);
+    viewportStore.set(canvasInteractionManager.getViewport());
+    return changed;
   }
 
   // Update ElementInteractionManager when elementManagerComponent changes
@@ -1661,6 +1517,9 @@
   <!-- Element Manager Component -->
   <ElementManagerComponent bind:this={elementManagerComponent} />
 
+  <!-- Meldungen und Rueckfragen: ersetzt window.alert / window.confirm -->
+  <NotificationCenter />
+
   <Toolbar
     on:add={({detail}) => {
       // Get the current mouse position or use default position
@@ -1700,6 +1559,7 @@
     on:import={() => document.getElementById('bpmn-import-input').click()}
     on:export={handleExportBpmnXml}
     on:exportSvg={handleExportSvg}
+    on:fit={fitDiagramToView}
   />
 
   <div

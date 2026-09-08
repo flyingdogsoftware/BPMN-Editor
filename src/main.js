@@ -7,9 +7,23 @@ export default BpmnEditor;
 
 // Export stores and utilities that might be useful for external consumers
 export { bpmnStore } from './lib/stores/bpmnStore';
-export { importBpmnXml } from './lib/utils/xml/bpmnXmlParser';
+export {
+	importBpmnXml,
+	importBpmnDiagram,
+	parseBpmnXml,
+	setBpmnImportDebug,
+} from './lib/utils/xml/bpmnXmlParser';
 export { exportBpmnXml } from './lib/utils/xml/bpmnXmlExporter';
 export { exportSvg } from './lib/utils/svgExporter';
+export {
+	notifications,
+	notify,
+	notifyInfo,
+	notifySuccess,
+	notifyWarning,
+	notifyError,
+	confirmAction,
+} from './lib/stores/notificationStore';
 
 // For development mode, instantiate the component if we're in a browser environment
 if (typeof window !== 'undefined' && document.getElementById('editor')) {

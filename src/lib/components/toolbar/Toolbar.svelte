@@ -4,6 +4,7 @@
   import { multiSelectionManager } from '../../services/MultiSelectionManager';
   import UndoRedoControls from '../UndoRedoControls.svelte';
   import FlyingDogLogo from './FlyingDogLogo.svelte';
+  import { confirmAction } from '../../stores/notificationStore';
 
   const dispatch = createEventDispatcher();
   let showElementDialog = false;
@@ -33,11 +34,18 @@
 
   // Connection Points and Add Condition functionality removed
 
-  function resetDiagram() {
-    // Sicherheitsabfrage vor dem Zurücksetzen des Diagramms
-    if (confirm('Are you sure you want to reset the diagram? All unsaved changes will be lost.')) {
-      dispatch('reset');
-    }
+  async function resetDiagram() {
+    // Sicherheitsabfrage vor dem Zuruecksetzen des Diagramms.
+    // Kein window.confirm: das blockiert den Browser und haelt jeden
+    // automatisierten Lauf an.
+    const ok = await confirmAction({
+      title: 'Diagramm zuruecksetzen?',
+      message: 'Alle nicht gespeicherten Aenderungen gehen verloren.',
+      confirmLabel: 'Zuruecksetzen',
+      cancelLabel: 'Abbrechen',
+      destructive: true,
+    });
+    if (ok) dispatch('reset');
   }
 
   // Import BPMN XML
@@ -62,6 +70,11 @@
 
   function zoomOut() {
     dispatch('zoomOut');
+  }
+
+  // Ganzes Diagramm sichtbar machen
+  function fitToView() {
+    dispatch('fit');
   }
 
   // Toggle selection mode
@@ -189,6 +202,11 @@
       <button on:click={zoomOut} class="tool-button" title="Zoom Out">
         <div class="tool-icon zoom-out-icon"></div>
         <span>Zoom Out</span>
+      </button>
+      <!-- Ganzes Diagramm einpassen -->
+      <button on:click={fitToView} class="tool-button" title="Ganzes Diagramm einpassen">
+        <div class="tool-icon fit-icon"></div>
+        <span>Fit</span>
       </button>
       <!-- Import button -->
       <button on:click={importBpmnXml} class="tool-button" title="Import BPMN XML">
