@@ -1,31 +1,38 @@
 /**
  * BPMN XML Exporter
  *
- * This module provides functionality to export the internal BPMN data model
- * to a standard BPMN 2.0 XML format.
+ * Schreibt das interne Modell des Editors als BPMN 2.0 XML.
+ *
+ * Leitgedanken - dieselben wie beim Import, nur in die andere Richtung:
+ *
+ * 1. Jedes Element wird GENAU EINMAL geschrieben. Frueher bekam jeder Prozess
+ *    saemtliche Flusselemente; bei vier Pools stand jedes Element viermal in
+ *    der Datei, mit vierfach vergebener Id. Das ist kein gueltiges BPMN.
+ * 2. Elemente werden ihrem Pool zugeordnet - ueber die flowNodeRef-Liste der
+ *    Lane, sonst ueber die Lage im Diagramm.
+ * 3. Unterprozesse und Aufrufaktivitaeten werden geschrieben, ihre Kinder
+ *    darin verschachtelt.
+ * 4. Was der Import gelesen hat, kommt wieder heraus: Aufgabentypen,
+ *    Ereignisdefinitionen, Bedingungen, Standardfluesse, Dokumentation und die
+ *    Position der Beschriftungen.
+ * 5. Ids, auf die verwiesen wird (Nachrichten, Signale, Fehler), werden als
+ *    Wurzelelemente ergaenzt, damit die Datei in sich geschlossen bleibt.
  */
 
-/**
- * Convert line breaks to XML entities
- * @param {string} text The text to process
- * @returns {string} Text with line breaks converted to XML entities
- */
+/* ------------------------------------------------------------------------ */
+/* Textwerkzeuge                                                              */
+/* ------------------------------------------------------------------------ */
+
+/** Zeilenumbrueche als XML-Entitaet schreiben. */
 function processTextForXml(text) {
   if (!text) return '';
-
-  // Replace line breaks with XML line break entity
-  return text.replace(/\n/g, '&#10;');
+  return String(text).replace(/\n/g, '&#10;');
 }
 
-/**
- * Escape special characters in XML
- * @param {string} text The text to escape
- * @returns {string} Escaped text
- */
+/** Sonderzeichen in XML maskieren. */
 function escapeXml(text) {
-  if (!text) return '';
-
-  return text
+  if (text === undefined || text === null) return '';
+  return String(text)
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
@@ -33,20 +40,280 @@ function escapeXml(text) {
     .replace(/'/g, '&apos;');
 }
 
-/**
- * Generate a unique ID for BPMN elements if needed
- * @param {string} prefix Prefix for the ID
- * @returns {string} A unique ID
- */
+/** Text fuer ein Attribut: erst Umbrueche, dann maskieren. */
+const attrText = (text) => escapeXml(processTextForXml(text));
+
+let idCounter = 0;
 function generateId(prefix = 'id_') {
-  return `${prefix}${Math.random().toString(36).substr(2, 9)}`;
+  idCounter += 1;
+  return `${prefix}${Date.now().toString(36)}_${idCounter}`;
+}
+
+/** Eine Zahl so schreiben, dass sie beim Wiedereinlesen dieselbe ist. */
+const numAttr = (v) => (Number.isFinite(v) ? String(Math.round(v * 1000) / 1000) : '0');
+
+/* ------------------------------------------------------------------------ */
+/* Typtabellen (Gegenstueck zum Mapper)                                       */
+/* ------------------------------------------------------------------------ */
+
+const TASK_TAG_BY_TYPE = {
+  task: 'bpmn:task',
+  user: 'bpmn:userTask',
+  service: 'bpmn:serviceTask',
+  send: 'bpmn:sendTask',
+  receive: 'bpmn:receiveTask',
+  manual: 'bpmn:manualTask',
+  'business-rule': 'bpmn:businessRuleTask',
+  script: 'bpmn:scriptTask',
+};
+
+const EVENT_TAG_BY_TYPE = {
+  start: 'bpmn:startEvent',
+  end: 'bpmn:endEvent',
+  'intermediate-throw': 'bpmn:intermediateThrowEvent',
+  'intermediate-catch': 'bpmn:intermediateCatchEvent',
+  boundary: 'bpmn:boundaryEvent',
+};
+
+const GATEWAY_TAG_BY_TYPE = {
+  exclusive: 'bpmn:exclusiveGateway',
+  inclusive: 'bpmn:inclusiveGateway',
+  parallel: 'bpmn:parallelGateway',
+  complex: 'bpmn:complexGateway',
+  'event-based': 'bpmn:eventBasedGateway',
+};
+
+/** Ereignisdefinition -> Elementname und Name des Verweisattributs. */
+const EVENT_DEFINITION_TAG = {
+  message: { tag: 'bpmn:messageEventDefinition', ref: 'messageRef', root: 'bpmn:message' },
+  timer: { tag: 'bpmn:timerEventDefinition' },
+  escalation: { tag: 'bpmn:escalationEventDefinition', ref: 'escalationRef', root: 'bpmn:escalation' },
+  conditional: { tag: 'bpmn:conditionalEventDefinition' },
+  link: { tag: 'bpmn:linkEventDefinition' },
+  error: { tag: 'bpmn:errorEventDefinition', ref: 'errorRef', root: 'bpmn:error' },
+  cancel: { tag: 'bpmn:cancelEventDefinition' },
+  compensate: { tag: 'bpmn:compensateEventDefinition' },
+  signal: { tag: 'bpmn:signalEventDefinition', ref: 'signalRef', root: 'bpmn:signal' },
+  terminate: { tag: 'bpmn:terminateEventDefinition' },
+};
+
+/** Untertyp einer Aktivitaet -> Elementname. */
+function activityTag(element) {
+  if (element.type === 'task') return TASK_TAG_BY_TYPE[element.taskType] || 'bpmn:task';
+  if (element.subProcessType === 'call') return 'bpmn:callActivity';
+  if (element.subProcessType === 'transaction') return 'bpmn:transaction';
+  if (element.subProcessType === 'adhoc') return 'bpmn:adHocSubProcess';
+  return 'bpmn:subProcess';
+}
+
+const isActivity = (el) => el.type === 'task' || el.type === 'subprocess';
+const isFlowNode = (el) => isActivity(el) || el.type === 'event' || el.type === 'gateway';
+
+/* ------------------------------------------------------------------------ */
+/* Zuordnung der Elemente zu Pools und Unterprozessen                         */
+/* ------------------------------------------------------------------------ */
+
+function boxContains(container, el) {
+  if (!container || !el) return false;
+  const c = [container.x, container.y, container.width, container.height];
+  const e = [el.x, el.y, el.width, el.height];
+  if (c.some((v) => !Number.isFinite(v)) || e.some((v) => !Number.isFinite(v))) return false;
+  // Ein Randereignis sitzt auf der Kante seiner Aktivitaet und ragt hinaus;
+  // deshalb wird der Mittelpunkt geprueft, nicht die vollstaendige Ueberdeckung.
+  const cx = el.x + el.width / 2;
+  const cy = el.y + el.height / 2;
+  return cx >= container.x && cx <= container.x + container.width &&
+         cy >= container.y && cy <= container.y + container.height;
+}
+
+const area = (el) => (Number.isFinite(el.width) && Number.isFinite(el.height) ? el.width * el.height : Infinity);
+
+/**
+ * Ordnet jedem Flussknoten seinen Pool zu.
+ * @returns {Map<string,string|null>} Element-Id -> Pool-Id (null = keinem Pool)
+ */
+function assignNodesToPools(elements, pools, lanes) {
+  const owner = new Map();
+  if (!pools.length) return owner;
+
+  const laneByNodeRef = new Map();
+  for (const lane of lanes) {
+    for (const ref of lane.flowNodeRefs || []) laneByNodeRef.set(String(ref), lane);
+  }
+
+  const nodes = elements.filter(isFlowNode);
+  for (const node of nodes) {
+    // 1. Ausdrueckliche Zuordnung durch die Lane
+    const lane = laneByNodeRef.get(String(node.id));
+    if (lane && lane.parentRef) {
+      owner.set(node.id, lane.parentRef);
+      continue;
+    }
+    // 2. Kleinste Lane, in der das Element liegt
+    const containingLanes = lanes.filter((l) => boxContains(l, node)).sort((a, b) => area(a) - area(b));
+    if (containingLanes.length && containingLanes[0].parentRef) {
+      owner.set(node.id, containingLanes[0].parentRef);
+      continue;
+    }
+    // 3. Kleinster Pool, in dem das Element liegt
+    const containingPools = pools.filter((p) => boxContains(p, node)).sort((a, b) => area(a) - area(b));
+    owner.set(node.id, containingPools.length ? containingPools[0].id : null);
+  }
+
+  // Ein Randereignis gehoert immer dorthin, wo seine Aktivitaet liegt.
+  const byId = new Map(elements.map((e) => [String(e.id), e]));
+  for (const node of nodes) {
+    if (node.type === 'event' && node.eventType === 'boundary' && node.attachedToRef) {
+      const host = byId.get(String(node.attachedToRef));
+      if (host && owner.has(host.id)) owner.set(node.id, owner.get(host.id));
+    }
+  }
+  // Ein Kind gehoert dorthin, wo sein Unterprozess liegt.
+  for (const node of nodes) {
+    if (node.containerRef) {
+      const parent = byId.get(String(node.containerRef));
+      if (parent && owner.has(parent.id)) owner.set(node.id, owner.get(parent.id));
+    }
+  }
+  return owner;
+}
+
+/** Prozess-Id eines Pools. */
+function processIdOf(pool) {
+  return pool.processRef || `Process_${String(pool.id).replace(/^Participant_?/, '')}`;
+}
+
+/* ------------------------------------------------------------------------ */
+/* Flusselemente schreiben                                                    */
+/* ------------------------------------------------------------------------ */
+
+function documentationXml(element, indent) {
+  if (!element.documentation) return '';
+  return `${indent}<bpmn:documentation>${escapeXml(element.documentation)}</bpmn:documentation>\n`;
+}
+
+function flowRefsXml(element, flows, indent) {
+  let xml = '';
+  const isBoundary = element.type === 'event' && element.eventType === 'boundary';
+  const isStart = element.type === 'event' && element.eventType === 'start';
+  const isEnd = element.type === 'event' && element.eventType === 'end';
+  // Ein Randereignis und ein Startereignis haben keine eingehenden Fluesse,
+  // ein Endereignis keine ausgehenden.
+  if (!isBoundary && !isStart) {
+    for (const f of flows) if (String(f.targetId) === String(element.id)) xml += `${indent}<bpmn:incoming>${escapeXml(f.id)}</bpmn:incoming>\n`;
+  }
+  if (!isEnd) {
+    for (const f of flows) if (String(f.sourceId) === String(element.id)) xml += `${indent}<bpmn:outgoing>${escapeXml(f.id)}</bpmn:outgoing>\n`;
+  }
+  return xml;
+}
+
+function eventDefinitionXml(element, indent) {
+  const kind = element.eventDefinition;
+  if (!kind || kind === 'none') return '';
+  const spec = EVENT_DEFINITION_TAG[kind];
+  if (!spec) return '';
+
+  if (kind === 'timer' && element.timerDefinition && element.timerDefinition.value) {
+    const t = element.timerDefinition;
+    const tag = t.type === 'date' ? 'timeDate' : t.type === 'cycle' ? 'timeCycle' : 'timeDuration';
+    return `${indent}<${spec.tag}>\n` +
+           `${indent}  <bpmn:${tag} xsi:type="bpmn:tFormalExpression">${escapeXml(t.value)}</bpmn:${tag}>\n` +
+           `${indent}</${spec.tag}>\n`;
+  }
+  if (spec.ref && element.eventDefinitionRef) {
+    return `${indent}<${spec.tag} ${spec.ref}="${escapeXml(element.eventDefinitionRef)}"/>\n`;
+  }
+  return `${indent}<${spec.tag}/>\n`;
 }
 
 /**
- * Create the XML header with all required namespaces
- * @returns {string} XML header string
+ * Schreibt einen Flussknoten samt Kindern (bei Unterprozessen).
+ * @param {object} element
+ * @param {object} ctx { flows, childrenByParent, depth }
  */
-function createXmlHeader() {
+function flowNodeXml(element, ctx, depth) {
+  const ind = '  '.repeat(depth);
+  const inner = '  '.repeat(depth + 1);
+  const { flows, childrenByParent } = ctx;
+
+  if (isActivity(element)) {
+    const tag = activityTag(element);
+    let xml = `${ind}<${tag} id="${escapeXml(element.id)}"`;
+    if (element.label) xml += ` name="${attrText(element.label)}"`;
+    if (tag === 'bpmn:callActivity' && element.calledElement) {
+      xml += ` calledElement="${escapeXml(element.calledElement)}"`;
+    }
+    if (tag === 'bpmn:subProcess' && element.subProcessType === 'event') {
+      xml += ' triggeredByEvent="true"';
+    }
+    xml += '>\n';
+    xml += documentationXml(element, inner);
+    xml += flowRefsXml(element, flows, inner);
+    // Kinder eines Unterprozesses verschachteln
+    const children = childrenByParent.get(String(element.id)) || [];
+    for (const child of children) xml += flowNodeXml(child, ctx, depth + 1);
+    const childFlows = (ctx.flowsByParent.get(String(element.id)) || []);
+    for (const flow of childFlows) xml += sequenceFlowXml(flow, depth + 1);
+    xml += `${ind}</${tag}>\n`;
+    return xml;
+  }
+
+  if (element.type === 'event') {
+    const tag = EVENT_TAG_BY_TYPE[element.eventType] || 'bpmn:startEvent';
+    let xml = `${ind}<${tag} id="${escapeXml(element.id)}"`;
+    if (element.label) xml += ` name="${attrText(element.label)}"`;
+    if (element.eventType === 'boundary') {
+      if (element.attachedToRef) xml += ` attachedToRef="${escapeXml(element.attachedToRef)}"`;
+      xml += ` cancelActivity="${element.cancelActivity === false ? 'false' : 'true'}"`;
+    }
+    if (element.eventType === 'start' && element.isInterrupting === false) {
+      xml += ' isInterrupting="false"';
+    }
+    xml += '>\n';
+    xml += documentationXml(element, inner);
+    xml += flowRefsXml(element, flows, inner);
+    xml += eventDefinitionXml(element, inner);
+    xml += `${ind}</${tag}>\n`;
+    return xml;
+  }
+
+  if (element.type === 'gateway') {
+    const tag = GATEWAY_TAG_BY_TYPE[element.gatewayType] || 'bpmn:exclusiveGateway';
+    let xml = `${ind}<${tag} id="${escapeXml(element.id)}"`;
+    if (element.label) xml += ` name="${attrText(element.label)}"`;
+    if (element.defaultFlow) xml += ` default="${escapeXml(element.defaultFlow)}"`;
+    xml += '>\n';
+    xml += documentationXml(element, inner);
+    xml += flowRefsXml(element, flows, inner);
+    xml += `${ind}</${tag}>\n`;
+    return xml;
+  }
+
+  return '';
+}
+
+function sequenceFlowXml(flow, depth) {
+  const ind = '  '.repeat(depth);
+  let xml = `${ind}<bpmn:sequenceFlow id="${escapeXml(flow.id)}"`;
+  if (flow.label) xml += ` name="${attrText(flow.label)}"`;
+  xml += ` sourceRef="${escapeXml(flow.sourceId)}" targetRef="${escapeXml(flow.targetId)}"`;
+  const hasBody = Boolean(flow.condition) || Boolean(flow.documentation);
+  if (!hasBody) return `${xml}/>\n`;
+  xml += '>\n';
+  xml += documentationXml(flow, `${ind}  `);
+  if (flow.condition) {
+    xml += `${ind}  <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${escapeXml(flow.condition)}</bpmn:conditionExpression>\n`;
+  }
+  xml += `${ind}</bpmn:sequenceFlow>\n`;
+  return xml;
+}
+
+/* ------------------------------------------------------------------------ */
+/* Abschnitte                                                                 */
+/* ------------------------------------------------------------------------ */
+
+function createXmlHeader(definitionsId) {
   return `<?xml version="1.0" encoding="UTF-8"?>
 <bpmn:definitions
   xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
@@ -54,393 +321,263 @@ function createXmlHeader() {
   xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
   xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-  id="Definitions_${generateId()}"
-  targetNamespace="http://bpmn.io/schema/bpmn">`;
+  id="${escapeXml(definitionsId)}"
+  exporter="flyingdog BPMN Editor"
+  targetNamespace="http://bpmn.io/schema/bpmn">
+`;
 }
 
 /**
- * Create the XML footer
- * @returns {string} XML footer string
+ * Wurzelelemente fuer Verweise aus Ereignisdefinitionen ergaenzen, damit die
+ * Datei in sich geschlossen ist.
  */
-function createXmlFooter() {
-  return '</bpmn:definitions>';
-}
-
-/**
- * Create the Collaboration section with participants
- * @param {Array} elements Array of BPMN elements
- * @returns {string} XML string for the collaboration section
- */
-function createCollaborationSection(elements) {
-  // Find all pools
-  const pools = elements.filter(el => el.type === 'pool');
-
-  if (pools.length === 0) {
-    return '';
+function createReferencedRootElements(elements) {
+  const needed = new Map(); // tag -> Set<id>
+  for (const el of elements) {
+    if (el.type !== 'event' || !el.eventDefinitionRef) continue;
+    const spec = EVENT_DEFINITION_TAG[el.eventDefinition];
+    if (!spec || !spec.root) continue;
+    if (!needed.has(spec.root)) needed.set(spec.root, new Map());
+    needed.get(spec.root).set(el.eventDefinitionRef, el.eventDefinitionName || el.eventDefinitionRef);
   }
+  let xml = '';
+  for (const [tag, entries] of needed) {
+    for (const [id, name] of entries) {
+      xml += `  <${tag} id="${escapeXml(id)}" name="${attrText(name)}"/>\n`;
+    }
+  }
+  return xml;
+}
 
-  // Create a unique collaboration ID
-  const collaborationId = `Collaboration_${generateId()}`;
-
-  let xml = `  <bpmn:collaboration id="${collaborationId}">\n`;
-
-  // Add participants (pools)
+function createCollaborationSection(collaborationId, pools, messageFlows, elements) {
+  let xml = `  <bpmn:collaboration id="${escapeXml(collaborationId)}">\n`;
   for (const pool of pools) {
-    // Create a process reference for this pool if not exists
-    const processRef = pool.processRef || `Process_${pool.id.replace('Participant_', '')}`;
-
-    xml += `    <bpmn:participant id="${pool.id}" name="${escapeXml(processTextForXml(pool.label))}" processRef="${processRef}" />\n`;
+    xml += `    <bpmn:participant id="${escapeXml(pool.id)}" name="${attrText(pool.label)}" processRef="${escapeXml(processIdOf(pool))}"/>\n`;
   }
-
-  // Add message flows between pools
-  const messageFlows = elements.filter(el =>
-    el.type === 'connection' &&
-    el.connectionType === 'message'
-  );
-
+  const known = new Set(elements.map((e) => String(e.id)));
   for (const flow of messageFlows) {
-    // Check if source and target exist
-    const sourceElement = elements.find(el => el.id === flow.sourceId);
-    const targetElement = elements.find(el => el.id === flow.targetId);
-
-    if (!sourceElement || !targetElement) {
-      continue;
-    }
-
-    xml += `    <bpmn:messageFlow id="${flow.id}" sourceRef="${flow.sourceId}" targetRef="${flow.targetId}"`;
-
-    if (flow.label) {
-      xml += ` name="${escapeXml(processTextForXml(flow.label))}"`;
-    }
-
-    xml += ' />\n';
+    if (!known.has(String(flow.sourceId)) || !known.has(String(flow.targetId))) continue;
+    xml += `    <bpmn:messageFlow id="${escapeXml(flow.id)}"`;
+    if (flow.label) xml += ` name="${attrText(flow.label)}"`;
+    xml += ` sourceRef="${escapeXml(flow.sourceId)}" targetRef="${escapeXml(flow.targetId)}"/>\n`;
   }
-
   xml += '  </bpmn:collaboration>\n';
-
   return xml;
 }
 
 /**
- * Create the Process section with lanes and flow elements
- * @param {Array} elements Array of BPMN elements
- * @param {Object} pool The pool element
- * @returns {string} XML string for the process section
+ * Ein Prozess mit seinen Lanes und Flusselementen.
+ * @param {object} args
  */
-function createProcessSection(elements, pool) {
-  // Create a process ID based on the pool
-  const processId = pool.processRef || `Process_${pool.id.replace('Participant_', '')}`;
+function createProcessSection({ processId, lanes, nodes, flows, childrenByParent, flowsByParent }) {
+  let xml = `  <bpmn:process id="${escapeXml(processId)}" isExecutable="false">\n`;
 
-  let xml = `  <bpmn:process id="${processId}" isExecutable="false">\n`;
-
-  // Find lanes for this pool
-  const lanes = elements.filter(el => el.type === 'lane' && el.parentRef === pool.id);
-
-  // Add lane set if there are lanes
-  if (lanes.length > 0) {
-    xml += '    <bpmn:laneSet>\n';
-
+  if (lanes.length) {
+    xml += `    <bpmn:laneSet id="LaneSet_${escapeXml(processId)}">\n`;
     for (const lane of lanes) {
-      xml += `      <bpmn:lane id="${lane.id}" name="${escapeXml(processTextForXml(lane.label))}">\n`;
-
-      // Add flow node references
-      if (lane.flowNodeRefs && lane.flowNodeRefs.length > 0) {
-        for (const nodeRef of lane.flowNodeRefs) {
-          xml += `        <bpmn:flowNodeRef>${nodeRef}</bpmn:flowNodeRef>\n`;
-        }
+      xml += `      <bpmn:lane id="${escapeXml(lane.id)}" name="${attrText(lane.label)}">\n`;
+      for (const ref of lane.flowNodeRefs || []) {
+        xml += `        <bpmn:flowNodeRef>${escapeXml(ref)}</bpmn:flowNodeRef>\n`;
       }
-
       xml += '      </bpmn:lane>\n';
     }
-
     xml += '    </bpmn:laneSet>\n';
   }
 
-  // Add sequence flows
-  const sequenceFlows = elements.filter(el =>
-    el.type === 'connection' &&
-    el.connectionType === 'sequence'
-  );
-
-  for (const flow of sequenceFlows) {
-    // Check if source and target are in this process
-    const sourceElement = elements.find(el => el.id === flow.sourceId);
-    const targetElement = elements.find(el => el.id === flow.targetId);
-
-    // Skip if source or target is missing or not in this process
-    if (!sourceElement || !targetElement) {
-      continue;
-    }
-
-    xml += `    <bpmn:sequenceFlow id="${flow.id}" sourceRef="${flow.sourceId}" targetRef="${flow.targetId}"`;
-
-    if (flow.label) {
-      xml += ` name="${escapeXml(processTextForXml(flow.label))}"`;
-    }
-
-    if (flow.isDefault) {
-      xml += ' isDefault="true"';
-    }
-
-    xml += ' />\n';
-  }
-
-  // Add tasks
-  const tasks = elements.filter(el => el.type === 'task');
-
-  for (const task of tasks) {
-    xml += `    <bpmn:task id="${task.id}"`;
-
-    if (task.label) {
-      xml += ` name="${escapeXml(processTextForXml(task.label))}"`;
-    }
-
-    xml += '>\n';
-
-    // Add incoming sequence flows
-    const incomingFlows = sequenceFlows.filter(flow => flow.targetId === task.id);
-    for (const flow of incomingFlows) {
-      xml += `      <bpmn:incoming>${flow.id}</bpmn:incoming>\n`;
-    }
-
-    // Add outgoing sequence flows
-    const outgoingFlows = sequenceFlows.filter(flow => flow.sourceId === task.id);
-    for (const flow of outgoingFlows) {
-      xml += `      <bpmn:outgoing>${flow.id}</bpmn:outgoing>\n`;
-    }
-
-    xml += '    </bpmn:task>\n';
-  }
-
-  // Add events
-  const events = elements.filter(el => el.type === 'event');
-
-  for (const event of events) {
-    // Determine event type tag
-    let eventTag = 'bpmn:startEvent';
-    if (event.eventType === 'end') {
-      eventTag = 'bpmn:endEvent';
-    } else if (event.eventType === 'intermediate') {
-      if (event.eventDefinition === 'throw') {
-        eventTag = 'bpmn:intermediateThrowEvent';
-      } else {
-        eventTag = 'bpmn:intermediateCatchEvent';
-      }
-    } else if (event.eventType === 'boundary') {
-      eventTag = 'bpmn:boundaryEvent';
-    }
-
-    xml += `    <${eventTag} id="${event.id}"`;
-
-    if (event.label) {
-      xml += ` name="${escapeXml(processTextForXml(event.label))}"`;
-    }
-
-    if (event.eventType === 'boundary' && event.attachedToRef) {
-      xml += ` attachedToRef="${event.attachedToRef}"`;
-    }
-
-    if (event.eventType === 'boundary' && event.cancelActivity !== undefined) {
-      xml += ` cancelActivity="${event.cancelActivity}"`;
-    }
-
-    xml += '>\n';
-
-    // Add incoming sequence flows (except for start events)
-    if (event.eventType !== 'start') {
-      const incomingFlows = sequenceFlows.filter(flow => flow.targetId === event.id);
-      for (const flow of incomingFlows) {
-        xml += `      <bpmn:incoming>${flow.id}</bpmn:incoming>\n`;
-      }
-    }
-
-    // Add outgoing sequence flows (except for end events)
-    if (event.eventType !== 'end') {
-      const outgoingFlows = sequenceFlows.filter(flow => flow.sourceId === event.id);
-      for (const flow of outgoingFlows) {
-        xml += `      <bpmn:outgoing>${flow.id}</bpmn:outgoing>\n`;
-      }
-    }
-
-    xml += `    </${eventTag}>\n`;
-  }
-
-  // Add gateways
-  const gateways = elements.filter(el => el.type === 'gateway');
-
-  for (const gateway of gateways) {
-    // Determine gateway type tag
-    let gatewayTag = 'bpmn:exclusiveGateway';
-    if (gateway.gatewayType === 'inclusive') {
-      gatewayTag = 'bpmn:inclusiveGateway';
-    } else if (gateway.gatewayType === 'parallel') {
-      gatewayTag = 'bpmn:parallelGateway';
-    } else if (gateway.gatewayType === 'complex') {
-      gatewayTag = 'bpmn:complexGateway';
-    } else if (gateway.gatewayType === 'event-based') {
-      gatewayTag = 'bpmn:eventBasedGateway';
-    } else if (gateway.gatewayType === 'parallel-event-based') {
-      gatewayTag = 'bpmn:parallelEventBasedGateway';
-    }
-
-    xml += `    <${gatewayTag} id="${gateway.id}"`;
-
-    if (gateway.label) {
-      xml += ` name="${escapeXml(processTextForXml(gateway.label))}"`;
-    }
-
-    if (gateway.gatewayType === 'event-based' && gateway.isInstantiating !== undefined) {
-      xml += ` instantiate="${gateway.isInstantiating}"`;
-    }
-
-    if (gateway.defaultFlow) {
-      xml += ` default="${gateway.defaultFlow}"`;
-    }
-
-    xml += '>\n';
-
-    // Add incoming sequence flows
-    const incomingFlows = sequenceFlows.filter(flow => flow.targetId === gateway.id);
-    for (const flow of incomingFlows) {
-      xml += `      <bpmn:incoming>${flow.id}</bpmn:incoming>\n`;
-    }
-
-    // Add outgoing sequence flows
-    const outgoingFlows = sequenceFlows.filter(flow => flow.sourceId === gateway.id);
-    for (const flow of outgoingFlows) {
-      xml += `      <bpmn:outgoing>${flow.id}</bpmn:outgoing>\n`;
-    }
-
-    xml += `    </${gatewayTag}>\n`;
-  }
+  for (const node of nodes) xml += flowNodeXml(node, { flows, childrenByParent, flowsByParent }, 2);
+  for (const flow of flows) xml += sequenceFlowXml(flow, 2);
 
   xml += '  </bpmn:process>\n';
-
   return xml;
 }
 
-/**
- * Create the BPMNDiagram section with shapes and edges
- * @param {Array} elements Array of BPMN elements
- * @returns {string} XML string for the diagram section
- */
-function createDiagramSection(elements) {
-  // Create a unique diagram ID
+function createDiagramSection(elements, planeElementId) {
   const diagramId = `BPMNDiagram_${generateId()}`;
   const planeId = `BPMNPlane_${generateId()}`;
 
-  // Find the collaboration ID if it exists
-  const pools = elements.filter(el => el.type === 'pool');
-  let bpmnElement = 'Process_1';
-
-  if (pools.length > 0) {
-    // Use the collaboration as the root element
-    bpmnElement = `Collaboration_${generateId()}`;
-  }
-
   let xml = `  <bpmndi:BPMNDiagram id="${diagramId}">\n`;
-  xml += `    <bpmndi:BPMNPlane id="${planeId}" bpmnElement="${bpmnElement}">\n`;
+  xml += `    <bpmndi:BPMNPlane id="${planeId}" bpmnElement="${escapeXml(planeElementId)}">\n`;
 
-  // Add shapes for all node elements
   for (const element of elements) {
-    if (element.type !== 'connection') {
-      // Skip elements without position or size
-      if (element.x === undefined || element.y === undefined ||
-          element.width === undefined || element.height === undefined) {
-        continue;
-      }
+    if (element.type === 'connection') continue;
+    if (![element.x, element.y, element.width, element.height].every(Number.isFinite)) continue;
 
-      xml += `      <bpmndi:BPMNShape id="${element.id}_di" bpmnElement="${element.id}">\n`;
-      xml += `        <dc:Bounds x="${element.x}" y="${element.y}" width="${element.width}" height="${element.height}" />\n`;
-
-      // Add label if it exists and has a position
-      if (element.label && element.labelPosition) {
-        xml += '        <bpmndi:BPMNLabel>\n';
-        xml += `          <dc:Bounds x="${element.labelPosition.x}" y="${element.labelPosition.y}" width="90" height="20" />\n`;
-        xml += '        </bpmndi:BPMNLabel>\n';
-      }
-
-      xml += '      </bpmndi:BPMNShape>\n';
+    const attrs = [];
+    if (element.type === 'pool' || element.type === 'lane') {
+      attrs.push(` isHorizontal="${element.isHorizontal === false ? 'false' : 'true'}"`);
     }
+    if (element.type === 'gateway') attrs.push(' isMarkerVisible="true"');
+    if (element.type === 'subprocess' && element.isExpanded !== undefined) {
+      attrs.push(` isExpanded="${element.isExpanded ? 'true' : 'false'}"`);
+    }
+
+    xml += `      <bpmndi:BPMNShape id="Shape_${escapeXml(element.id)}" bpmnElement="${escapeXml(element.id)}"${attrs.join('')}>\n`;
+    xml += `        <dc:Bounds x="${numAttr(element.x)}" y="${numAttr(element.y)}" width="${numAttr(element.width)}" height="${numAttr(element.height)}"/>\n`;
+    const lb = element.labelBounds;
+    if (lb && [lb.x, lb.y, lb.width, lb.height].every(Number.isFinite)) {
+      xml += '        <bpmndi:BPMNLabel>\n';
+      xml += `          <dc:Bounds x="${numAttr(lb.x)}" y="${numAttr(lb.y)}" width="${numAttr(lb.width)}" height="${numAttr(lb.height)}"/>\n`;
+      xml += '        </bpmndi:BPMNLabel>\n';
+    }
+    xml += '      </bpmndi:BPMNShape>\n';
   }
 
-  // Add edges for all connections
   for (const element of elements) {
-    if (element.type === 'connection') {
-      xml += `      <bpmndi:BPMNEdge id="${element.id}_di" bpmnElement="${element.id}">\n`;
-
-      // Add waypoints
-      for (const waypoint of element.waypoints) {
-        xml += `        <di:waypoint xsi:type="dc:Point" x="${waypoint.x}" y="${waypoint.y}" />\n`;
-      }
-
-      // Add label if it exists and has a position
-      if (element.label && element.labelOffset) {
-        xml += '        <bpmndi:BPMNLabel>\n';
-        xml += `          <dc:Bounds x="${element.labelOffset.x}" y="${element.labelOffset.y}" width="90" height="20" />\n`;
-        xml += '        </bpmndi:BPMNLabel>\n';
-      }
-
-      xml += '      </bpmndi:BPMNEdge>\n';
+    if (element.type !== 'connection') continue;
+    const waypoints = element.waypoints || [];
+    if (waypoints.length < 2) continue; // ohne zwei Punkte ist die Kante nicht darstellbar
+    xml += `      <bpmndi:BPMNEdge id="Edge_${escapeXml(element.id)}" bpmnElement="${escapeXml(element.id)}">\n`;
+    for (const wp of waypoints) {
+      xml += `        <di:waypoint x="${numAttr(wp.x)}" y="${numAttr(wp.y)}"/>\n`;
     }
+    const lb = element.labelBounds;
+    if (lb && [lb.x, lb.y, lb.width, lb.height].every(Number.isFinite)) {
+      xml += '        <bpmndi:BPMNLabel>\n';
+      xml += `          <dc:Bounds x="${numAttr(lb.x)}" y="${numAttr(lb.y)}" width="${numAttr(lb.width)}" height="${numAttr(lb.height)}"/>\n`;
+      xml += '        </bpmndi:BPMNLabel>\n';
+    }
+    xml += '      </bpmndi:BPMNEdge>\n';
   }
 
   xml += '    </bpmndi:BPMNPlane>\n';
   xml += '  </bpmndi:BPMNDiagram>\n';
-
   return xml;
 }
 
+/* ------------------------------------------------------------------------ */
+/* Oeffentliche Schnittstelle                                                 */
+/* ------------------------------------------------------------------------ */
+
 /**
- * Export the internal BPMN data model to BPMN 2.0 XML
- * @param {Array} elements Array of BPMN elements
- * @returns {string} BPMN 2.0 XML string
+ * Schreibt das interne Modell als BPMN 2.0 XML.
+ *
+ * @param {Array<object>} elements
+ * @returns {string}
  */
 export function exportBpmnXml(elements) {
-  let xml = createXmlHeader();
+  const all = Array.isArray(elements) ? elements : [];
+  const pools = all.filter((el) => el.type === 'pool');
+  const lanes = all.filter((el) => el.type === 'lane');
+  const connections = all.filter((el) => el.type === 'connection');
+  const messageFlows = connections.filter((c) => c.connectionType === 'message');
+  const sequenceFlows = connections.filter((c) => c.connectionType !== 'message');
+  const nodes = all.filter(isFlowNode);
+  const byId = new Map(all.map((e) => [String(e.id), e]));
 
-  // Add collaboration section if there are pools
-  const pools = elements.filter(el => el.type === 'pool');
-  if (pools.length > 0) {
-    xml += createCollaborationSection(elements);
+  // Kinder von Unterprozessen: werden dort verschachtelt, nicht oben.
+  const childrenByParent = new Map();
+  for (const node of nodes) {
+    if (!node.containerRef) continue;
+    const parent = byId.get(String(node.containerRef));
+    if (!parent || parent.type !== 'subprocess') continue;
+    if (!childrenByParent.has(String(parent.id))) childrenByParent.set(String(parent.id), []);
+    childrenByParent.get(String(parent.id)).push(node);
+  }
+  const nestedIds = new Set([...childrenByParent.values()].flat().map((n) => String(n.id)));
 
-    // Create a process section for each pool
-    for (const pool of pools) {
-      xml += createProcessSection(elements, pool);
+  // Sequenzfluesse, deren beide Enden in demselben Unterprozess liegen,
+  // gehoeren in diesen Unterprozess.
+  const flowsByParent = new Map();
+  const topLevelFlows = [];
+  for (const flow of sequenceFlows) {
+    const s = byId.get(String(flow.sourceId));
+    const t = byId.get(String(flow.targetId));
+    if (!s || !t) continue; // Kante ins Leere wird nicht geschrieben
+    const sc = s.containerRef ? String(s.containerRef) : null;
+    const tc = t.containerRef ? String(t.containerRef) : null;
+    if (sc && sc === tc && byId.get(sc)?.type === 'subprocess') {
+      if (!flowsByParent.has(sc)) flowsByParent.set(sc, []);
+      flowsByParent.get(sc).push(flow);
+    } else {
+      topLevelFlows.push(flow);
     }
-  } else {
-    // If there are no pools, create a single process
-    xml += createProcessSection(elements, { id: 'Process_1', processRef: 'Process_1' });
   }
 
-  // Add diagram section
-  xml += createDiagramSection(elements);
+  const definitionsId = `Definitions_${generateId()}`;
+  let xml = createXmlHeader(definitionsId);
+  xml += createReferencedRootElements(all);
 
-  // Add footer
-  xml += createXmlFooter();
+  let planeElementId;
 
+  if (pools.length) {
+    const collaborationId = `Collaboration_${generateId()}`;
+    planeElementId = collaborationId;
+    xml += createCollaborationSection(collaborationId, pools, messageFlows, all);
+
+    const owner = assignNodesToPools(all, pools, lanes);
+    const unassigned = [];
+
+    for (const pool of pools) {
+      const poolNodes = nodes.filter(
+        (n) => owner.get(n.id) === pool.id && !nestedIds.has(String(n.id))
+      );
+      const poolNodeIds = new Set(nodes.filter((n) => owner.get(n.id) === pool.id).map((n) => String(n.id)));
+      const poolFlows = topLevelFlows.filter(
+        (f) => poolNodeIds.has(String(f.sourceId)) && poolNodeIds.has(String(f.targetId))
+      );
+      xml += createProcessSection({
+        processId: processIdOf(pool),
+        lanes: lanes.filter((l) => l.parentRef === pool.id),
+        nodes: poolNodes,
+        flows: poolFlows,
+        childrenByParent,
+        flowsByParent,
+      });
+    }
+
+    // Alles, was in keinem Pool liegt, bekommt einen eigenen Prozess -
+    // verlieren ist keine Option.
+    for (const node of nodes) {
+      if (!owner.get(node.id) && !nestedIds.has(String(node.id))) unassigned.push(node);
+    }
+    const assignedFlowIds = new Set();
+    for (const pool of pools) {
+      const poolNodeIds = new Set(nodes.filter((n) => owner.get(n.id) === pool.id).map((n) => String(n.id)));
+      for (const f of topLevelFlows) {
+        if (poolNodeIds.has(String(f.sourceId)) && poolNodeIds.has(String(f.targetId))) assignedFlowIds.add(f.id);
+      }
+    }
+    const leftoverFlows = topLevelFlows.filter((f) => !assignedFlowIds.has(f.id));
+    if (unassigned.length || leftoverFlows.length) {
+      xml += createProcessSection({
+        processId: `Process_Ohne_Pool_${generateId()}`,
+        lanes: [],
+        nodes: unassigned,
+        flows: leftoverFlows,
+        childrenByParent,
+        flowsByParent,
+      });
+    }
+  } else {
+    const processId = 'Process_1';
+    planeElementId = processId;
+    xml += createProcessSection({
+      processId,
+      lanes: [],
+      nodes: nodes.filter((n) => !nestedIds.has(String(n.id))),
+      flows: topLevelFlows,
+      childrenByParent,
+      flowsByParent,
+    });
+  }
+
+  xml += createDiagramSection(all, planeElementId);
+  xml += '</bpmn:definitions>\n';
   return xml;
 }
 
 /**
- * Create a downloadable file with the BPMN XML
- * @param {string} xml The BPMN XML string
- * @param {string} filename The name of the file to download
+ * Bietet das XML als Datei zum Herunterladen an.
+ * @param {string} xml
+ * @param {string} filename
  */
 export function downloadBpmnXml(xml, filename = 'diagram.bpmn') {
-  // Create a blob with the XML content
   const blob = new Blob([xml], { type: 'application/xml' });
-
-  // Create a download link
   const link = document.createElement('a');
   link.href = URL.createObjectURL(blob);
   link.download = filename;
-
-  // Trigger the download
   document.body.appendChild(link);
   link.click();
-
-  // Clean up
   document.body.removeChild(link);
   URL.revokeObjectURL(link.href);
 }
