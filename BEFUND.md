@@ -162,30 +162,94 @@ import BPMN XML: Missing bpmn:definitions in parsed XML" jetzt zum Beispiel:
 
 ## Prüfung
 
-`npm test` — drei Läufe, kein Browser nötig. Einzelheiten in
+`npm test` — vier Läufe, kein Browser nötig. Einzelheiten in
 [test/README.md](test/README.md).
 
 ```
-9/9 Dateien fehlerfrei importiert.
-6/6 Dateien überstehen den Rundlauf unverändert.
-6/6 erzeugte Dateien sind schemakonform.
+10/10 Dateien fehlerfrei importiert.
+7/7 Dateien überstehen den Rundlauf unverändert.
+9/9 Prüfungen zur Verschachtelung bestanden.
+7/7 erzeugte Dateien sind schemakonform.
 ```
 
 Der Rundlauf importiert, exportiert und importiert erneut und vergleicht das
-Modell davor und danach — Id, Typ, Untertyp, Ereignisdefinition, Geometrie,
-Beschriftung, Wegpunktzahl, Randereignis-Bindung. Vor der Änderung überstand
-**keine** Datei diesen Lauf.
+Modell davor und danach — Id, Typ, Untertyp, Ereignisdefinition und deren
+Verweis, Timer-Wert, `cancelActivity`, `calledElement`, Bedingung,
+Nachrichtenverweis, Dokumentation, Geometrie, Beschriftung und Wegpunktzahl.
+Vor der Änderung überstand **keine** Datei diesen Lauf.
+
+---
+
+## Zweiter Durchgang
+
+### 9. Daten und Artefakte wurden angeboten, aber nicht gezeichnet
+
+Datenobjekt, Datenspeicher und Textanmerkung stehen seit jeher in der
+Werkzeugleiste. Gezeichnet wurden sie als weißes Rechteck mit dem Typnamen
+darin, weil kein Renderer sie abdeckte; der Export ließ sie ganz weg.
+
+`ArtifactRenderer.svelte` zeichnet sie nach Notation: Blatt mit umgeknickter
+Ecke, Sammlungsmarkierung, Ein-/Ausgabepfeil, Zylinder, offene Klammer,
+gestrichelter Gruppenrahmen.
+
+Dabei kam heraus, dass `BpmnEditor.svelte` diese vier Typen **zusätzlich**
+selbst zeichnete, 162 Zeilen davon — jede Anmerkung erschien doppelt, und die
+Fassung im Editor malte einen geschlossenen Rahmen statt der offenen Klammer.
+Alle Knotentypen laufen jetzt über den `ElementRenderer`.
+
+### 10. Eine Assoziation wurde als Sequenzfluss exportiert
+
+Damit wird aus einer Anmerkung ein Kontrollfluss. Assoziationen sind Artefakte
+und stehen im Schema **nach** den Flusselementen.
+
+### 11. Doppelte Maskierung in Attributwerten
+
+`processTextForXml` setzte die Entität `&#10;`, danach maskierte `escapeXml`
+deren `&` gleich mit. In der Datei stand sichtbar `&amp;#10;`. Der Rundlauf
+merkte es nicht, weil der Import es zufällig wieder auflöste — jedes andere
+Werkzeug zeigte den Text literal.
+
+### 12. Nichts folgte dem, woran es hing
+
+Nur ein Pool nahm seinen Inhalt mit. Zwei Beziehungen fehlten, und beide fallen
+sofort auf:
+
+- Ein **Randereignis** sitzt auf der Kante seiner Aktivität. Wurde die Aufgabe
+  verschoben, blieb das Ereignis liegen — der Bezug stand im Modell, wurde beim
+  Ziehen aber nicht gelesen.
+- Ein aufgeklappter **Unterprozess** ließ seinen Inhalt stehen.
+
+`src/lib/utils/containment.js` beantwortet die Frage jetzt an einer Stelle, für
+alle drei Fälle und über mehrere Ebenen hinweg: ein Pool nimmt einen
+Unterprozess darin samt dessen Kindern mit. Verbindungen, deren beide Enden
+mitwandern, behalten ihren Verlauf.
+
+### 13. Protokollierung im Ziehpfad
+
+`ElementManager` enthielt 23 `console.log`, mehrere davon in Schleifen über
+alle Elemente — sie feuerten bei **jeder** Mausbewegung. Bei 132 Elementen sind
+das rund 140 Zeilen je Bewegung. Übrig sind zwei, beide außerhalb des
+Ziehpfads.
 
 ---
 
 ## Offen
 
-- **Verschachtelte Darstellung.** Kinder eines aufgeklappten Unterprozesses
-  werden an ihrer DI-Position gezeichnet, sind aber keine Kinder im Modell:
-  wer den Unterprozess verschiebt, verschiebt sie nicht mit.
-- **Namen von Nachrichten und Signalen** überstehen den Rundlauf nur, wenn das
-  Wurzelelement gelesen wurde; der Exporter baut sie sonst aus der Id neu auf.
-- **Assoziationen und Textanmerkungen** werden importiert, aber nicht
-  gezeichnet — dafür fehlt der Renderer.
-- **`main.js`** exportiert weiterhin Default und benannte Exporte zusammen;
-  Rollup weist bei jedem Bau darauf hin.
+- **`isElementInsidePool` liegt fünffach im Code** — in `BpmnEditor`,
+  `MultiSelectionManager`, `ConnectionRenderer`, `ConnectionManager` und bis
+  eben in `ElementManager`, jedes Mal leicht anders. Gehört nach
+  `containment.js`. Die vier verbliebenen Fundstellen sitzen in Auswahl- und
+  Verbindungscode ohne Testabdeckung; das zuerst abzusichern ist die eigentliche
+  Arbeit.
+- **Verschachtelung beim Löschen und bei der Größenänderung.** Ziehen nimmt den
+  Inhalt jetzt mit; wer einen Unterprozess löscht oder verkleinert, lässt seine
+  Kinder unberührt.
+- **Namen von Gruppen** überstehen den Rundlauf nicht: BPMN führt sie über eine
+  `categoryValue`, der Exporter schreibt die Gruppe ohne Namen.
+- **Ein- und Ausgabepfeil am Datenobjekt** wird gezeichnet, aber nicht
+  importiert: dafür bräuchte es `dataInput`/`dataOutput` und die
+  Datenzuordnungen einer Aktivität.
+- **Kommentarsprache.** Die von mir überarbeiteten Dateien sind auf Deutsch
+  kommentiert, der ältere Bestand überwiegend auf Englisch. Für ein
+  öffentliches Repository wäre eine Sprache besser — leicht umzustellen, aber
+  eine Entscheidung, die dem Projekt gehört.

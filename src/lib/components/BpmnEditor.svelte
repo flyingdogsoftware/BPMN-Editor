@@ -1,6 +1,7 @@
 <script >
   import { bpmnStore } from '../stores/bpmnStore';
   import { snapPositionToGrid, snapToGrid } from '../utils/gridUtils';
+  import { getMovingWith, getInternalConnections } from '../utils/containment';
   // Removed old connection utils import
   import { onMount } from 'svelte';
   import { importBpmnDiagram } from '../utils/xml/bpmnXmlParser';
@@ -773,69 +774,32 @@
       return false; // We're handling the drag ourselves
     }
 
-    // First delegate to the ElementInteractionManager to set up basic dragging
-    console.log('DEBUG: Delegating to ElementInteractionManager.handleMouseDown');
+    // Grundlegendes Ziehen einrichten
     const result = elementInteractionManager.handleMouseDown(event, element);
-    console.log('DEBUG: ElementInteractionManager.handleMouseDown result:', result);
     if (!result) return false;
 
-    // Then handle pool/lane specific logic - ONLY if we're directly dragging a pool or lane
-    if (isNode(element) && (element.type === 'pool' || element.type === 'lane')) {
-      console.log('DEBUG: Handling pool/lane specific logic for element:', element.id, 'type:', element.type);
-
-      // If this is a pool, store positions of all lanes and contained elements
-      // BUT ONLY if we're directly dragging the pool itself (not elements inside it)
-      if (element.type === 'pool' && element.lanes && element.lanes.length > 0) {
-        console.log('DEBUG: This is a pool with lanes, storing positions of contained elements');
-
-        // Get current original positions
-        const positions = elementInteractionManager.getOriginalPositions();
-        console.log('DEBUG: Current original positions:', positions);
-        const updatedPositions = { ...positions };
-
-        // Store positions of all lanes in this pool
-        element.lanes.forEach(laneId => {
-          const lane = $bpmnStore.find(el => el.id === laneId && el.type === 'lane');
-          if (lane && 'x' in lane && 'y' in lane) {
-            updatedPositions[lane.id] = { x: lane.x, y: lane.y };
-            console.log('DEBUG: Stored position for lane:', lane.id, 'position:', updatedPositions[lane.id]);
-          }
-        });
-
-        // Store positions of all elements contained within the pool
-        let elementsInsidePoolCount = 0;
-        $bpmnStore.forEach(el => {
-          if (isNode(el) && el.type !== 'pool' && el.type !== 'lane' && 'x' in el && 'y' in el) {
-            // Check if element is inside the pool
-            const isInside = isElementInsidePool(el, element);
-            console.log('DEBUG: Checking if element is inside pool:', el.id, 'type:', el.type, 'result:', isInside);
-
-            if (isInside) {
-              elementsInsidePoolCount++;
-              updatedPositions[el.id] = { x: el.x, y: el.y };
-              console.log('DEBUG: Stored position for contained element:', el.id, 'position:', updatedPositions[el.id]);
-            }
-          }
-        });
-        console.log('DEBUG: Total elements inside pool:', elementsInsidePoolCount);
-
-        // Update the original positions in the manager
-        console.log('DEBUG: Setting updated positions in ElementInteractionManager');
-        elementInteractionManager.setOriginalPositions(updatedPositions);
-      }
-    } else {
-      console.log('DEBUG: Not handling pool/lane specific logic for element:', element.id, 'type:', element.type);
-
-      // Check if this element is inside a pool
-      if (isNode(element)) {
-        const pools = $bpmnStore.filter(el => el.type === 'pool');
-        for (const pool of pools) {
-          if (isElementInsidePool(element, pool)) {
-            console.log('DEBUG: Element is inside pool but pool is not being dragged directly:', pool.id);
-            break;
-          }
+    // Ausgangslage von allem sichern, was mitwandert. Frueher galt das nur
+    // fuer Pools; damit blieben Randereignisse an ihrer alten Stelle liegen
+    // und der Inhalt eines Unterprozesses ebenfalls stehen.
+    const elements = $bpmnStore;
+    const movingIds = getMovingWith(element, elements);
+    if (movingIds.size) {
+      const positions = { ...elementInteractionManager.getOriginalPositions() };
+      for (const id of movingIds) {
+        const moved = elements.find(el => el.id === id);
+        if (moved && 'x' in moved && 'y' in moved) {
+          positions[id] = { x: moved.x, y: moved.y };
         }
       }
+      // Verbindungen, deren beide Enden mitwandern, behalten ihren Verlauf -
+      // dafuer braucht es die Wegpunkte von vorher.
+      const all = new Set([...movingIds, String(element.id)]);
+      for (const connection of getInternalConnections(all, elements)) {
+        if (Array.isArray(connection.waypoints) && connection.waypoints.length) {
+          positions[`waypoints:${connection.id}`] = connection.waypoints.map(p => ({ x: p.x, y: p.y }));
+        }
+      }
+      elementInteractionManager.setOriginalPositions(positions);
     }
 
     return true;

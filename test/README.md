@@ -1,11 +1,12 @@
 # Prueflaeufe
 
-Drei Laeufe, alle ohne Browser. `npm test` fuehrt sie nacheinander aus.
+Vier Laeufe, alle ohne Browser. `npm test` fuehrt sie nacheinander aus.
 
 ```
-npm run test:import      # laedt jede Fixture und vergleicht mit dem Dateiinhalt
-npm run test:roundtrip   # importieren -> exportieren -> importieren, ohne Verlust
-npm run test:schema      # das erzeugte XML gegen das OMG-Schema
+npm run test:import       # laedt jede Fixture und vergleicht mit dem Dateiinhalt
+npm run test:roundtrip    # importieren -> exportieren -> importieren, ohne Verlust
+npm run test:containment  # was bewegt sich mit, wenn man etwas zieht
+npm run test:schema       # das erzeugte XML gegen das OMG-Schema
 ```
 
 Alle drei laden den echten Importpfad ueber Vites SSR-Loader — also genau den
@@ -45,6 +46,16 @@ Elemente in einem Unterprozess **ohne** eigenes BPMNShape duerfen fehlen — sie
 gehoeren zu einer zugeklappten Darstellung und sind auf dieser Ebene nicht
 sichtbar.
 
+## Was `runContainment.mjs` prueft
+
+Zieht Elemente wirklich, ueber denselben `ElementManager`, den auch die
+Oberflaeche benutzt - der Store und die Zieh-Logik sind reines JavaScript.
+Geprueft wird, dass ein Randereignis seiner Aktivitaet folgt, der Inhalt eines
+aufgeklappten Unterprozesses dem Unterprozess, und ein Pool seine Lanes und
+deren Inhalt mitnimmt - auch ueber zwei Ebenen hinweg. Dazu die Gegenprobe:
+eine einzelne Aufgabe nimmt nichts Fremdes mit, und der Pool bleibt liegen,
+wenn man eine Aufgabe darin zieht.
+
 ## Fixtures
 
 | Datei | wofuer |
@@ -55,6 +66,7 @@ sichtbar.
 | `gross-ohne-di.bpmn` | dasselbe Modell ohne jedes Diagram Interchange |
 | `klein-lanes.bpmn` | ein Pool, fuenf Lanes, ein Unterprozess |
 | `nur-prozess.bpmn` | ein Prozess ohne Kollaboration, `bpmn2:`-Praefix, Randereignis mit Frist |
+| `artefakte.bpmn` | Datenobjekt, Sammlung, Datenspeicher, Textanmerkung, Gruppe, Assoziation |
 | `invalid-kein-xml.bpmn` | nicht wohlgeformt |
 | `invalid-kein-bpmn.bpmn` | wohlgeformtes XML, aber SVG |
 | `invalid-falscher-namensraum.bpmn` | `<definitions>` in einem fremden Namensraum |

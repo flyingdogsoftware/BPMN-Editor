@@ -1,4 +1,6 @@
+import { get } from 'svelte/store';
 import { bpmnStore } from '../stores/bpmnStore';
+import { getMovingWith, getInternalConnections, isContainer } from '../utils/containment';
 import { isNode } from '../models/bpmnElements';
 import { snapPositionToGrid, snapToGrid } from '../utils/gridUtils';
 import { removeNonCornerWaypoints } from '../utils/connectionRouting';
@@ -213,190 +215,126 @@ class ElementManager {
         return newLane;
     }
     /**
-     * Handle element dragging
-     * @param elementId The ID of the element being dragged
-     * @param dx The change in x position
-     * @param dy The change in y position
-     * @param originalPositions The original positions of elements before dragging
+     * Ein Element ziehen - mit allem, was daran haengt.
+     *
+     * Was mitkommt, beantwortet getMovingWith an einer Stelle fuer alle
+     * Faelle: Randereignisse folgen ihrer Aktivitaet, der Inhalt eines
+     * aufgeklappten Unterprozesses folgt dem Unterprozess, und ein Pool nimmt
+     * seine Lanes und deren Inhalt mit. Frueher galt nur der letzte Fall.
+     *
+     * Waehrend des Ziehens wird bewusst nicht am Raster eingerastet, damit die
+     * Bewegung fluessig bleibt; das besorgt handleElementDragEnd.
+     *
+     * @param {string} elementId Id des gezogenen Elements
+     * @param {number} dx Verschiebung in x seit dem Beginn
+     * @param {number} dy Verschiebung in y seit dem Beginn
+     * @param {Record<string,{x:number,y:number}>} originalPositions Positionen zu Beginn
      */
     handleElementDrag(elementId, dx, dy, originalPositions) {
-        console.log('DEBUG: handleElementDrag called with elementId:', elementId, 'dx:', dx, 'dy:', dy);
-        console.log('DEBUG: Original positions:', originalPositions);
-        let element;
-        // Get the element being dragged
-        const unsubscribe = bpmnStore.subscribe(store => {
-            element = store.find(el => el.id === elementId);
-        });
-        unsubscribe();
-        console.log('DEBUG: Element being dragged:', element);
-        if (!element) {
-            console.log('DEBUG: Element not found, returning');
-            return;
-        }
-        // Get the original position of the dragged element
+        const elements = get(bpmnStore);
+        const element = elements.find(el => el.id === elementId);
+        if (!element) return;
+
         const originalPos = originalPositions[elementId];
-        console.log('DEBUG: Original position for element:', originalPos);
-        if (!originalPos) {
-            console.log('DEBUG: No original position for element, returning');
-            return;
+        if (!originalPos) return;
+
+        bpmnStore.updateElement(elementId, { x: originalPos.x + dx, y: originalPos.y + dy });
+
+        if (!this.shouldMoveContents(element)) return;
+
+        const movingIds = getMovingWith(element, elements);
+        for (const id of movingIds) {
+            const pos = originalPositions[id];
+            if (!pos) continue; // beim Anfassen nicht erfasst - dann bleibt es stehen
+            bpmnStore.updateElement(id, { x: pos.x + dx, y: pos.y + dy });
         }
-        // Calculate the new position based on the original position and the drag distance
-        const newX = originalPos.x + dx;
-        const newY = originalPos.y + dy;
-        console.log('DEBUG: New position calculated:', { newX, newY });
-        // Update the element position in the store (without snapping during drag for smooth movement)
-        bpmnStore.updateElement(elementId, { x: newX, y: newY });
-        console.log('DEBUG: Element position updated in store');
-        // If this is a pool, also move all its lanes and contained elements
-        // BUT ONLY if we're directly dragging the pool itself (not elements inside it)
-        if (element.type === 'pool' && element.lanes && element.lanes.length > 0) {
-            console.log('DEBUG: Element is a pool with lanes, handling pool-specific logic');
-            // Check if we're in selection mode - if so, we don't want to move contained elements
-            // because the user might be trying to move elements within the pool
-            const inSelectionMode = multiSelectionManager.getSelectionMode();
-            // Get the currently selected element IDs
-            const selectedIds = multiSelectionManager.getSelectedElementIds();
-            console.log('DEBUG: In selection mode:', inSelectionMode, 'Selected IDs:', selectedIds);
-            // Only move contained elements if we're not in selection mode or if the pool itself is selected
-            // (not elements inside it)
-            const shouldMoveContainedElements = !inSelectionMode ||
-                (selectedIds.includes(element.id) && selectedIds.length === 1);
-            console.log('DEBUG: Should move contained elements:', shouldMoveContainedElements);
-            if (shouldMoveContainedElements) {
-                // Move all lanes in this pool
-                element.lanes.forEach(laneId => {
-                    let lane;
-                    const laneUnsubscribe = bpmnStore.subscribe(store => {
-                        lane = store.find(el => el.id === laneId && el.type === 'lane');
-                    });
-                    laneUnsubscribe();
-                    const laneOriginalPos = originalPositions[laneId];
-                    console.log('DEBUG: Lane:', lane?.id, 'Original position:', laneOriginalPos);
-                    if (lane && laneOriginalPos) {
-                        // Move the lane based on its original position plus the drag distance
-                        bpmnStore.updateElement(lane.id, {
-                            x: laneOriginalPos.x + dx,
-                            y: laneOriginalPos.y + dy
-                        });
-                        console.log('DEBUG: Updated lane position');
-                    }
-                });
-                // Move all elements contained within the pool
-                let allElements = [];
-                const storeUnsubscribe = bpmnStore.subscribe(store => {
-                    allElements = store;
-                });
-                storeUnsubscribe();
-                console.log('DEBUG: Checking for elements inside the pool');
-                let elementsInsidePoolCount = 0;
-                allElements.forEach(el => {
-                    if (el.type !== 'connection' && el.type !== 'pool' && el.type !== 'lane') {
-                        const elOriginalPos = originalPositions[el.id];
-                        const isInside = this.isElementInsidePool(el, element);
-                        console.log('DEBUG: Element:', el.id, 'type:', el.type, 'is inside pool:', isInside, 'has original position:', !!elOriginalPos);
-                        if (elOriginalPos && isInside) {
-                            elementsInsidePoolCount++;
-                            // Move the element based on its original position plus the drag distance
-                            bpmnStore.updateElement(el.id, {
-                                x: elOriginalPos.x + dx,
-                                y: elOriginalPos.y + dy
-                            });
-                            console.log('DEBUG: Updated element position inside pool');
-                        }
-                    }
-                });
-                console.log('DEBUG: Total elements inside pool that were moved:', elementsInsidePoolCount);
-            }
+
+        // Verbindungen, deren beide Enden mitwandern, behalten ihren Verlauf.
+        const all = new Set([...movingIds, String(elementId)]);
+        for (const connection of getInternalConnections(all, elements)) {
+            const original = originalPositions[`waypoints:${connection.id}`];
+            if (!original) continue;
+            bpmnStore.updateConnectionWaypoints(
+                connection.id,
+                original.map(p => ({ x: p.x + dx, y: p.y + dy }))
+            );
         }
     }
+
     /**
-     * Handle element drag end (with snapping to grid)
-     * @param elementId The ID of the element being dragged
+     * Entscheidet, ob der Inhalt eines Bereichs mitwandert.
+     *
+     * In der Mehrfachauswahl bewegt der Anwender ausgewaehlte Elemente, nicht
+     * den Bereich - dann bleibt der Inhalt stehen, ausser der Bereich selbst
+     * ist das einzige ausgewaehlte Element.
+     *
+     * @param {object} element
+     * @returns {boolean}
+     */
+    shouldMoveContents(element) {
+        if (!isContainer(element) && element.type !== 'task' && element.type !== 'subprocess') {
+            return true; // ein einfacher Knoten: nur Randereignisse, immer mitnehmen
+        }
+        if (!multiSelectionManager.getSelectionMode()) return true;
+        const selected = multiSelectionManager.getSelectedElementIds();
+        return selected.includes(element.id) && selected.length === 1;
+    }
+
+    /**
+     * Ziehen beenden: die Endlage am Raster einrasten und alles Mitbewegte um
+     * denselben Betrag nachziehen, damit die Abstaende erhalten bleiben.
+     *
+     * @param {string} elementId
      */
     handleElementDragEnd(elementId) {
-        // Find the element that was being dragged
-        let element;
-        const unsubscribe = bpmnStore.subscribe(store => {
-            element = store.find(el => el.id === elementId);
-        });
-        unsubscribe();
-        if (element && element.type !== 'connection' && 'x' in element && 'y' in element) {
-            // Get the current position
-            const currentX = element.x;
-            const currentY = element.y;
-            // Snap the final position to the grid
-            const [snappedX, snappedY] = snapPositionToGrid(currentX, currentY);
-            // Update the element with the snapped position
-            bpmnStore.updateElement(elementId, { x: snappedX, y: snappedY });
-            // If this is a pool, also update its lanes
-            // BUT ONLY if we're directly dragging the pool itself (not elements inside it)
-            if (element.type === 'pool' && element.lanes && element.lanes.length > 0) {
-                // Check if we're in selection mode - if so, we don't want to move contained elements
-                // because the user might be trying to move elements within the pool
-                const inSelectionMode = multiSelectionManager.getSelectionMode();
-                // Get the currently selected element IDs
-                const selectedIds = multiSelectionManager.getSelectedElementIds();
-                console.log('DEBUG: In selection mode:', inSelectionMode, 'Selected IDs:', selectedIds);
-                // Only move contained elements if we're not in selection mode or if the pool itself is selected
-                // (not elements inside it)
-                const shouldMoveContainedElements = !inSelectionMode ||
-                    (selectedIds.includes(element.id) && selectedIds.length === 1);
-                console.log('DEBUG: Should move contained elements:', shouldMoveContainedElements);
-                if (shouldMoveContainedElements) {
-                    // Calculate the offset from snapping
-                    const offsetX = snappedX - currentX;
-                    const offsetY = snappedY - currentY;
-                    // Update all lanes in this pool
-                    element.lanes.forEach(laneId => {
-                        let lane;
-                        const laneUnsubscribe = bpmnStore.subscribe(store => {
-                            lane = store.find(el => el.id === laneId && el.type === 'lane');
-                        });
-                        laneUnsubscribe();
-                        if (lane && 'x' in lane && 'y' in lane) {
-                            bpmnStore.updateElement(lane.id, {
-                                x: lane.x + offsetX,
-                                y: lane.y + offsetY
-                            });
-                        }
-                    });
-                    // Update all elements contained within the pool
-                    let allElements = [];
-                    const storeUnsubscribe = bpmnStore.subscribe(store => {
-                        allElements = store;
-                    });
-                    storeUnsubscribe();
-                    // Collect all connections that need to be updated
-                    const connectionsToUpdate = new Set();
-                    allElements.forEach(el => {
-                        if (el.type !== 'connection' && el.type !== 'pool' && el.type !== 'lane' && 'x' in el && 'y' in el) {
-                            if (this.isElementInsidePool(el, element)) {
-                                bpmnStore.updateElement(el.id, {
-                                    x: el.x + offsetX,
-                                    y: el.y + offsetY
-                                });
-                                // Add any connections connected to this element to the update list
-                                allElements.forEach(conn => {
-                                    if (conn.type === 'connection' && (conn.sourceId === el.id || conn.targetId === el.id)) {
-                                        connectionsToUpdate.add(conn.id);
-                                    }
-                                });
-                            }
-                        }
-                    });
-                    // Schedule a batch update for all affected connections
-                    if (connectionsToUpdate.size > 0) {
-                        console.log(`Scheduling batch update for ${connectionsToUpdate.size} connections`);
-                        this.scheduleBatchConnectionUpdate(connectionsToUpdate);
-                    }
-                }
-            }
-            else {
-                // For non-pool elements, just optimize the directly connected connections
-                this.optimizeConnectedConnections(elementId);
+        const elements = get(bpmnStore);
+        const element = elements.find(el => el.id === elementId);
+        if (!element || element.type === 'connection') return;
+        if (!('x' in element) || !('y' in element)) return;
+
+        const [snappedX, snappedY] = snapPositionToGrid(element.x, element.y);
+        const offsetX = snappedX - element.x;
+        const offsetY = snappedY - element.y;
+        bpmnStore.updateElement(elementId, { x: snappedX, y: snappedY });
+
+        const connectionsToUpdate = new Set();
+        for (const connection of elements) {
+            if (connection.type !== 'connection') continue;
+            if (connection.sourceId === elementId || connection.targetId === elementId) {
+                connectionsToUpdate.add(connection.id);
             }
         }
+
+        if (this.shouldMoveContents(element) && (offsetX !== 0 || offsetY !== 0)) {
+            const movingIds = getMovingWith(element, elements);
+            for (const id of movingIds) {
+                const moved = elements.find(el => el.id === id);
+                if (!moved || !('x' in moved) || !('y' in moved)) continue;
+                bpmnStore.updateElement(id, { x: moved.x + offsetX, y: moved.y + offsetY });
+            }
+            const all = new Set([...movingIds, String(elementId)]);
+            for (const connection of elements) {
+                if (connection.type !== 'connection') continue;
+                if (all.has(String(connection.sourceId)) || all.has(String(connection.targetId))) {
+                    connectionsToUpdate.add(connection.id);
+                }
+            }
+            for (const connection of getInternalConnections(all, elements)) {
+                if (!Array.isArray(connection.waypoints) || !connection.waypoints.length) continue;
+                bpmnStore.updateConnectionWaypoints(
+                    connection.id,
+                    connection.waypoints.map(p => ({ x: p.x + offsetX, y: p.y + offsetY }))
+                );
+                connectionsToUpdate.delete(connection.id); // Verlauf stimmt bereits
+            }
+        }
+
+        if (connectionsToUpdate.size) {
+            this.scheduleBatchConnectionUpdate([...connectionsToUpdate]);
+        }
     }
+
+
     /**
      * Schedule a batch update for multiple connections
      * @param connectionIds Set of connection IDs to update
@@ -610,33 +548,6 @@ class ElementManager {
                 }
             });
         }
-    }
-    /**
-     * Check if an element is inside a pool
-     * @param element The element to check
-     * @param pool The pool to check against
-     * @returns Whether the element is inside the pool
-     */
-    isElementInsidePool(element, pool) {
-        if (!isNode(element) || !isNode(pool)) {
-            return false;
-        }
-        // Check if the element's center is inside the pool
-        const elementCenterX = element.x + element.width / 2;
-        const elementCenterY = element.y + element.height / 2;
-        const result = (elementCenterX >= pool.x &&
-            elementCenterX <= pool.x + pool.width &&
-            elementCenterY >= pool.y &&
-            elementCenterY <= pool.y + pool.height);
-        console.log('DEBUG: isElementInsidePool check:', {
-            elementId: element.id,
-            elementType: element.type,
-            elementCenter: { x: elementCenterX, y: elementCenterY },
-            poolId: pool.id,
-            poolBounds: { x: pool.x, y: pool.y, width: pool.width, height: pool.height },
-            result: result
-        });
-        return result;
     }
 }
 // Export a singleton instance
