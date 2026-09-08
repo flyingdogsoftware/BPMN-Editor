@@ -1,1218 +1,864 @@
 /**
- * XML to Model Mapper for BPMN 2.0
+ * XML to Model Mapper fuer BPMN 2.0
  *
- * This module provides the mapXmlToModel function, which converts parsed BPMN XML
- * objects into the internal BPMN model representation used by the editor.
+ * Uebersetzt den geparsten (und namensraum-normalisierten) BPMN-Baum in das
+ * interne Modell des Editors.
+ *
+ * Leitgedanken:
+ *
+ * 1. Nichts geht still verloren. Jeder Flussknoten und jede Kante der Datei
+ *    landet im Modell oder erzeugt einen Hinweis im Bericht.
+ * 2. Flusselemente werden REKURSIV eingesammelt. BPMN erlaubt Aktivitaeten in
+ *    Unterprozessen, Transaktionen und Ereignis-Unterprozessen; wer nur die
+ *    oberste Ebene liest, verliert sie.
+ * 3. Das Diagram Interchange ist massgeblich. Liegt fuer ein Element ein
+ *    BPMNShape vor, gelten dessen Bounds - auch fuer Lanes. Nur wo die Datei
+ *    nichts sagt, wird gerechnet.
+ * 4. Der Typ eines Elements ergibt sich aus seinem XML-Namen, nicht aus seiner
+ *    Id. Frueher galt jedes Element, dessen Id "Lane" enthielt, als Lane.
  */
 import { calculateConnectionPoints } from '../connectionUtils';
+import { localName } from './bpmnNamespaces';
+
+/* ------------------------------------------------------------------------ */
+/* Typtabellen                                                                */
+/* ------------------------------------------------------------------------ */
+
+/** XML-Element -> internes Modell. */
+const ACTIVITY_TYPES = {
+  task: { type: 'task', taskType: 'task' },
+  userTask: { type: 'task', taskType: 'user' },
+  serviceTask: { type: 'task', taskType: 'service' },
+  sendTask: { type: 'task', taskType: 'send' },
+  receiveTask: { type: 'task', taskType: 'receive' },
+  manualTask: { type: 'task', taskType: 'manual' },
+  businessRuleTask: { type: 'task', taskType: 'business-rule' },
+  scriptTask: { type: 'task', taskType: 'script' },
+  // Eine Aufrufaktivitaet ist notationell eine Aktivitaet mit dickem Rand.
+  // Der Subprozess-Renderer bringt die Form mit; der Untertyp steuert den Rand.
+  callActivity: { type: 'subprocess', subProcessType: 'call' },
+  subProcess: { type: 'subprocess', subProcessType: 'embedded' },
+  transaction: { type: 'subprocess', subProcessType: 'transaction' },
+  adHocSubProcess: { type: 'subprocess', subProcessType: 'adhoc' },
+};
+
+const EVENT_TYPES = {
+  startEvent: 'start',
+  endEvent: 'end',
+  intermediateThrowEvent: 'intermediate-throw',
+  intermediateCatchEvent: 'intermediate-catch',
+  boundaryEvent: 'boundary',
+};
+
+const GATEWAY_TYPES = {
+  exclusiveGateway: 'exclusive',
+  inclusiveGateway: 'inclusive',
+  parallelGateway: 'parallel',
+  complexGateway: 'complex',
+  eventBasedGateway: 'event-based',
+};
+
+/** Elemente, die selbst wieder Flusselemente enthalten koennen. */
+const FLOW_CONTAINERS = new Set(['subProcess', 'transaction', 'adHocSubProcess']);
+
+/** Ereignisdefinitionen: XML-Element -> Kurzname im Modell. */
+const EVENT_DEFINITIONS = [
+  'messageEventDefinition', 'timerEventDefinition', 'escalationEventDefinition',
+  'conditionalEventDefinition', 'linkEventDefinition', 'errorEventDefinition',
+  'cancelEventDefinition', 'compensateEventDefinition', 'signalEventDefinition',
+  'terminateEventDefinition',
+];
+
+const EDGE_TYPES = {
+  sequenceFlow: 'sequence',
+  messageFlow: 'message',
+  association: 'association',
+};
+
+/* ------------------------------------------------------------------------ */
+/* Kleine Helfer                                                              */
+/* ------------------------------------------------------------------------ */
+
+const NULL_REPORT = {
+  warn() {},
+  debug() {},
+  stats: {},
+};
+
+const attr = (node, name) => {
+  const v = node ? node[`@_${name}`] : undefined;
+  return v === undefined || v === null ? undefined : String(v);
+};
+
+const num = (value, fallback = undefined) => {
+  if (value === undefined || value === null || value === '') return fallback;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : fallback;
+};
+
 /**
- * Automatically wrap text at word boundaries
- * @param text The text to wrap
- * @param maxCharsPerLine Maximum characters per line (default: 20)
- * @returns Text with automatic line breaks
+ * Boolesches Attribut lesen. Wichtig: String("false") ist wahrheitswertig,
+ * ein blosses Boolean(...) war hier frueher falsch.
  */
+const bool = (value, fallback = false) => {
+  if (value === undefined || value === null || value === '') return fallback;
+  const s = String(value).trim().toLowerCase();
+  if (s === 'true' || s === '1' || s === 'yes') return true;
+  if (s === 'false' || s === '0' || s === 'no') return false;
+  return fallback;
+};
+
+/** Immer ein Array liefern. */
+const arr = (value) => (Array.isArray(value) ? value : value === undefined || value === null ? [] : [value]);
+
+/** Text eines Kindelements, das sowohl String als auch Objekt sein kann. */
+const textOf = (value) => {
+  if (typeof value === 'string') return value;
+  if (typeof value === 'number') return String(value);
+  if (value && typeof value === 'object') {
+    if (value['#text'] !== undefined) return String(value['#text']);
+    const firstString = Object.values(value).find((v) => typeof v === 'string');
+    if (firstString !== undefined) return firstString;
+  }
+  return undefined;
+};
+
+/* ------------------------------------------------------------------------ */
+/* Beschriftungen                                                             */
+/* ------------------------------------------------------------------------ */
+
+/** Text an Wortgrenzen umbrechen. */
 function wrapLabelText(text, maxCharsPerLine = 20) {
-    if (!text) return '';
-
-    // If text already contains line breaks, don't modify it
-    if (text.includes('\n')) return text;
-
-    const words = text.split(' ');
-    const lines = [];
-    let currentLine = '';
-
-    for (const word of words) {
-        // If adding this word would exceed the max length
-        if (currentLine.length + word.length + 1 > maxCharsPerLine && currentLine.length > 0) {
-            // Push the current line and start a new one
-            lines.push(currentLine);
-            currentLine = word;
-        } else {
-            // Add the word to the current line
-            currentLine = currentLine.length === 0 ? word : currentLine + ' ' + word;
-        }
-    }
-
-    // Add the last line if it's not empty
-    if (currentLine.length > 0) {
-        lines.push(currentLine);
-    }
-
-    return lines.join('\n');
-}
-
-/**
- * Process label text to handle XML entities and line breaks
- * @param text The label text from XML
- * @param elementType The type of element (for determining max chars per line)
- * @param elementWidth The width of the element (if available)
- * @returns Processed label text with proper line breaks
- */
-function processLabelText(text, elementType = '', elementWidth = 0) {
-    if (!text)
-        return '';
-
-    // Replace XML line break entity with actual line breaks
-    const processedText = text.replace(/&#10;/g, '\n');
-
-    // If the text already has line breaks, don't add more
-    if (processedText.includes('\n')) return processedText;
-
-    // Determine max chars per line based on element type and width
-    let maxCharsPerLine = 20; // Default
-
-    if (elementWidth > 0) {
-        // Approximate characters per line based on element width
-        // Assuming average character width is about 8 pixels
-        maxCharsPerLine = Math.max(10, Math.floor(elementWidth / 8));
+  if (!text) return '';
+  if (text.includes('\n')) return text;
+  const words = String(text).split(' ');
+  const lines = [];
+  let current = '';
+  for (const word of words) {
+    if (current.length + word.length + 1 > maxCharsPerLine && current.length > 0) {
+      lines.push(current);
+      current = word;
     } else {
-        // If no width provided, use defaults based on element type
-        switch (elementType) {
-            case 'task':
-            case 'subprocess':
-                maxCharsPerLine = 20;
-                break;
-            case 'event':
-                maxCharsPerLine = 15;
-                break;
-            case 'gateway':
-                maxCharsPerLine = 15;
-                break;
-            case 'pool':
-            case 'lane':
-                maxCharsPerLine = 25;
-                break;
-            default:
-                maxCharsPerLine = 20;
-        }
+      current = current.length === 0 ? word : `${current} ${word}`;
     }
-
-    // Apply automatic text wrapping
-    return wrapLabelText(processedText, maxCharsPerLine);
+  }
+  if (current.length > 0) lines.push(current);
+  return lines.join('\n');
 }
+
+const DEFAULT_WRAP = { task: 20, subprocess: 22, event: 15, gateway: 15, pool: 25, lane: 25, connection: 18 };
+
+/** Beschriftung aufbereiten: Zeilenumbrueche und automatischer Umbruch. */
+function processLabelText(text, elementType = '', elementWidth = 0) {
+  if (text === undefined || text === null || text === '') return '';
+  const processed = String(text).replace(/&#10;/g, '\n');
+  if (processed.includes('\n')) return processed;
+  const maxChars = elementWidth > 0
+    ? Math.max(10, Math.floor(elementWidth / 8))
+    : DEFAULT_WRAP[elementType] ?? 20;
+  return wrapLabelText(processed, maxChars);
+}
+
+/* ------------------------------------------------------------------------ */
+/* Diagram Interchange                                                        */
+/* ------------------------------------------------------------------------ */
+
 /**
- * Map parsed BPMN XML to the internal data model.
- * @param parsedXml The parsed BPMN XML object
- * @returns Array of BPMN elements in the internal data model format
+ * Baut die Nachschlagetabellen aus allen BPMNDiagram/BPMNPlane der Datei.
+ * @returns {{ shapes: Map<string,object>, edges: Map<string,object[]>, planeElements: Set<string> }}
  */
-export function mapXmlToModel(parsedXml) {
-    // TODO: Implement full mapping logic for all BPMN elements
-    // Example: Extract process and its flow elements
-    const elements = [];
-    const definitions = parsedXml['bpmn:definitions'];
-    if (!definitions) {
-        throw new Error('Missing bpmn:definitions in parsed XML');
-    }
-    // --- Extract BPMN DI (Diagram Interchange) info ---
-    // Find BPMNDiagram and BPMNPlane
-    const diagram = definitions['bpmndi:BPMNDiagram'];
-    const plane = diagram && diagram['bpmndi:BPMNPlane'];
-    // Helper: always return array
-    const toArray = (val) => (Array.isArray(val) ? val : val ? [val] : []);
-    // Build shape lookup: bpmnElement id -> { x, y, width, height, labelBounds?, isHorizontal? }
-    const shapeMap = {};
-    // Extract all shapes from the diagram
-    const shapes = toArray(plane && plane['bpmndi:BPMNShape']);
-    console.log(`Found ${shapes.length} shapes in the diagram`);
-    // Debug the raw shapes
-    console.log('Raw shapes:', JSON.stringify(shapes, null, 2));
-    // Debug the raw collaboration
-    if (definitions['bpmn:collaboration']) {
-        console.log('Raw collaboration:', JSON.stringify(definitions['bpmn:collaboration'], null, 2));
-    }
-    // Create a map of element IDs to their normalized versions
-    const normalizedIdMap = {};
-    // Special case for the example XML with Participant_1, Participant_2, Lane_1, Lane_2
-    // These IDs might not be in the shape map with these exact names
-    for (const shape of shapes) {
-        const bpmnElement = shape['@_bpmnElement'];
-        if (bpmnElement) {
-            // Check if this is a participant or lane shape
-            if (bpmnElement.includes('Participant') || bpmnElement.includes('Lane')) {
-                // Map common IDs to this shape's ID
-                if (bpmnElement.includes('Participant')) {
-                    // Extract the participant number if possible
-                    const match = bpmnElement.match(/Participant[_]?(\d+)/i);
-                    if (match && match[1]) {
-                        const num = match[1];
-                        normalizedIdMap[`Participant_${num}`] = bpmnElement;
-                        normalizedIdMap[`Participant${num}`] = bpmnElement;
-                    }
-                }
-                else if (bpmnElement.includes('Lane')) {
-                    // Extract the lane number if possible
-                    const match = bpmnElement.match(/Lane[_]?(\d+)/i);
-                    if (match && match[1]) {
-                        const num = match[1];
-                        normalizedIdMap[`Lane_${num}`] = bpmnElement;
-                        normalizedIdMap[`Lane${num}`] = bpmnElement;
-                    }
-                }
-            }
+function buildDiIndex(definitions, report) {
+  const shapes = new Map();
+  const edges = new Map();
+
+  for (const diagram of arr(definitions['bpmndi:BPMNDiagram'])) {
+    for (const plane of arr(diagram['bpmndi:BPMNPlane'])) {
+      for (const shape of arr(plane['bpmndi:BPMNShape'])) {
+        const ref = attr(shape, 'bpmnElement');
+        if (!ref) {
+          report.warn('di.shape.noRef', 'BPMNShape ohne bpmnElement wird uebergangen.');
+          continue;
         }
-    }
-    // First pass: process all shapes
-    for (const shape of shapes) {
-        const bpmnElement = shape['@_bpmnElement'];
         const bounds = shape['dc:Bounds'];
-        if (bpmnElement && bounds) {
-            // Check if this is a pool or lane by looking at the element ID pattern
-            // Note: Some BPMN tools use Participant_X and Lane_X, others just use the IDs directly
-            const isPoolOrLane = bpmnElement.includes('Participant') ||
-                bpmnElement.includes('Lane') ||
-                bpmnElement === 'Participant_1' ||
-                bpmnElement === 'Participant_2' ||
-                bpmnElement === 'Lane_1' ||
-                bpmnElement === 'Lane_2';
-            // Log extra information for pools and lanes
-            if (isPoolOrLane) {
-                console.log(`Found shape for ${bpmnElement}:`, JSON.stringify(shape, null, 2));
-                // Store normalized versions of the ID
-                if (bpmnElement.includes('Participant')) {
-                    normalizedIdMap[bpmnElement.replace('Participant_', 'Participant')] = bpmnElement;
-                    normalizedIdMap[bpmnElement.replace('Participant', 'Participant_')] = bpmnElement;
-                    normalizedIdMap[`Participant_${bpmnElement.replace('Participant_', '')}`] = bpmnElement;
-                }
-                else if (bpmnElement.includes('Lane')) {
-                    normalizedIdMap[bpmnElement.replace('Lane_', 'Lane')] = bpmnElement;
-                    normalizedIdMap[bpmnElement.replace('Lane', 'Lane_')] = bpmnElement;
-                    normalizedIdMap[`Lane_${bpmnElement.replace('Lane_', '')}`] = bpmnElement;
-                }
-            }
-            shapeMap[bpmnElement] = {
-                x: Number(bounds['@_x']),
-                y: Number(bounds['@_y']),
-                width: Number(bounds['@_width']),
-                height: Number(bounds['@_height']),
-                // Check if isHorizontal attribute exists
-                isHorizontal: shape['@_isHorizontal'] !== undefined ? Boolean(shape['@_isHorizontal']) : true,
-                labelBounds: shape['bpmndi:BPMNLabel'] && shape['bpmndi:BPMNLabel']['dc:Bounds']
-                    ? {
-                        x: Number(shape['bpmndi:BPMNLabel']['dc:Bounds']['@_x']),
-                        y: Number(shape['bpmndi:BPMNLabel']['dc:Bounds']['@_y']),
-                        width: Number(shape['bpmndi:BPMNLabel']['dc:Bounds']['@_width']),
-                        height: Number(shape['bpmndi:BPMNLabel']['dc:Bounds']['@_height']),
-                    }
-                    : undefined,
-            };
+        if (!bounds) {
+          report.warn('di.shape.noBounds', `BPMNShape fuer "${ref}" hat keine dc:Bounds.`);
+          continue;
         }
+        const labelShape = shape['bpmndi:BPMNLabel'];
+        const labelBounds = labelShape && labelShape['dc:Bounds'];
+        if (shapes.has(ref)) {
+          report.warn('di.shape.duplicate', `Mehrere BPMNShape fuer "${ref}"; das erste gilt.`);
+          continue;
+        }
+        shapes.set(ref, {
+          x: num(attr(bounds, 'x'), 0),
+          y: num(attr(bounds, 'y'), 0),
+          width: num(attr(bounds, 'width'), 0),
+          height: num(attr(bounds, 'height'), 0),
+          isHorizontal: bool(attr(shape, 'isHorizontal'), true),
+          isExpanded: bool(attr(shape, 'isExpanded'), true),
+          isMarkerVisible: bool(attr(shape, 'isMarkerVisible'), false),
+          labelBounds: labelBounds
+            ? {
+                x: num(attr(labelBounds, 'x'), 0),
+                y: num(attr(labelBounds, 'y'), 0),
+                width: num(attr(labelBounds, 'width'), 0),
+                height: num(attr(labelBounds, 'height'), 0),
+              }
+            : undefined,
+        });
+      }
+
+      for (const edge of arr(plane['bpmndi:BPMNEdge'])) {
+        const ref = attr(edge, 'bpmnElement');
+        if (!ref) {
+          report.warn('di.edge.noRef', 'BPMNEdge ohne bpmnElement wird uebergangen.');
+          continue;
+        }
+        const waypoints = arr(edge['di:waypoint'])
+          .map((wp) => ({ x: num(attr(wp, 'x')), y: num(attr(wp, 'y')) }))
+          .filter((p) => Number.isFinite(p.x) && Number.isFinite(p.y));
+        if (waypoints.length < 2) {
+          report.warn('di.edge.fewWaypoints', `BPMNEdge fuer "${ref}" hat weniger als zwei Wegpunkte.`);
+        }
+        const edgeLabel = edge['bpmndi:BPMNLabel'];
+        const edgeLabelBounds = edgeLabel && edgeLabel['dc:Bounds'];
+        if (waypoints.length) {
+          edges.set(ref, {
+            waypoints,
+            labelBounds: edgeLabelBounds
+              ? {
+                  x: num(attr(edgeLabelBounds, 'x'), 0),
+                  y: num(attr(edgeLabelBounds, 'y'), 0),
+                  width: num(attr(edgeLabelBounds, 'width'), 0),
+                  height: num(attr(edgeLabelBounds, 'height'), 0),
+                }
+              : undefined,
+          });
+        }
+      }
     }
-    // Log all shapes for pools and lanes
-    console.log('Shape map for pools and lanes:');
-    for (const [id, shape] of Object.entries(shapeMap)) {
-        if (id.includes('Participant') ||
-            id.includes('Lane') ||
-            id === 'Participant_1' ||
-            id === 'Participant_2' ||
-            id === 'Lane_1' ||
-            id === 'Lane_2') {
-            console.log(`- ${id}:`, JSON.stringify(shape, null, 2));
-        }
-    }
-    // Build edge lookup: bpmnElement id -> waypoints[]
-    const edgeMap = {};
-    for (const edge of toArray(plane && plane['bpmndi:BPMNEdge'])) {
-        const bpmnElement = edge['@_bpmnElement'];
-        const waypoints = toArray(edge['di:waypoint']).map((wp) => ({
-            x: Number(wp['@_x']),
-            y: Number(wp['@_y']),
-        }));
-        if (bpmnElement && waypoints.length) {
-            edgeMap[bpmnElement] = waypoints;
-            console.log(`Found edge for ${bpmnElement} with ${waypoints.length} waypoints:`, JSON.stringify(waypoints, null, 2));
-        }
-    }
-    // First, check for collaboration (which contains pools)
-    if (definitions['bpmn:collaboration']) {
-        console.log('Found collaboration:', definitions['bpmn:collaboration']);
-        // Special case for the XML structure provided by the user
-        // Sometimes the collaboration is an array with a single object that has a bpmn:participant property
-        if (Array.isArray(definitions['bpmn:collaboration']) &&
-            definitions['bpmn:collaboration'].length === 1 &&
-            definitions['bpmn:collaboration'][0]['bpmn:participant']) {
-            console.log('Found special case collaboration structure');
-            const specialParticipants = toArray(definitions['bpmn:collaboration'][0]['bpmn:participant']);
-            console.log('Special participants:', JSON.stringify(specialParticipants, null, 2));
-        }
-        // The collaboration might be an array or a single object
-        const collaborations = toArray(definitions['bpmn:collaboration']);
-        console.log(`Found ${collaborations.length} collaborations`);
-        // Process each collaboration (usually just one)
-        let allParticipants = [];
-        for (const collaboration of collaborations) {
-            // Debug the raw collaboration structure
-            console.log('Processing collaboration:', JSON.stringify(collaboration, null, 2));
-            // Check if participants exist in the collaboration
-            if (!collaboration['bpmn:participant']) {
-                console.error('No participants found in this collaboration');
-                continue;
-            }
-            // Extract participants, ensuring we get an array
-            const participants = toArray(collaboration['bpmn:participant']);
-            console.log(`Found ${participants.length} participants in this collaboration:`, JSON.stringify(participants, null, 2));
-            // Add these participants to our collection
-            allParticipants = allParticipants.concat(participants);
-
-            // Process message flows in the collaboration
-            if (collaboration['bpmn:messageFlow']) {
-                console.log('Found message flows in collaboration');
-                const messageFlows = toArray(collaboration['bpmn:messageFlow']);
-                console.log(`Found ${messageFlows.length} message flows:`, JSON.stringify(messageFlows, null, 2));
-
-                for (const flow of messageFlows) {
-                    // Get waypoints if available
-                    const waypoints = edgeMap[flow['@_id']];
-
-                    // Find source and target elements
-                    const sourceId = flow['@_sourceRef'];
-                    const targetId = flow['@_targetRef'];
-
-                    console.log(`Processing message flow ${flow['@_id']} from ${sourceId} to ${targetId}`);
-
-                    // Create the connection with message flow type
-                    const mappedConnection = {
-                        id: flow['@_id'],
-                        type: "connection",
-                        connectionType: "message",  // This is the key difference from sequence flows
-                        sourceId: sourceId,
-                        targetId: targetId,
-                        sourcePointId: '',
-                        targetPointId: '',
-                        waypoints: waypoints ? waypoints : [],
-                        label: processLabelText(flow['@_name'], 'connection') || '',
-                    };
-
-                    elements.push(mappedConnection);
-                    console.log(`Created message flow connection ${mappedConnection.id} from ${sourceId} to ${targetId} with ${mappedConnection.waypoints?.length || 0} waypoints`);
-                }
-            }
-        }
-        // Use all participants from all collaborations
-        const participants = allParticipants;
-        console.log('All participants:', JSON.stringify(participants, null, 2));
-        // If we have no participants, try to extract them directly from the XML
-        if (participants.length === 0) {
-            console.log('No participants found in collaborations, trying direct extraction');
-            // Try to find participants directly in the XML
-            for (const collab of collaborations) {
-                if (typeof collab === 'object') {
-                    for (const key in collab) {
-                        if (key.includes('participant') || key.includes('Participant')) {
-                            console.log(`Found potential participants in key ${key}:`, collab[key]);
-                            const extractedParticipants = toArray(collab[key]);
-                            allParticipants = allParticipants.concat(extractedParticipants);
-                        }
-                    }
-                }
-            }
-            // Update participants after direct extraction
-            if (allParticipants.length > 0) {
-                console.log('Extracted participants directly:', JSON.stringify(allParticipants, null, 2));
-            }
-        }
-        // If we have participants but no shapes for them, create default shapes
-        if (participants.length > 0) {
-            for (const participant of participants) {
-                const participantId = participant['@_id'];
-                // Check if we have a shape for this participant
-                let hasShape = false;
-                for (const id of Object.keys(shapeMap)) {
-                    if (id === participantId || normalizedIdMap[participantId] === id) {
-                        hasShape = true;
-                        break;
-                    }
-                }
-                // If no shape found, create a default one
-                if (!hasShape) {
-                    console.log(`No shape found for participant ${participantId}, creating default shape`);
-                    // Create a default shape for this participant
-                    shapeMap[participantId] = {
-                        x: 100,
-                        y: 100 + (Object.keys(shapeMap).length * 20), // Offset each new pool to avoid overlap
-                        width: 600,
-                        height: 200,
-                        isHorizontal: true
-                    };
-                    // Add to normalized ID map
-                    normalizedIdMap[`Participant_${participantId.replace('Participant_', '')}`] = participantId;
-                    normalizedIdMap[participantId.replace('Participant_', 'Participant')] = participantId;
-                    normalizedIdMap[participantId.replace('Participant', 'Participant_')] = participantId;
-                }
-            }
-        }
-        // Map for storing process IDs to their corresponding pool IDs
-        const processToPoolMap = {};
-        // Process all participants (pools)
-        for (const participant of participants) {
-            const poolId = participant['@_id'];
-            const processRef = participant['@_processRef'];
-            console.log(`Processing participant: ${poolId} with processRef: ${processRef}`);
-            // Store the process-to-pool mapping
-            if (processRef) {
-                processToPoolMap[processRef] = poolId;
-                console.log(`Mapped process ${processRef} to pool ${poolId}`);
-            }
-            // Try to find the shape for this pool
-            let shape = shapeMap[poolId];
-            // If shape not found, try using the normalized ID map
-            if (!shape && normalizedIdMap[poolId]) {
-                const normalizedId = normalizedIdMap[poolId];
-                console.log(`Shape not found for ${poolId}, using normalized ID ${normalizedId}`);
-                shape = shapeMap[normalizedId];
-            }
-            // If still not found, try alternative IDs that might be used in the diagram
-            if (!shape) {
-                // Some BPMN tools use different ID formats for the same element
-                const alternativeIds = [
-                    `Participant_${poolId.replace('Participant_', '')}`,
-                    poolId.replace('Participant_', 'Participant'),
-                    poolId.replace('Participant', 'Participant_')
-                ];
-                for (const altId of alternativeIds) {
-                    if (shapeMap[altId]) {
-                        console.log(`Shape not found for ${poolId}, using alternative ID ${altId}`);
-                        shape = shapeMap[altId];
-                        break;
-                    }
-                }
-            }
-            console.log('Processing pool:', JSON.stringify({ poolId, processRef, shape }, null, 2));
-            // Create the pool, even if no shape is found (we'll use default values)
-            let poolX = 100;
-            let poolY = 100;
-            let poolWidth = 600;
-            let poolHeight = 200;
-            let isHorizontal = true;
-            if (shape) {
-                poolX = shape.x;
-                poolY = shape.y;
-                poolWidth = shape.width;
-                poolHeight = shape.height;
-                isHorizontal = shape.isHorizontal !== undefined ? shape.isHorizontal : true;
-            }
-            else {
-                console.warn(`No shape found for pool ${poolId}, using default values`);
-            }
-            // Create the pool
-            const pool = {
-                id: poolId,
-                type: 'pool',
-                label: processLabelText(participant['@_name'], 'pool', poolWidth) || 'Pool',
-                x: poolX,
-                y: poolY,
-                width: poolWidth,
-                height: poolHeight,
-                isHorizontal: isHorizontal,
-                lanes: [], // Will be populated when we process lanes
-                processRef: processRef || ''
-            };
-            console.log('Created pool:', JSON.stringify(pool, null, 2));
-            elements.push(pool);
-        }
-        // Now process all processes to find lanes
-        console.log('Process to pool map:', JSON.stringify(processToPoolMap, null, 2));
-        console.log('Processes:', JSON.stringify(definitions['bpmn:process'], null, 2));
-        // Handle processes - either as array or single object
-        const processes = Array.isArray(definitions['bpmn:process'])
-            ? definitions['bpmn:process']
-            : [definitions['bpmn:process']].filter(Boolean);
-        console.log(`Found ${processes.length} processes to process`);
-        // Process each process that has a corresponding pool
-        for (const process of processes) {
-            const processId = process['@_id'];
-            console.log(`Processing process ${processId}`);
-            // Check if this process is referenced by a pool
-            let poolId = processToPoolMap[processId];
-            // If no direct match, try to find a pool that references this process
-            if (!poolId) {
-                console.log(`No direct pool reference found for process ${processId}, checking all pools...`);
-                // Look through all pools to find one that might reference this process
-                const poolElements = elements.filter(el => el.type === 'pool');
-                for (const pool of poolElements) {
-                    if (pool.processRef === processId) {
-                        poolId = pool.id;
-                        console.log(`Found pool ${poolId} referencing process ${processId}`);
-                        break;
-                    }
-                }
-                // If still no pool found, check if there's a participant in the XML that references this process
-                if (!poolId && definitions['bpmn:collaboration']) {
-                    const collaboration = definitions['bpmn:collaboration'];
-                    const participants = toArray(collaboration['bpmn:participant']);
-                    for (const participant of participants) {
-                        if (participant['@_processRef'] === processId) {
-                            // We found a participant that references this process, but we don't have a pool for it
-                            // This could happen if the shape information is missing
-                            const participantId = participant['@_id'];
-                            console.log(`Found participant ${participantId} referencing process ${processId}, but no shape information`);
-                            // Check if we have any shape information for this participant
-                            const shape = shapeMap[participantId];
-                            if (!shape) {
-                                console.log(`No shape information found for participant ${participantId}, creating default shape`);
-                                // Create a default shape for this participant
-                                shapeMap[participantId] = {
-                                    x: 100,
-                                    y: 100 + (elements.length * 20), // Offset each new pool to avoid overlap
-                                    width: 600,
-                                    height: 200,
-                                    isHorizontal: true
-                                };
-                                // Now create the pool
-                                const width = shapeMap[participantId].width;
-                                const pool = {
-                                    id: participantId,
-                                    type: 'pool',
-                                    label: processLabelText(participant['@_name'], 'pool', width) || 'Pool',
-                                    x: shapeMap[participantId].x,
-                                    y: shapeMap[participantId].y,
-                                    width: width,
-                                    height: shapeMap[participantId].height,
-                                    isHorizontal: true,
-                                    lanes: [],
-                                    processRef: processId
-                                };
-                                console.log(`Created default pool for participant ${participantId}:`, JSON.stringify(pool, null, 2));
-                                elements.push(pool);
-                                // Update the process-to-pool map
-                                processToPoolMap[processId] = participantId;
-                                poolId = participantId;
-                            }
-                        }
-                    }
-                }
-            }
-            if (!poolId) {
-                console.log(`Process ${processId} is not referenced by any pool, skipping lane processing`);
-                continue;
-            }
-            const pool = elements.find(el => el.id === poolId && el.type === 'pool');
-            if (!pool) {
-                console.error(`Pool ${poolId} not found for process ${processId}, skipping lane processing`);
-                continue;
-            }
-            console.log(`Found pool ${poolId} for process ${processId}`);
-            // Handle lane sets
-            if (process['bpmn:laneSet']) {
-                console.log('Process has lane set:', JSON.stringify(process['bpmn:laneSet'], null, 2));
-                const laneSets = toArray(process['bpmn:laneSet']);
-                for (const laneSet of laneSets) {
-                    console.log('Processing lane set:', JSON.stringify(laneSet, null, 2));
-                    // Handle different lane formats
-                    let lanes = [];
-                    if (laneSet['bpmn:lane']) {
-                        lanes = toArray(laneSet['bpmn:lane']);
-                    }
-                    else if (Array.isArray(laneSet)) {
-                        // Sometimes the lane set is directly an array of lanes
-                        lanes = laneSet;
-                    }
-                    console.log(`Found ${lanes.length} lanes in lane set`);
-                    // First pass: create all lanes to ensure they all exist before positioning
-                    const createdLanes = [];
-                    for (const lane of lanes) {
-                        const laneId = lane['@_id'];
-                        // Try to find the shape for this lane
-                        let shape = shapeMap[laneId];
-                        // If shape not found, try using the normalized ID map
-                        if (!shape && normalizedIdMap[laneId]) {
-                            const normalizedId = normalizedIdMap[laneId];
-                            console.log(`Shape not found for ${laneId}, using normalized ID ${normalizedId}`);
-                            shape = shapeMap[normalizedId];
-                        }
-                        // If still not found, try alternative IDs that might be used in the diagram
-                        if (!shape) {
-                            // Some BPMN tools use different ID formats for the same element
-                            const alternativeIds = [
-                                `Lane_${laneId.replace('Lane_', '')}`,
-                                laneId.replace('Lane_', 'Lane'),
-                                laneId.replace('Lane', 'Lane_')
-                            ];
-                            for (const altId of alternativeIds) {
-                                if (shapeMap[altId]) {
-                                    console.log(`Shape not found for ${laneId}, using alternative ID ${altId}`);
-                                    shape = shapeMap[altId];
-                                    break;
-                                }
-                            }
-                        }
-                        console.log('Processing lane:', JSON.stringify({ laneId, shape }, null, 2));
-                        // Get flow node references
-                        const flowNodeRefs = [];
-                        if (lane['bpmn:flowNodeRef']) {
-                            // Handle the case where flowNodeRef is directly a string
-                            if (typeof lane['bpmn:flowNodeRef'] === 'string') {
-                                flowNodeRefs.push(lane['bpmn:flowNodeRef']);
-                                console.log('Direct string flowNodeRef:', lane['bpmn:flowNodeRef']);
-                            }
-                            else {
-                                const refs = toArray(lane['bpmn:flowNodeRef']);
-                                console.log('Flow node refs raw:', JSON.stringify(refs, null, 2));
-                                for (const ref of refs) {
-                                    if (typeof ref === 'string') {
-                                        flowNodeRefs.push(ref);
-                                    }
-                                    else if (ref['#text']) {
-                                        flowNodeRefs.push(ref['#text']);
-                                    }
-                                    else if (typeof ref === 'object') {
-                                        // Try to extract the text content directly
-                                        const textContent = Object.values(ref).find(val => typeof val === 'string');
-                                        if (textContent) {
-                                            flowNodeRefs.push(textContent);
-                                        }
-                                        else {
-                                            console.warn('Could not extract text from flowNodeRef:', ref);
-                                        }
-                                    }
-                                    else {
-                                        console.warn('Unexpected flowNodeRef format:', ref);
-                                    }
-                                }
-                            }
-                            console.log('Processed flow node refs:', flowNodeRefs);
-                        }
-                        // Create the lane, even if no shape is found (we'll use default values)
-                        let laneX = pool.x + 30; // Default: account for pool label area
-                        let laneY = pool.y + (createdLanes.length * 100); // Default: stack lanes vertically
-                        let laneWidth = pool.width - 30; // Default: pool width minus label area
-                        let laneHeight = 100; // Default height
-                        if (shape) {
-                            laneX = shape.x;
-                            laneY = shape.y;
-                            laneWidth = shape.width;
-                            laneHeight = shape.height;
-                        }
-                        else {
-                            console.warn(`No shape found for lane ${laneId}, using default values`);
-                        }
-                        // Create the lane with original coordinates from the shape
-                        // We'll adjust positions in a second pass
-                        // Calculate height percentage based on original height from XML
-                        const heightPercentage = shape ? (laneHeight / pool.height) * 100 : 100 / lanes.length;
-                        const mappedLane = {
-                            id: laneId,
-                            type: 'lane',
-                            label: processLabelText(lane['@_name'], 'lane', laneWidth) || 'Lane',
-                            x: laneX,
-                            y: laneY,
-                            width: laneWidth,
-                            height: laneHeight,
-                            isHorizontal: pool.isHorizontal,
-                            parentRef: poolId,
-                            flowNodeRefs: flowNodeRefs,
-                            heightPercentage: heightPercentage
-                        };
-                        console.log('Created lane:', JSON.stringify(mappedLane, null, 2));
-                        elements.push(mappedLane);
-                        createdLanes.push(mappedLane);
-                        // Add lane to pool's lanes array
-                        pool.lanes.push(laneId);
-                    }
-                    // Second pass: adjust lane positions based on pool orientation and size
-                    if (createdLanes.length > 0) {
-                        console.log(`Adjusting positions for ${createdLanes.length} lanes in pool ${poolId}`);
-                        if (pool.isHorizontal) {
-                            // For horizontal pools, sort lanes by y-coordinate
-                            createdLanes.sort((a, b) => a.y - b.y);
-                            // Calculate lane heights based on height percentages
-                            let currentY = pool.y;
-                            // Adjust each lane's position and size
-                            createdLanes.forEach((lane) => {
-                                const laneElement = elements.find(el => el.id === lane.id && el.type === 'lane');
-                                if (laneElement) {
-                                    // Use heightPercentage if available, otherwise divide equally
-                                    const heightPercentage = laneElement.heightPercentage || (100 / createdLanes.length);
-                                    const laneHeight = (pool.height * heightPercentage) / 100;
-                                    laneElement.x = pool.x + 30; // Account for pool label area (30px)
-                                    laneElement.y = currentY;
-                                    laneElement.width = pool.width - 30; // Pool width minus label area
-                                    laneElement.height = laneHeight;
-                                    // Update currentY for the next lane
-                                    currentY += laneHeight;
-                                    console.log(`Adjusted horizontal lane ${lane.id} position to:`, JSON.stringify({
-                                        x: laneElement.x,
-                                        y: laneElement.y,
-                                        width: laneElement.width,
-                                        height: laneElement.height,
-                                        heightPercentage: laneElement.heightPercentage
-                                    }, null, 2));
-                                }
-                            });
-                        }
-                        else {
-                            // For vertical pools, sort lanes by x-coordinate
-                            createdLanes.sort((a, b) => a.x - b.x);
-                            // Calculate lane widths based on width percentages
-                            let currentX = pool.x;
-                            // Adjust each lane's position and size
-                            createdLanes.forEach((lane) => {
-                                const laneElement = elements.find(el => el.id === lane.id && el.type === 'lane');
-                                if (laneElement) {
-                                    // Use widthPercentage if available, otherwise divide equally
-                                    const widthPercentage = laneElement.widthPercentage || (100 / createdLanes.length);
-                                    const laneWidth = (pool.width * widthPercentage) / 100;
-                                    laneElement.x = currentX;
-                                    laneElement.y = pool.y + 30; // Account for pool label area (30px)
-                                    laneElement.width = laneWidth;
-                                    laneElement.height = pool.height - 30; // Pool height minus label area
-                                    // Update currentX for the next lane
-                                    currentX += laneWidth;
-                                    console.log(`Adjusted vertical lane ${lane.id} position to:`, JSON.stringify({
-                                        x: laneElement.x,
-                                        y: laneElement.y,
-                                        width: laneElement.width,
-                                        height: laneElement.height,
-                                        widthPercentage: laneElement.widthPercentage
-                                    }, null, 2));
-                                }
-                            });
-                        }
-                    }
-                }
-            }
-            else {
-                console.log(`Process ${processId} has no lane sets`);
-            }
-        }
-    }
-    else {
-        console.log('No collaboration found in the BPMN XML');
-    }
-    // Handle single or multiple processes
-    const processes = Array.isArray(definitions['bpmn:process'])
-        ? definitions['bpmn:process']
-        : [definitions['bpmn:process']].filter(Boolean);
-    for (const process of processes) {
-        // Map all task types
-        // Helper function to map tasks of a specific type
-        function mapTasks(taskType, taskXmlKey) {
-            if (process[taskXmlKey]) {
-                const tasks = Array.isArray(process[taskXmlKey])
-                    ? process[taskXmlKey]
-                    : [process[taskXmlKey]];
-                console.log(`Found ${tasks.length} ${taskType} tasks`);
-                for (const task of tasks) {
-                    // Get graphical info if available
-                    const shape = shapeMap[task['@_id']];
-                    const width = shape ? shape.width : 120;
-                    const mappedTask = {
-                        id: task['@_id'],
-                        type: "task",
-                        taskType: taskType,
-                        label: processLabelText(task['@_name'], 'task', width) || '',
-                        x: shape ? shape.x : 0,
-                        y: shape ? shape.y : 0,
-                        width: width,
-                        height: shape ? shape.height : 60,
-                    };
-                    elements.push(mappedTask);
-                }
-            }
-        }
-
-        // Map all task types
-        mapTasks('task', 'bpmn:task');
-        mapTasks('user', 'bpmn:userTask');
-        mapTasks('service', 'bpmn:serviceTask');
-        mapTasks('send', 'bpmn:sendTask');
-        mapTasks('receive', 'bpmn:receiveTask');
-        mapTasks('manual', 'bpmn:manualTask');
-        mapTasks('business-rule', 'bpmn:businessRuleTask');
-        mapTasks('script', 'bpmn:scriptTask');
-        // Map all event types
-        // Helper function to map events of a specific type
-        function mapEvents(eventType, eventXmlKey, defaultDefinition = 'none') {
-            if (process[eventXmlKey]) {
-                const events = Array.isArray(process[eventXmlKey])
-                    ? process[eventXmlKey]
-                    : [process[eventXmlKey]];
-                console.log(`Found ${events.length} ${eventType} events`);
-                for (const event of events) {
-                    const shape = shapeMap[event['@_id']];
-                    // Determine event definition
-                    let eventDefinition = defaultDefinition;
-                    // Check for event definitions
-                    const definitionKeys = [
-                        'bpmn:messageEventDefinition',
-                        'bpmn:timerEventDefinition',
-                        'bpmn:escalationEventDefinition',
-                        'bpmn:conditionalEventDefinition',
-                        'bpmn:linkEventDefinition',
-                        'bpmn:errorEventDefinition',
-                        'bpmn:cancelEventDefinition',
-                        'bpmn:compensateEventDefinition',
-                        'bpmn:signalEventDefinition',
-                        'bpmn:terminateEventDefinition'
-                    ];
-                    for (const key of definitionKeys) {
-                        if (event[key]) {
-                            // Extract the definition type from the key (e.g., 'message' from 'bpmn:messageEventDefinition')
-                            eventDefinition = key.replace('bpmn:', '').replace('EventDefinition', '');
-                            break;
-                        }
-                    }
-                    const width = shape ? shape.width : 36;
-                    const mappedEvent = {
-                        id: event['@_id'],
-                        type: "event",
-                        eventType: eventType,
-                        eventDefinition: eventDefinition,
-                        label: processLabelText(event['@_name'], 'event', width) || '',
-                        x: shape ? shape.x : 0,
-                        y: shape ? shape.y : 0,
-                        width: width,
-                        height: shape ? shape.height : 36,
-                    };
-                    console.log(`Created ${eventType} event with definition ${eventDefinition}:`, mappedEvent);
-                    elements.push(mappedEvent);
-                }
-            }
-        }
-        // Map all event types
-        mapEvents('start', 'bpmn:startEvent');
-        mapEvents('end', 'bpmn:endEvent');
-        mapEvents('intermediate-throw', 'bpmn:intermediateThrowEvent');
-        mapEvents('intermediate-catch', 'bpmn:intermediateCatchEvent');
-        mapEvents('boundary', 'bpmn:boundaryEvent');
-        // End events are now handled by the mapEvents function
-        // Map all gateway types
-        // Helper function to map gateways of a specific type
-        function mapGateways(gatewayType, gatewayXmlKey) {
-            if (process[gatewayXmlKey]) {
-                const gateways = Array.isArray(process[gatewayXmlKey])
-                    ? process[gatewayXmlKey]
-                    : [process[gatewayXmlKey]];
-                console.log(`Found ${gateways.length} ${gatewayType} gateways`);
-                for (const gateway of gateways) {
-                    const shape = shapeMap[gateway['@_id']];
-                    const width = shape ? shape.width : 50;
-                    const mappedGateway = {
-                        id: gateway['@_id'],
-                        type: "gateway",
-                        gatewayType: gatewayType,
-                        label: processLabelText(gateway['@_name'], 'gateway', width) || '',
-                        x: shape ? shape.x : 0,
-                        y: shape ? shape.y : 0,
-                        width: width,
-                        height: shape ? shape.height : 50,
-                    };
-                    console.log(`Created ${gatewayType} gateway:`, mappedGateway);
-                    elements.push(mappedGateway);
-                }
-            }
-        }
-        // Map all gateway types
-        mapGateways('exclusive', 'bpmn:exclusiveGateway');
-        mapGateways('inclusive', 'bpmn:inclusiveGateway');
-        mapGateways('parallel', 'bpmn:parallelGateway');
-        mapGateways('complex', 'bpmn:complexGateway');
-        mapGateways('event-based', 'bpmn:eventBasedGateway');
-        mapGateways('parallel-event-based', 'bpmn:parallelEventBasedGateway');
-        // Map sequence flows
-        if (process['bpmn:sequenceFlow']) {
-            const flows = Array.isArray(process['bpmn:sequenceFlow'])
-                ? process['bpmn:sequenceFlow']
-                : [process['bpmn:sequenceFlow']];
-            // First pass: create all nodes before creating connections
-            // This ensures all nodes exist when we calculate connection points
-            // Second pass: create connections with proper connection points
-            for (const flow of flows) {
-                // Note: Connections are not nodes and do not have x/y/width/height
-                // Get waypoints if available
-                const waypoints = edgeMap[flow['@_id']];
-                // Find source and target elements
-                const sourceId = flow['@_sourceRef'];
-                const targetId = flow['@_targetRef'];
-                // Check if source and target elements exist
-                const sourceElement = elements.find(el => el.id === sourceId);
-                const targetElement = elements.find(el => el.id === targetId);
-                if (!sourceElement || !targetElement) {
-                    console.warn(`Connection ${flow['@_id']} references missing elements: sourceId=${sourceId} (${sourceElement ? 'found' : 'missing'}), targetId=${targetId} (${targetElement ? 'found' : 'missing'})`);
-                    // Skip this connection if source or target is missing
-                    continue;
-                }
-                // Create the connection with empty connection points for now
-                const mappedConnection = {
-                    id: flow['@_id'],
-                    type: "connection",
-                    connectionType: "sequence",
-                    sourceId: sourceId,
-                    targetId: targetId,
-                    sourcePointId: '',
-                    targetPointId: '',
-                    waypoints: waypoints ? waypoints : [],
-                    label: processLabelText(flow['@_name'], 'connection') || '',
-                };
-                elements.push(mappedConnection);
-                console.log(`Created connection ${mappedConnection.id} from ${sourceId} to ${targetId} with ${mappedConnection.waypoints.length} waypoints`);
-            }
-        }
-    }
-    // Post-processing: Validate and fix pool-lane relationships
-    console.log('Validating pool-lane relationships...');
-    validatePoolLaneRelationships(elements);
-    // Post-processing: Assign connection points to connections
-    console.log('Before assigning connection points:', JSON.parse(JSON.stringify(elements)));
-    assignConnectionPoints(elements);
-    console.log('After assigning connection points:', JSON.parse(JSON.stringify(elements)));
-    return elements;
+  }
+  return { shapes, edges };
 }
+
+/* ------------------------------------------------------------------------ */
+/* Flusselemente einsammeln                                                   */
+/* ------------------------------------------------------------------------ */
+
 /**
- * Validate and fix pool-lane relationships
- * @param elements Array of BPMN elements
+ * Sammelt rekursiv alle Flussknoten und Kanten eines Containers
+ * (Prozess, Unterprozess, Transaktion, Ad-hoc-Unterprozess).
+ *
+ * @param {object} container geparstes Container-Element
+ * @param {object} ctx { processId, containerId, depth }
+ * @param {object} sink { nodes: [], edges: [] }
  */
-function validatePoolLaneRelationships(elements) {
-    console.log('Starting pool-lane relationship validation');
-    // Get all pools and lanes
-    const pools = elements.filter(el => el.type === 'pool');
-    const lanes = elements.filter(el => el.type === 'lane');
-    console.log(`Found ${pools.length} pools and ${lanes.length} lanes`);
-    // Check each pool
-    for (const pool of pools) {
-        console.log(`Validating pool ${pool.id} (${pool.label})`);
-        // Ensure pool has a lanes array
-        if (!pool.lanes) {
-            console.warn(`Pool ${pool.id} has no lanes array, creating empty array`);
-            pool.lanes = [];
+function collectFlowElements(container, ctx, sink) {
+  for (const [key, value] of Object.entries(container)) {
+    if (key.startsWith('@_') || key === '#text') continue;
+    const local = localName(key);
+
+    const isActivity = Object.prototype.hasOwnProperty.call(ACTIVITY_TYPES, local);
+    const isEvent = Object.prototype.hasOwnProperty.call(EVENT_TYPES, local);
+    const isGateway = Object.prototype.hasOwnProperty.call(GATEWAY_TYPES, local);
+    const isEdge = Object.prototype.hasOwnProperty.call(EDGE_TYPES, local);
+
+    if (isActivity || isEvent || isGateway) {
+      for (const node of arr(value)) {
+        if (!node || typeof node !== 'object') continue;
+        sink.nodes.push({ local, node, ctx });
+        if (FLOW_CONTAINERS.has(local)) {
+          const id = attr(node, 'id');
+          collectFlowElements(node, {
+            processId: ctx.processId,
+            containerId: id,
+            depth: ctx.depth + 1,
+            rootNames: ctx.rootNames,
+          }, sink);
         }
-        // Check if all referenced lanes exist
-        const missingLanes = [];
-        for (const laneId of pool.lanes) {
-            const lane = lanes.find(l => l.id === laneId);
-            if (!lane) {
-                console.warn(`Lane ${laneId} referenced by pool ${pool.id} not found, will be removed from pool`);
-                missingLanes.push(laneId);
-            }
-        }
-        // Remove missing lanes from pool's lanes array
-        if (missingLanes.length > 0) {
-            pool.lanes = pool.lanes.filter(id => !missingLanes.includes(id));
-        }
-        // Check for lanes that should be in this pool but aren't referenced
-        for (const lane of lanes) {
-            if (lane.parentRef === pool.id && !pool.lanes.includes(lane.id)) {
-                console.warn(`Lane ${lane.id} references pool ${pool.id} but is not in pool's lanes array, adding it`);
-                pool.lanes.push(lane.id);
-            }
-        }
-        // Adjust lane positions if needed
-        if (pool.lanes.length > 0) {
-            const poolLanes = lanes.filter(lane => pool.lanes.includes(lane.id));
-            // Sort lanes by y position for horizontal pools, or x position for vertical pools
-            if (pool.isHorizontal) {
-                poolLanes.sort((a, b) => a.y - b.y);
-            }
-            else {
-                poolLanes.sort((a, b) => a.x - b.x);
-            }
-            // Adjust lane positions and sizes to fit within the pool
-            // and ensure they don't overlap
-            if (pool.isHorizontal) {
-                // For horizontal pools, lanes should be stacked vertically
-                // Calculate height percentages if not already set
-                poolLanes.forEach(lane => {
-                    if (!lane.heightPercentage) {
-                        lane.heightPercentage = 100 / poolLanes.length;
-                    }
-                });
-                // Position lanes based on height percentages
-                let currentY = pool.y;
-                poolLanes.forEach(lane => {
-                    const laneHeight = (pool.height * (lane.heightPercentage || (100 / poolLanes.length))) / 100;
-                    lane.x = pool.x + 30; // Account for pool label area
-                    lane.y = currentY;
-                    lane.width = pool.width - 30;
-                    lane.height = laneHeight;
-                    lane.isHorizontal = true;
-                    // Update currentY for the next lane
-                    currentY += laneHeight;
-                });
-            }
-            else {
-                // For vertical pools, lanes should be arranged horizontally
-                // Calculate width percentages if not already set
-                poolLanes.forEach(lane => {
-                    if (!lane.widthPercentage) {
-                        lane.widthPercentage = 100 / poolLanes.length;
-                    }
-                });
-                // Position lanes based on width percentages
-                let currentX = pool.x;
-                poolLanes.forEach(lane => {
-                    const laneWidth = (pool.width * (lane.widthPercentage || (100 / poolLanes.length))) / 100;
-                    lane.x = currentX;
-                    lane.y = pool.y + 30; // Account for pool label area
-                    lane.width = laneWidth;
-                    lane.height = pool.height - 30;
-                    lane.isHorizontal = false;
-                    // Update currentX for the next lane
-                    currentX += laneWidth;
-                });
-            }
-        }
+      }
+      continue;
     }
-    // Check each lane
+
+    if (isEdge) {
+      for (const edge of arr(value)) {
+        if (!edge || typeof edge !== 'object') continue;
+        sink.edges.push({ local, edge, ctx });
+      }
+      continue;
+    }
+  }
+}
+
+/** Lanes rekursiv einsammeln (laneSet kann childLaneSet enthalten). */
+function collectLanes(laneSetOwner, processId, sink, parentLaneId = undefined) {
+  for (const laneSet of arr(laneSetOwner['bpmn:laneSet'])) {
+    for (const lane of arr(laneSet['bpmn:lane'])) {
+      if (!lane || typeof lane !== 'object') continue;
+      const id = attr(lane, 'id');
+      const flowNodeRefs = arr(lane['bpmn:flowNodeRef'])
+        .map(textOf)
+        .filter((v) => v !== undefined && v !== '');
+      sink.push({ id, lane, processId, parentLaneId, flowNodeRefs });
+      // Verschachtelte Lanes
+      collectLanes(lane, processId, sink, id);
+    }
+  }
+}
+
+/* ------------------------------------------------------------------------ */
+/* Hauptabbildung                                                             */
+/* ------------------------------------------------------------------------ */
+
+/**
+ * Bildet den geparsten BPMN-Baum auf das interne Modell ab.
+ *
+ * @param {object} parsedXml namensraum-normalisierter Baum
+ * @param {object} [report] Berichtsobjekt mit warn()/debug()
+ * @returns {object[]} Elemente des internen Modells
+ */
+export function mapXmlToModel(parsedXml, report = NULL_REPORT) {
+  const definitions = parsedXml['bpmn:definitions'];
+  if (!definitions) {
+    throw new Error(
+      'Kein <definitions>-Element im BPMN-Namensraum gefunden. ' +
+        'Die Datei ist entweder kein BPMN 2.0 oder deklariert einen anderen Namensraum.'
+    );
+  }
+
+  const elements = [];
+  const { shapes, edges } = buildDiIndex(definitions, report);
+  const hasAnyDi = shapes.size > 0;
+
+  const processes = arr(definitions['bpmn:process']);
+  const collaborations = arr(definitions['bpmn:collaboration']);
+
+  /* ---- 1. Pools aus den Teilnehmern der Kollaborationen ------------------ */
+
+  const processToPool = new Map();
+  const poolById = new Map();
+  let poolFallbackY = 40;
+
+  for (const collaboration of collaborations) {
+    for (const participant of arr(collaboration['bpmn:participant'])) {
+      const poolId = attr(participant, 'id');
+      if (!poolId) {
+        report.warn('pool.noId', 'Teilnehmer ohne id wird uebergangen.');
+        continue;
+      }
+      const processRef = attr(participant, 'processRef');
+      const shape = shapes.get(poolId);
+      if (!shape) {
+        report.warn(
+          'pool.noShape',
+          `Fuer den Pool "${poolId}" gibt es kein BPMNShape; er wird ersatzweise platziert.`
+        );
+      }
+      const width = shape ? shape.width : 900;
+      const pool = {
+        id: poolId,
+        type: 'pool',
+        label: processLabelText(attr(participant, 'name'), 'pool', width) || 'Pool',
+        x: shape ? shape.x : 60,
+        y: shape ? shape.y : poolFallbackY,
+        width,
+        height: shape ? shape.height : 240,
+        isHorizontal: shape ? shape.isHorizontal : true,
+        lanes: [],
+        processRef: processRef || '',
+      };
+      if (shape && shape.labelBounds) pool.labelBounds = shape.labelBounds;
+      if (!shape) poolFallbackY += 280;
+      elements.push(pool);
+      poolById.set(poolId, pool);
+      if (processRef) processToPool.set(processRef, poolId);
+    }
+  }
+
+  /* ---- 2. Lanes ---------------------------------------------------------- */
+
+  for (const process of processes) {
+    const processId = attr(process, 'id');
+    const laneEntries = [];
+    collectLanes(process, processId, laneEntries);
+    if (!laneEntries.length) continue;
+
+    const poolId = processId ? processToPool.get(processId) : undefined;
+    const pool = poolId ? poolById.get(poolId) : undefined;
+    if (!pool) {
+      report.warn(
+        'lane.noPool',
+        `Der Prozess "${processId}" hat Lanes, wird aber von keinem Pool referenziert. ` +
+          'Die Lanes werden ohne Pool angelegt.'
+      );
+    }
+
+    const created = [];
+    for (const entry of laneEntries) {
+      const { id: laneId, lane, flowNodeRefs, parentLaneId } = entry;
+      if (!laneId) {
+        report.warn('lane.noId', 'Lane ohne id wird uebergangen.');
+        continue;
+      }
+      const shape = shapes.get(laneId);
+      if (!shape) {
+        report.warn('lane.noShape', `Fuer die Lane "${laneId}" gibt es kein BPMNShape.`);
+      }
+      const width = shape ? shape.width : pool ? pool.width - 30 : 600;
+      const mappedLane = {
+        id: laneId,
+        type: 'lane',
+        label: processLabelText(attr(lane, 'name'), 'lane', width) || 'Lane',
+        x: shape ? shape.x : pool ? pool.x + 30 : 90,
+        y: shape ? shape.y : pool ? pool.y + created.length * 120 : 40 + created.length * 120,
+        width,
+        height: shape ? shape.height : 120,
+        isHorizontal: pool ? pool.isHorizontal : true,
+        parentRef: poolId || '',
+        parentLaneRef: parentLaneId || '',
+        flowNodeRefs,
+        hasDi: Boolean(shape),
+      };
+      elements.push(mappedLane);
+      created.push(mappedLane);
+      if (pool) pool.lanes.push(laneId);
+    }
+
+    // Nur wenn die Datei KEINE Geometrie fuer die Lanes liefert, wird sie
+    // gerechnet. Liegt DI vor, ist sie massgeblich - fruehere Fassungen haben
+    // gueltige Angaben ueberschrieben.
+    if (pool && created.length && created.every((l) => !l.hasDi)) {
+      layoutLanesInPool(pool, created);
+    }
+    for (const lane of created) {
+      const primary = pool && !pool.isHorizontal ? lane.width : lane.height;
+      const poolPrimary = pool ? (pool.isHorizontal ? pool.height : pool.width) : 0;
+      const share = poolPrimary > 0 ? (primary / poolPrimary) * 100 : 100 / created.length;
+      if (pool && pool.isHorizontal) lane.heightPercentage = share;
+      else lane.widthPercentage = share;
+      delete lane.hasDi;
+    }
+  }
+
+  /* ---- 3. Flussknoten ---------------------------------------------------- */
+
+  const rootNames = collectRootDefinitionNames(definitions);
+  const sink = { nodes: [], edges: [] };
+  for (const process of processes) {
+    collectFlowElements(process, { processId: attr(process, 'id'), containerId: undefined, depth: 0, rootNames }, sink);
+  }
+  for (const collaboration of collaborations) {
+    // Nachrichtenfluesse liegen in der Kollaboration, nicht im Prozess.
+    for (const [key, value] of Object.entries(collaboration)) {
+      if (localName(key) !== 'messageFlow') continue;
+      for (const edge of arr(value)) {
+        if (edge && typeof edge === 'object') {
+          sink.edges.push({ local: 'messageFlow', edge, ctx: { processId: undefined, containerId: undefined, depth: 0 } });
+        }
+      }
+    }
+  }
+
+  const seenNodeIds = new Set();
+  let fallbackSlot = 0;
+
+  for (const { local, node, ctx } of sink.nodes) {
+    const id = attr(node, 'id');
+    if (!id) {
+      report.warn('node.noId', `Ein <${local}> ohne id wurde uebergangen.`);
+      continue;
+    }
+    if (seenNodeIds.has(id)) {
+      report.warn('node.duplicateId', `Die Id "${id}" kommt mehrfach vor; nur das erste Vorkommen wird uebernommen.`);
+      continue;
+    }
+
+    const shape = shapes.get(id);
+    if (!shape && hasAnyDi && ctx.depth > 0) {
+      // Kein Shape und in einem Unterprozess: das Element gehoert zu einer
+      // zugeklappten Darstellung und ist auf dieser Ebene nicht sichtbar.
+      report.warn(
+        'node.collapsedChild',
+        `"${id}" (<${local}>) liegt in einem Unterprozess ohne eigene Darstellung und wird nicht gezeichnet.`
+      );
+      continue;
+    }
+    if (!shape) {
+      report.warn('node.noShape', `Fuer "${id}" (<${local}>) gibt es kein BPMNShape; es wird ersatzweise platziert.`);
+    }
+
+    const mapped = mapFlowNode(local, node, shape, ctx, fallbackSlot, report);
+    if (!mapped) {
+      report.warn('node.unsupported', `<${local}> ("${id}") wird vom Editor nicht unterstuetzt.`);
+      continue;
+    }
+    if (!shape) fallbackSlot += 1;
+    seenNodeIds.add(id);
+    elements.push(mapped);
+  }
+
+  /* ---- 4. Kanten --------------------------------------------------------- */
+
+  const nodeIndex = new Map(elements.map((e) => [e.id, e]));
+  const seenEdgeIds = new Set();
+
+  for (const { local, edge } of sink.edges) {
+    const id = attr(edge, 'id');
+    if (!id) {
+      report.warn('edge.noId', `Ein <${local}> ohne id wurde uebergangen.`);
+      continue;
+    }
+    if (seenEdgeIds.has(id)) {
+      report.warn('edge.duplicateId', `Die Verbindungs-Id "${id}" kommt mehrfach vor.`);
+      continue;
+    }
+    const sourceId = attr(edge, 'sourceRef');
+    const targetId = attr(edge, 'targetRef');
+    const source = nodeIndex.get(sourceId);
+    const target = nodeIndex.get(targetId);
+    if (!source || !target) {
+      report.warn(
+        'edge.danglingEndpoint',
+        `Die Verbindung "${id}" wird nicht gezeichnet: ` +
+          `${!source ? `Quelle "${sourceId}" ` : ''}${!source && !target ? 'und ' : ''}` +
+          `${!target ? `Ziel "${targetId}" ` : ''}nicht im Diagramm.`
+      );
+      continue;
+    }
+
+    const di = edges.get(id);
+    const waypoints = di ? di.waypoints : [];
+    if (!waypoints.length) {
+      report.warn('edge.noWaypoints', `Fuer die Verbindung "${id}" liefert die Datei keine Wegpunkte.`);
+    }
+
+    const conditionNode = edge['bpmn:conditionExpression'];
+    const condition = conditionNode !== undefined ? textOf(conditionNode) : undefined;
+
+    const connection = {
+      id,
+      type: 'connection',
+      connectionType: EDGE_TYPES[local] || 'sequence',
+      sourceId,
+      targetId,
+      sourcePointId: '',
+      targetPointId: '',
+      waypoints,
+      label: processLabelText(attr(edge, 'name'), 'connection') || '',
+    };
+    if (condition !== undefined && condition !== '') connection.condition = condition;
+    if (di && di.labelBounds) connection.labelBounds = di.labelBounds;
+    const doc = documentationOf(edge);
+    if (doc) connection.documentation = doc;
+
+    seenEdgeIds.add(id);
+    elements.push(connection);
+  }
+
+  /* ---- 5. Nachbereitung -------------------------------------------------- */
+
+  validatePoolLaneRelationships(elements, report);
+  assignConnectionPoints(elements);
+
+  report.stats = {
+    pools: elements.filter((e) => e.type === 'pool').length,
+    lanes: elements.filter((e) => e.type === 'lane').length,
+    tasks: elements.filter((e) => e.type === 'task').length,
+    subprocesses: elements.filter((e) => e.type === 'subprocess').length,
+    events: elements.filter((e) => e.type === 'event').length,
+    gateways: elements.filter((e) => e.type === 'gateway').length,
+    connections: elements.filter((e) => e.type === 'connection').length,
+    shapesInFile: shapes.size,
+    edgesInFile: edges.size,
+  };
+  report.debug('Import abgeschlossen', report.stats);
+
+  return elements;
+}
+
+/* ------------------------------------------------------------------------ */
+/* Einzelne Knoten abbilden                                                   */
+/* ------------------------------------------------------------------------ */
+
+function documentationOf(node) {
+  const doc = node['bpmn:documentation'];
+  if (doc === undefined) return undefined;
+  const texts = arr(doc).map(textOf).filter(Boolean);
+  return texts.length ? texts.join('\n\n') : undefined;
+}
+
+/**
+ * Ereignisdefinition auslesen: Art, verwiesene Id und - bei Zeitereignissen -
+ * der Wert. Ohne diese Angaben verliert ein Export die Bedeutung des
+ * Ereignisses und macht aus jeder Frist ein leeres Zwischenereignis.
+ */
+function eventDefinitionOf(node) {
+  for (const def of EVENT_DEFINITIONS) {
+    const raw = node[`bpmn:${def}`];
+    if (raw === undefined) continue;
+    const first = arr(raw)[0];
+    const kind = def.replace('EventDefinition', '');
+    const out = { kind, ref: undefined, timer: undefined };
+    if (first && typeof first === 'object') {
+      out.ref =
+        attr(first, 'messageRef') || attr(first, 'signalRef') ||
+        attr(first, 'errorRef') || attr(first, 'escalationRef');
+      if (kind === 'timer') {
+        for (const [tag, type] of [['timeDuration', 'duration'], ['timeDate', 'date'], ['timeCycle', 'cycle']]) {
+          const v = first[`bpmn:${tag}`];
+          if (v !== undefined) {
+            const text = textOf(arr(v)[0]);
+            if (text) out.timer = { type, value: text };
+            break;
+          }
+        }
+      }
+    }
+    return out;
+  }
+  return { kind: 'none', ref: undefined, timer: undefined };
+}
+
+/** Namen der Wurzelelemente (message, signal, error, escalation) je Id. */
+function collectRootDefinitionNames(definitions) {
+  const names = new Map();
+  for (const tag of ['bpmn:message', 'bpmn:signal', 'bpmn:error', 'bpmn:escalation']) {
+    for (const item of arr(definitions[tag])) {
+      const id = attr(item, 'id');
+      if (id) names.set(id, attr(item, 'name'));
+    }
+  }
+  return names;
+}
+
+/** Ersatzposition fuer Elemente, zu denen die Datei keine Geometrie liefert. */
+function fallbackBounds(slot, defaultWidth, defaultHeight) {
+  const perRow = 8;
+  return {
+    x: 60 + (slot % perRow) * 160,
+    y: 60 + Math.floor(slot / perRow) * 120,
+    width: defaultWidth,
+    height: defaultHeight,
+  };
+}
+
+function mapFlowNode(local, node, shape, ctx, fallbackSlot, report) {
+  const id = attr(node, 'id');
+  const name = attr(node, 'name');
+
+  if (Object.prototype.hasOwnProperty.call(ACTIVITY_TYPES, local)) {
+    const spec = ACTIVITY_TYPES[local];
+    const box = shape || fallbackBounds(fallbackSlot, 120, 80);
+    const el = {
+      id,
+      type: spec.type,
+      label: processLabelText(name, spec.type, box.width) || '',
+      x: box.x,
+      y: box.y,
+      width: box.width,
+      height: box.height,
+    };
+    if (spec.taskType) el.taskType = spec.taskType;
+    if (spec.subProcessType) {
+      el.subProcessType = local === 'subProcess' && bool(attr(node, 'triggeredByEvent'))
+        ? 'event'
+        : spec.subProcessType;
+    }
+    if (local === 'callActivity') {
+      const called = attr(node, 'calledElement');
+      if (called) el.calledElement = called;
+    }
+    if (shape) {
+      el.isExpanded = shape.isExpanded;
+      if (shape.labelBounds) el.labelBounds = shape.labelBounds;
+    }
+    const doc = documentationOf(node);
+    if (doc) el.documentation = doc;
+    if (ctx.containerId) el.containerRef = ctx.containerId;
+    return el;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(EVENT_TYPES, local)) {
+    const box = shape || fallbackBounds(fallbackSlot, 36, 36);
+    const evDef = eventDefinitionOf(node);
+    const el = {
+      id,
+      type: 'event',
+      eventType: EVENT_TYPES[local],
+      eventDefinition: evDef.kind,
+      label: processLabelText(name, 'event', box.width) || '',
+      x: box.x,
+      y: box.y,
+      width: box.width,
+      height: box.height,
+    };
+    if (shape && shape.labelBounds) el.labelBounds = shape.labelBounds;
+    if (local === 'boundaryEvent') {
+      const host = attr(node, 'attachedToRef');
+      if (host) el.attachedToRef = host;
+      else report.warn('boundary.noHost', `Das Randereignis "${id}" nennt kein attachedToRef.`);
+      // Ohne cancelActivity gilt nach BPMN "true", also unterbrechend.
+      el.cancelActivity = bool(attr(node, 'cancelActivity'), true);
+    }
+    if (local === 'startEvent') {
+      el.isInterrupting = bool(attr(node, 'isInterrupting'), true);
+    }
+    if (evDef.ref) {
+      el.eventDefinitionRef = evDef.ref;
+      const refName = ctx.rootNames && ctx.rootNames.get(evDef.ref);
+      if (refName) el.eventDefinitionName = refName;
+    }
+    if (evDef.timer) el.timerDefinition = evDef.timer;
+    const doc = documentationOf(node);
+    if (doc) el.documentation = doc;
+    if (ctx.containerId) el.containerRef = ctx.containerId;
+    return el;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(GATEWAY_TYPES, local)) {
+    const box = shape || fallbackBounds(fallbackSlot, 50, 50);
+    const el = {
+      id,
+      type: 'gateway',
+      gatewayType: GATEWAY_TYPES[local],
+      label: processLabelText(name, 'gateway', box.width) || '',
+      x: box.x,
+      y: box.y,
+      width: box.width,
+      height: box.height,
+    };
+    if (shape && shape.labelBounds) el.labelBounds = shape.labelBounds;
+    const def = attr(node, 'default');
+    if (def) el.defaultFlow = def;
+    const doc = documentationOf(node);
+    if (doc) el.documentation = doc;
+    if (ctx.containerId) el.containerRef = ctx.containerId;
+    return el;
+  }
+
+  return null;
+}
+
+/* ------------------------------------------------------------------------ */
+/* Lanes ohne Geometrie im Pool verteilen                                     */
+/* ------------------------------------------------------------------------ */
+
+function layoutLanesInPool(pool, lanes) {
+  const band = 30; // Beschriftungsstreifen des Pools
+  if (pool.isHorizontal) {
+    const height = pool.height / lanes.length;
+    lanes.forEach((lane, i) => {
+      lane.x = pool.x + band;
+      lane.y = pool.y + i * height;
+      lane.width = pool.width - band;
+      lane.height = height;
+    });
+  } else {
+    const width = pool.width / lanes.length;
+    lanes.forEach((lane, i) => {
+      lane.x = pool.x + i * width;
+      lane.y = pool.y + band;
+      lane.width = width;
+      lane.height = pool.height - band;
+    });
+  }
+}
+
+/* ------------------------------------------------------------------------ */
+/* Nachbereitung                                                              */
+/* ------------------------------------------------------------------------ */
+
+/** Beziehungen zwischen Pools und Lanes pruefen und in Ordnung bringen. */
+function validatePoolLaneRelationships(elements, report) {
+  const pools = elements.filter((el) => el.type === 'pool');
+  const lanes = elements.filter((el) => el.type === 'lane');
+  const laneById = new Map(lanes.map((l) => [l.id, l]));
+
+  for (const pool of pools) {
+    if (!Array.isArray(pool.lanes)) pool.lanes = [];
+    const missing = pool.lanes.filter((laneId) => !laneById.has(laneId));
+    if (missing.length) {
+      report.warn('pool.missingLane', `Der Pool "${pool.id}" verweist auf unbekannte Lanes: ${missing.join(', ')}.`);
+      pool.lanes = pool.lanes.filter((laneId) => laneById.has(laneId));
+    }
     for (const lane of lanes) {
-        // Ensure lane has a parentRef
-        if (!lane.parentRef) {
-            console.warn(`Lane ${lane.id} has no parentRef, trying to find a matching pool`);
-            // Try to find a pool that includes this lane
-            const matchingPool = pools.find(pool => pool.lanes && pool.lanes.includes(lane.id));
-            if (matchingPool) {
-                console.log(`Found matching pool ${matchingPool.id} for lane ${lane.id}, setting parentRef`);
-                lane.parentRef = matchingPool.id;
-            }
-            else {
-                console.error(`Could not find a matching pool for lane ${lane.id}, this lane may not render correctly`);
-            }
-        }
-        // Ensure lane has flowNodeRefs array
-        if (!lane.flowNodeRefs) {
-            lane.flowNodeRefs = [];
-        }
+      if (lane.parentRef === pool.id && !pool.lanes.includes(lane.id)) pool.lanes.push(lane.id);
     }
-    console.log('Pool-lane relationship validation complete');
-}
-/**
- * Check if a connection crosses pool boundaries
- * @param {Object} sourceElement The source element
- * @param {Object} targetElement The target element
- * @param {Array} elements All BPMN elements
- * @returns {boolean} True if the connection crosses pool boundaries
- */
-function connectionCrossesPoolBoundaries(sourceElement, targetElement, elements) {
-    // If either element is a pool, and the other is not the same pool, it crosses boundaries
-    if (sourceElement.type === 'pool' && targetElement.type === 'pool' && sourceElement.id !== targetElement.id) {
-        return true;
+  }
+
+  for (const lane of lanes) {
+    if (!lane.parentRef) {
+      const owner = pools.find((p) => p.lanes.includes(lane.id));
+      if (owner) lane.parentRef = owner.id;
+      else report.warn('lane.orphan', `Die Lane "${lane.id}" gehoert zu keinem Pool.`);
     }
-
-    // Find the containing pool for each element
-    let sourcePool = null;
-    let targetPool = null;
-
-    // If the element is a pool, it's its own container
-    if (sourceElement.type === 'pool') {
-        sourcePool = sourceElement;
-    }
-    if (targetElement.type === 'pool') {
-        targetPool = targetElement;
-    }
-
-    // If the element is a lane, find its parent pool
-    if (sourceElement.type === 'lane' && sourceElement.parentRef) {
-        sourcePool = elements.find(el => el.id === sourceElement.parentRef && el.type === 'pool');
-    }
-    if (targetElement.type === 'lane' && targetElement.parentRef) {
-        targetPool = elements.find(el => el.id === targetElement.parentRef && el.type === 'pool');
-    }
-
-    // For other elements, check if they're inside a pool or lane
-    if (!sourcePool) {
-        // Check if source is inside a pool directly
-        const pools = elements.filter(el => el.type === 'pool');
-        for (const pool of pools) {
-            if (isElementInsidePool(sourceElement, pool)) {
-                sourcePool = pool;
-                break;
-            }
-        }
-
-        // If not found directly in a pool, check if it's in a lane
-        if (!sourcePool) {
-            const lanes = elements.filter(el => el.type === 'lane');
-            for (const lane of lanes) {
-                if (isElementInsidePool(sourceElement, lane)) {
-                    // Find the parent pool of this lane
-                    const parentPool = elements.find(el => el.id === lane.parentRef && el.type === 'pool');
-                    if (parentPool) {
-                        sourcePool = parentPool;
-                        break;
-                    }
-                }
-            }
-        }
-    }
-
-    // Same for target element
-    if (!targetPool) {
-        // Check if target is inside a pool directly
-        const pools = elements.filter(el => el.type === 'pool');
-        for (const pool of pools) {
-            if (isElementInsidePool(targetElement, pool)) {
-                targetPool = pool;
-                break;
-            }
-        }
-
-        // If not found directly in a pool, check if it's in a lane
-        if (!targetPool) {
-            const lanes = elements.filter(el => el.type === 'lane');
-            for (const lane of lanes) {
-                if (isElementInsidePool(targetElement, lane)) {
-                    // Find the parent pool of this lane
-                    const parentPool = elements.find(el => el.id === lane.parentRef && el.type === 'pool');
-                    if (parentPool) {
-                        targetPool = parentPool;
-                        break;
-                    }
-                }
-            }
-        }
-    }
-
-    // If both elements have pools and they're different, the connection crosses boundaries
-    return sourcePool && targetPool && sourcePool.id !== targetPool.id;
+    if (!Array.isArray(lane.flowNodeRefs)) lane.flowNodeRefs = [];
+  }
 }
 
 /**
- * Helper function to check if an element is inside a pool
- * @param {Object} element The element to check
- * @param {Object} container The container (pool or lane) to check against
- * @returns {boolean} True if the element is inside the container
- */
-function isElementInsidePool(element, container) {
-    // Skip elements without position or size
-    if (!element || !container ||
-        element.x === undefined || element.y === undefined ||
-        element.width === undefined || element.height === undefined ||
-        container.x === undefined || container.y === undefined ||
-        container.width === undefined || container.height === undefined) {
-        return false;
-    }
-
-    // Check if the element is fully contained within the container boundaries
-    return element.x >= container.x &&
-           element.y >= container.y &&
-           element.x + element.width <= container.x + container.width &&
-           element.y + element.height <= container.y + container.height;
-}
-
-/**
- * Assign connection points to connections based on source and target elements
- * @param elements Array of BPMN elements
+ * Verbindungspunkte an Quelle und Ziel bestimmen.
+ * Die Richtung ergibt sich aus den Wegpunkten der Datei, sonst aus der Lage
+ * der beiden Elemente zueinander.
  */
 function assignConnectionPoints(elements) {
-    // Process all connections
-    for (const element of elements) {
-        if (element.type === 'connection') {
-            // Find source and target elements
-            const sourceElement = elements.find(el => el.id === element.sourceId);
-            const targetElement = elements.find(el => el.id === element.targetId);
-            if (sourceElement && targetElement &&
-                sourceElement.type !== 'connection' && targetElement.type !== 'connection') {
+  const byId = new Map(elements.map((el) => [el.id, el]));
 
-                // Check if this connection crosses pool boundaries and should be a message flow
-                if (element.connectionType === 'sequence' && connectionCrossesPoolBoundaries(sourceElement, targetElement, elements)) {
-                    console.log(`Connection ${element.id} crosses pool boundaries, changing to message flow`);
-                    element.connectionType = 'message';
-                }
-                // Calculate connection points for source and target
-                const sourcePoints = calculateConnectionPoints(sourceElement);
-                const targetPoints = calculateConnectionPoints(targetElement);
-                if (sourcePoints.length > 0 && targetPoints.length > 0) {
-                    // Get the first and last waypoints to determine best connection points
-                    let firstWaypoint, lastWaypoint;
-                    if (element.waypoints && element.waypoints.length > 1) {
-                        // If we have waypoints, use the first and last ones
-                        // IMPORTANT: For source, we use the SECOND waypoint (not the first)
-                        // For target, we use the SECOND-TO-LAST waypoint (not the last)
-                        // This is because the first and last waypoints are often directly on the elements
-                        // and don't give a good indication of the direction
-                        firstWaypoint = element.waypoints.length > 1 ? element.waypoints[1] : element.waypoints[0];
-                        lastWaypoint = element.waypoints.length > 1 ? element.waypoints[element.waypoints.length - 2] : element.waypoints[element.waypoints.length - 1];
-                    }
-                    else {
-                        // If no waypoints or only one, use the center of the target/source elements
-                        firstWaypoint = { x: targetElement.x + targetElement.width / 2, y: targetElement.y + targetElement.height / 2 };
-                        lastWaypoint = { x: sourceElement.x + sourceElement.width / 2, y: sourceElement.y + sourceElement.height / 2 };
-                    }
-                    console.log(`Connection ${element.id} waypoints:`, element.waypoints);
-                    console.log(`Using firstWaypoint for target:`, firstWaypoint, 'lastWaypoint for source:', lastWaypoint);
-                    // Find the best connection points based on waypoints or relative positions
-                    // For source, we use the second waypoint (or target center)
-                    // For target, we use the second-to-last waypoint (or source center)
-                    const bestSourcePoint = findBestConnectionPoint(sourcePoints, lastWaypoint);
-                    const bestTargetPoint = findBestConnectionPoint(targetPoints, firstWaypoint);
-                    console.log(`Selected source point: ${bestSourcePoint.id} (${bestSourcePoint.position}) at (${bestSourcePoint.x}, ${bestSourcePoint.y})`);
-                    console.log(`Selected target point: ${bestTargetPoint.id} (${bestTargetPoint.position}) at (${bestTargetPoint.x}, ${bestTargetPoint.y})`);
-                    // Assign the connection points
-                    element.sourcePointId = bestSourcePoint.id;
-                    element.targetPointId = bestTargetPoint.id;
-                }
-            }
-        }
+  for (const element of elements) {
+    if (element.type !== 'connection') continue;
+    const source = byId.get(element.sourceId);
+    const target = byId.get(element.targetId);
+    if (!source || !target) continue;
+    if (source.type === 'connection' || target.type === 'connection') continue;
+
+    const sourcePoints = calculateConnectionPoints(source);
+    const targetPoints = calculateConnectionPoints(target);
+    if (!sourcePoints.length || !targetPoints.length) continue;
+
+    let towardsTarget;
+    let towardsSource;
+    if (element.waypoints && element.waypoints.length > 1) {
+      // Der zweite bzw. vorletzte Wegpunkt gibt die Richtung besser wieder als
+      // der erste bzw. letzte, der meist direkt auf dem Element liegt.
+      towardsTarget = element.waypoints[1];
+      towardsSource = element.waypoints[element.waypoints.length - 2];
+    } else {
+      towardsTarget = { x: target.x + target.width / 2, y: target.y + target.height / 2 };
+      towardsSource = { x: source.x + source.width / 2, y: source.y + source.height / 2 };
     }
+
+    element.sourcePointId = findBestConnectionPoint(sourcePoints, towardsTarget).id;
+    element.targetPointId = findBestConnectionPoint(targetPoints, towardsSource).id;
+  }
 }
-/**
- * Find the best connection point based on target position
- * @param points Array of connection points
- * @param targetPosition Target position to connect to
- * @returns The best connection point
- */
+
+/** Den Verbindungspunkt waehlen, der in Richtung des Ziels zeigt. */
 function findBestConnectionPoint(points, targetPosition) {
-    // First, try to find the best connection point based on direction
-    // This is more important than distance for visual appearance
-    // Group connection points by position (top, right, bottom, left)
-    const topPoints = points.filter(p => p.position === 'top');
-    const rightPoints = points.filter(p => p.position === 'right');
-    const bottomPoints = points.filter(p => p.position === 'bottom');
-    const leftPoints = points.filter(p => p.position === 'left');
-    // Determine the primary direction from the element to the target
-    const elementCenter = {
-        x: points[0].x, // Approximate center X based on first point
-        y: points[0].y // Approximate center Y based on first point
-    };
-    // For the first point, find the element it belongs to
-    if (points.length > 0) {
-        // Find the center of the element based on the points
-        const xPoints = points.map(p => p.x);
-        const yPoints = points.map(p => p.y);
-        const minX = Math.min(...xPoints);
-        const maxX = Math.max(...xPoints);
-        const minY = Math.min(...yPoints);
-        const maxY = Math.max(...yPoints);
-        elementCenter.x = minX + (maxX - minX) / 2;
-        elementCenter.y = minY + (maxY - minY) / 2;
+  const xs = points.map((p) => p.x);
+  const ys = points.map((p) => p.y);
+  const center = {
+    x: Math.min(...xs) + (Math.max(...xs) - Math.min(...xs)) / 2,
+    y: Math.min(...ys) + (Math.max(...ys) - Math.min(...ys)) / 2,
+  };
+
+  const dx = targetPosition.x - center.x;
+  const dy = targetPosition.y - center.y;
+  const side = Math.abs(dx) > Math.abs(dy)
+    ? (dx > 0 ? 'right' : 'left')
+    : (dy > 0 ? 'bottom' : 'top');
+
+  const preferred = points.filter((p) => p.position === side);
+  const candidates = preferred.length ? preferred : points;
+
+  let best = candidates[0];
+  let bestDistance = Number.POSITIVE_INFINITY;
+  for (const point of candidates) {
+    const d = (point.x - targetPosition.x) ** 2 + (point.y - targetPosition.y) ** 2;
+    if (d < bestDistance) {
+      bestDistance = d;
+      best = point;
     }
-    const dx = targetPosition.x - elementCenter.x;
-    const dy = targetPosition.y - elementCenter.y;
-    const adx = Math.abs(dx);
-    const ady = Math.abs(dy);
-    // Determine which direction has the strongest pull
-    let candidatePoints = [];
-    if (adx > ady) {
-        // Horizontal direction is stronger
-        if (dx > 0) {
-            // Target is to the right
-            candidatePoints = rightPoints.length > 0 ? rightPoints : points;
-        }
-        else {
-            // Target is to the left
-            candidatePoints = leftPoints.length > 0 ? leftPoints : points;
-        }
-    }
-    else {
-        // Vertical direction is stronger
-        if (dy > 0) {
-            // Target is below
-            candidatePoints = bottomPoints.length > 0 ? bottomPoints : points;
-        }
-        else {
-            // Target is above
-            candidatePoints = topPoints.length > 0 ? topPoints : points;
-        }
-    }
-    // Now find the closest point among the candidates
-    let bestPoint = candidatePoints[0] || points[0];
-    let minDistance = Number.MAX_VALUE;
-    for (const point of candidatePoints) {
-        const pointDx = point.x - targetPosition.x;
-        const pointDy = point.y - targetPosition.y;
-        const distance = Math.sqrt(pointDx * pointDx + pointDy * pointDy);
-        if (distance < minDistance) {
-            minDistance = distance;
-            bestPoint = point;
-        }
-    }
-    return bestPoint;
+  }
+  return best;
 }
